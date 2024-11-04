@@ -15,12 +15,14 @@ const { width, height } = Dimensions.get('window');
 
 interface MovieReviewProps {
   movie: {
+    id: number;
     title: string;
     // Include other movie properties if needed
   };
+  isFlipped: boolean;
 }
 
-const MovieReview: React.FC<MovieReviewProps> = ({ movie }) => {
+const MovieReview: React.FC<MovieReviewProps> = ({ movie, isFlipped }) => {
   const [rating, setRating] = useState(0);
   const [review, setReview] = useState('');
   const [addToList, setAddToList] = useState(false);
@@ -64,19 +66,26 @@ const MovieReview: React.FC<MovieReviewProps> = ({ movie }) => {
           multiline
           numberOfLines={4}
           placeholder="Write your review here..."
+          placeholderTextColor="#888888"
           value={review}
           onChangeText={setReview}
+          editable={isFlipped} // Disable when not flipped
+          // Ensure autoFocus is not set
         />
       </View>
 
       {/* Add to List Feature */}
       <View style={styles.sectionRow}>
         <Text style={styles.label}>Add to List:</Text>
-        <Switch value={addToList} onValueChange={setAddToList} />
+        <Switch value={addToList} onValueChange={setAddToList} disabled={!isFlipped} />
       </View>
 
       {/* Submit Button */}
-      <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
+      <TouchableOpacity
+        style={styles.submitButton}
+        onPress={handleSubmit}
+        disabled={!isFlipped}
+      >
         <Text style={styles.submitButtonText}>Submit</Text>
       </TouchableOpacity>
     </View>
@@ -85,78 +94,61 @@ const MovieReview: React.FC<MovieReviewProps> = ({ movie }) => {
 
 const styles = StyleSheet.create({
   container: {
-    width: '100%',
-    height: '100%',
+    flex: 1,
+    backgroundColor: '#1F1F1F',
     padding: 20,
-    borderRadius: 15,
-    backgroundColor: '#fff',
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
-    justifyContent: 'center',
   },
   title: {
     fontSize: 24,
-    fontWeight: '700',
-    color: '#000',
-    textAlign: 'center',
+    fontWeight: 'bold',
+    color: '#ffffff',
     marginBottom: 20,
-    textShadowColor: 'rgba(0, 0, 0, 0.1)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
+    textAlign: 'center',
   },
   section: {
     marginBottom: 20,
   },
   sectionRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginVertical: 10,
+    marginBottom: 20,
   },
   label: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#000',
+    color: '#ffffff',
     marginBottom: 10,
   },
   starsContainer: {
     flexDirection: 'row',
-    justifyContent: 'center',
   },
   star: {
-    fontSize: 40,
-    marginHorizontal: 5,
+    fontSize: 30,
+    marginRight: 5,
   },
   filledStar: {
     color: '#FFD700',
   },
   emptyStar: {
-    color: '#C0C0C0',
+    color: '#888888',
   },
   textInput: {
-    height: 100,
-    borderColor: '#ccc',
+    borderColor: '#555555',
     borderWidth: 1,
     borderRadius: 10,
+    color: '#ffffff',
     padding: 10,
     textAlignVertical: 'top',
-    backgroundColor: '#f9f9f9',
   },
   submitButton: {
-    backgroundColor: '#2196F3',
+    backgroundColor: '#FFD700',
     paddingVertical: 15,
     borderRadius: 10,
-    elevation: 2,
-    marginTop: 20,
+    alignItems: 'center',
   },
   submitButtonText: {
-    color: '#fff',
     fontSize: 18,
-    fontWeight: '600',
-    textAlign: 'center',
+    fontWeight: 'bold',
+    color: '#1F1F1F',
   },
 });
 

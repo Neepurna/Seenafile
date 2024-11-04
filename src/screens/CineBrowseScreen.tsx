@@ -206,16 +206,19 @@ const CineBrowseScreen: React.FC = () => {
           if (!movie) {
             return null; // Avoid rendering if movie is undefined
           }
-          return <FlipCard movie={movie} setSwipingEnabled={setSwipingEnabled} />;
+          return (
+            <FlipCard
+              movie={movie}
+              setSwipingEnabled={setSwipingEnabled}
+            />
+          );
         }}
         infinite={false}
         backgroundColor="transparent"
         cardVerticalMargin={10}
         stackSize={3}
         stackSeparation={15}
-        onSwipedAll={() => {
-          fetchMoreMovies();
-        }}
+        onSwipedAll={fetchMoreMovies}
         overlayLabels={{
           left: {
             title: 'NOPE',
@@ -250,10 +253,10 @@ const CineBrowseScreen: React.FC = () => {
             },
           },
         }}
+        disableTopSwipe={true} // Disable up swipe
         disableBottomSwipe={!swipingEnabled}
         disableLeftSwipe={!swipingEnabled}
         disableRightSwipe={!swipingEnabled}
-        disableTopSwipe={!swipingEnabled}
       />
       {loading && (
         <View style={styles.loadingOverlay}>
@@ -267,13 +270,14 @@ const CineBrowseScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: '#000', // Dark background
     justifyContent: 'center',
     alignItems: 'center',
     paddingTop: 20,
   },
   loadingContainer: {
     flex: 1,
+    backgroundColor: '#000', // Dark background
     justifyContent: 'center',
     alignItems: 'center',
   },
