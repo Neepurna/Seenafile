@@ -8,11 +8,13 @@ import CineGamesScreen from '../screens/CineGamesScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 
 const Tab = createBottomTabNavigator();
+const TAB_BAR_HEIGHT = 100; // Increased by 2% from 66 to 67
 
 const Tabs: React.FC = () => {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
+        headerShown: route.name === 'CineBrowse' ? false : true, // Hide header for CineBrowse
         tabBarIcon: ({ color, size }) => {
           let iconName: string;
 
@@ -30,6 +32,18 @@ const Tabs: React.FC = () => {
 
           return <Ionicons name={iconName} size={size} color={color} />;
         },
+        tabBarStyle: {
+          height: TAB_BAR_HEIGHT,
+          backgroundColor: '#000',
+          paddingBottom: 10, // Add some padding for better touch targets
+        },
+        tabBarItemStyle: {
+          padding: 5,
+        },
+        headerStyle: {
+          backgroundColor: '#000', // Make header black for other screens
+        },
+        headerTintColor: '#fff', // Make header text white for other screens
       })}
     >
       <Tab.Screen name="CineBrowse" component={CineBrowseScreen} />

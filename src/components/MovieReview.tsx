@@ -1,154 +1,223 @@
 // src/components/MovieReview.tsx
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
+  ActivityIndicator,
+  Image,
   Dimensions,
-  TextInput,
-  TouchableOpacity,
-  Switch,
+  ScrollView,
+  Text,
+  Platform,
 } from 'react-native';
+import { fetchMovieImages } from '../services/tmdb'; // Add this import at the top with other imports
 
 const { width, height } = Dimensions.get('window');
+const TAB_BAR_HEIGHT = 100; // Match with Tabs.tsx
+const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 44 : 0;
+
+// Match CARD_HEIGHT exactly with FlipCard
+const CARD_PADDING = 16;
+const CARD_WIDTH = width - (CARD_PADDING * 2);
+const CARD_HEIGHT = (CARD_WIDTH * 1.5);
+
+interface Backdrop {
+  file_path: string;
+}
 
 interface MovieReviewProps {
   movie: {
     id: number;
     title: string;
-    // Include other movie properties if needed
+    vote_average: number;
+    genres: { id: number; name: string }[];
+    release_date?: string;
+    runtime?: number;
+    overview?: string;
   };
-  isFlipped: boolean;
 }
 
-const MovieReview: React.FC<MovieReviewProps> = ({ movie, isFlipped }) => {
-  const [rating, setRating] = useState(0);
-  const [review, setReview] = useState('');
-  const [addToList, setAddToList] = useState(false);
+const MovieReview: React.FC<MovieReviewProps> = ({ movie }) => {
+  const [backdrops, setBackdrops] = useState<Backdrop[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleRating = (newRating: number) => {
-    setRating(newRating);
-  };
+  useEffect(() => {
+    const fetchImages = async () => {
+      try {
+        const imagesData = await fetchMovieImages(movie.id);
+        setBackdrops(imagesData.backdrops.slice(0, 1)); // Limit to 1 image
+      } catch (error) {
+        console.error('Error fetching movie images:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const handleSubmit = () => {
-    // Handle the submit action
-  };
+    fetchImages();
+  }, [movie.id]);
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#ffffff" />
+      </View>
+    );
+  }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>{movie.title}</Text>
+    <ScrollView style={styles.container}>
+      {/* Movie Details Section */}
+      <View style={styles.detailsContainer}>
+        {/* Title and Rating section */}
+        <Text numberOfLines={2} style={styles.title}>
+          {movie.title}
+        </Text>
+        <Text style={styles.rating}>⭐ {movie.vote_average.toFixed(1)}</Text>
 
-      {/* Rating Feature */}
-      <View style={styles.section}>
-        <Text style={styles.label}>Your Rating:</Text>
-        <View style={styles.starsContainer}>
-          {[1, 2, 3, 4, 5].map((star) => (
-            <TouchableOpacity key={star} onPress={() => handleRating(star)}>
-              <Text
-                style={[
-                  styles.star,
-                  rating >= star ? styles.filledStar : styles.emptyStar,
-                ]}
-              >
-                ★
-              </Text>
-            </TouchableOpacity>
-          ))}
+        {/* Genres section */}
+        {movie.genres && movie.genres.length > 0 && (
+          <View style={styles.genresContainer}>
+            {movie.genres.slice(0, 3).map((genre) => (
+              <View key={genre.id} style={styles.genreBadge}>
+                <Text style={styles.genreText}>{genre.name}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Movie Additional Details */}
+        <View style={styles.additionalDetails}>
+          {movie.release_date && (
+            <Text style={styles.detailText}>
+              Released: {new Date(movie.release_date).getFullYear()}
+            </Text>
+          )}
+          {movie.runtime && (
+            <Text style={styles.detailText}>
+              Runtime: {movie.runtime} min
+            </Text>
+          )}
         </View>
+
+        {/* Movie Overview */}
+        {movie.overview && (
+          <View style={styles.overviewContainer}>
+            <Text style={styles.overviewTitle}>Overview</Text>
+            <Text style={styles.overviewText}>{movie.overview}</Text>
+          </View>
+        )}
       </View>
 
-      {/* Review Feature */}
-      <View style={styles.section}>
-        <Text style={styles.label}>Your Review:</Text>
-        <TextInput
-          style={styles.textInput}
-          multiline
-          numberOfLines={4}
-          placeholder="Write your review here..."
-          placeholderTextColor="#888888"
-          value={review}
-          onChangeText={setReview}
-          editable={isFlipped} // Disable when not flipped
-          // Ensure autoFocus is not set
-        />
-      </View>
-
-      {/* Add to List Feature */}
-      <View style={styles.sectionRow}>
-        <Text style={styles.label}>Add to List:</Text>
-        <Switch value={addToList} onValueChange={setAddToList} disabled={!isFlipped} />
-      </View>
-
-      {/* Submit Button */}
-      <TouchableOpacity
-        style={styles.submitButton}
-        onPress={handleSubmit}
-        disabled={!isFlipped}
-      >
-        <Text style={styles.submitButtonText}>Submit</Text>
-      </TouchableOpacity>
-    </View>
+      {/* Single Backdrop Image */}
+      {backdrops.length > 0 && (
+        <View style={styles.backdropContainer}>
+          <Image
+            source={{ uri: `https://image.tmdb.org/t/p/w780${backdrops[0].file_path}` }}
+            style={styles.backdropImage}
+          />
+        </View>
+      )}
+    </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#000000',
+    width: CARD_WIDTH,
+    height: CARD_HEIGHT,
+    borderRadius: 20,
+  },
+  loadingContainer: {
+    flex: 1,
     backgroundColor: '#1F1F1F',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  detailsContainer: {
     padding: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    borderRadius: 20,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 20,
-    textAlign: 'center',
+    color: '#fff',
+    marginBottom: 8,
+    letterSpacing: 0.5,
   },
-  section: {
-    marginBottom: 20,
-  },
-  sectionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 18,
-    color: '#ffffff',
-    marginBottom: 10,
-  },
-  starsContainer: {
-    flexDirection: 'row',
-  },
-  star: {
-    fontSize: 30,
-    marginRight: 5,
-  },
-  filledStar: {
+  rating: {
+    fontSize: 20,
     color: '#FFD700',
+    marginBottom: 8,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
   },
-  emptyStar: {
-    color: '#888888',
+  genresContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 4,
   },
-  textInput: {
-    borderColor: '#555555',
-    borderWidth: 1,
-    borderRadius: 10,
+  genreBadge: {
+    backgroundColor: 'rgba(51, 51, 51, 0.8)',
+    borderRadius: 15,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  genreText: {
     color: '#ffffff',
-    padding: 10,
-    textAlignVertical: 'top',
+    fontSize: 14,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
   },
-  submitButton: {
-    backgroundColor: '#FFD700',
-    paddingVertical: 15,
-    borderRadius: 10,
-    alignItems: 'center',
+  backdropContainer: {
+    marginTop: CARD_HEIGHT * 0.02, // Adjust margin for backdrop
+    paddingBottom: 20,
+    backgroundColor: '#000000', // Changed to black
   },
-  submitButtonText: {
+  backdropImage: {
+    width: CARD_WIDTH,
+    height: CARD_HEIGHT * 0.35,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  additionalDetails: {
+    marginTop: 15,
+    marginBottom: 15,
+  },
+  detailText: {
+    color: '#ffffff',
+    fontSize: 16,
+    marginBottom: 5,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
+  },
+  overviewContainer: {
+    marginTop: 10,
+  },
+  overviewTitle: {
+    color: '#ffffff',
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#1F1F1F',
+    marginBottom: 8,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
+  },
+  overviewText: {
+    color: '#ffffff',
+    fontSize: 16,
+    lineHeight: 24,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
   },
 });
 

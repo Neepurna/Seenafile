@@ -1,14 +1,28 @@
 // src/screens/CineBrowseScreen.tsx
 
 import React, { useEffect, useState, useRef } from 'react';
-import { View, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Alert, Dimensions, SafeAreaView, Platform, Text } from 'react-native';
 import Swiper from 'react-native-deck-swiper';
 import FlipCard from '../components/FlipCard';
+import { Ionicons } from '@expo/vector-icons'; // Add this import
 import {
   fetchTopRatedMovies,
   fetchMoviesByGenre,
   fetchHighestRatedMovies,
 } from '../services/tmdb';
+import SideBar from '../components/SideBar';
+
+const { width, height } = Dimensions.get('window');
+const TAB_BAR_HEIGHT = 67; // Match new tab bar height
+const SCREEN_HEIGHT = Platform.select({
+  ios: height - TAB_BAR_HEIGHT - (Platform.OS === 'ios' ? 44 : 0), // Account for iOS status bar
+  android: height - TAB_BAR_HEIGHT,
+});
+
+interface Genre {
+  label: string;
+  id: number;
+}
 
 interface Movie {
   id: number;
@@ -16,28 +30,16 @@ interface Movie {
   poster_path: string;
   vote_average: number;
   overview: string;
+  release_date: string;
+  runtime: number;
+  genres: { id: number; name: string }[];
+  // Add other detailed fields if needed
 }
 
-const genres = [
+const genres: Genre[] = [
   { label: 'Action', id: 28 },
   { label: 'Adventure', id: 12 },
-  { label: 'Animation', id: 16 },
-  { label: 'Comedy', id: 35 },
-  { label: 'Crime', id: 80 },
-  { label: 'Documentary', id: 99 },
-  { label: 'Drama', id: 18 },
-  { label: 'Family', id: 10751 },
-  { label: 'Fantasy', id: 14 },
-  { label: 'History', id: 36 },
-  { label: 'Horror', id: 27 },
-  { label: 'Music', id: 10402 },
-  { label: 'Mystery', id: 9648 },
-  { label: 'Romance', id: 10749 },
-  { label: 'Science Fiction', id: 878 },
-  { label: 'TV Movie', id: 10770 },
-  { label: 'Thriller', id: 53 },
-  { label: 'War', id: 10752 },
-  { label: 'Western', id: 37 },
+  // ... (rest of the genres)
 ];
 
 const MAX_PAGE = 500; // Maximum page number allowed by TMDB API
@@ -189,11 +191,36 @@ const CineBrowseScreen: React.FC = () => {
     return array.sort(() => Math.random() - 0.5);
   };
 
+  const handleLove = () => {
+    // Handle love action
+    console.log('Loved movie');
+  };
+
+  const handleComment = () => {
+    // Handle comment action
+    console.log('Comment on movie');
+  };
+
+  const handleAddToList = () => {
+    // Handle add to list action
+    console.log('Added to list');
+  };
+
+  const handleSwipedTop = (index: number) => {
+    console.log('Super liked movie:', movies[index]);
+    // Add your super like logic here
+  };
+
+  const handleSwipedBottom = (index: number) => {
+    console.log('Rejected movie:', movies[index]);
+    // Add your reject logic here
+  };
+
   if (loading && movies.length === 0) {
     // Show loading indicator only if no movies are loaded yet
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#ffffff" />
+        <ActivityIndicator size="large" color="#000000" />
       </View>
     );
   }
@@ -209,54 +236,75 @@ const CineBrowseScreen: React.FC = () => {
           return (
             <FlipCard
               movie={movie}
-              setSwipingEnabled={setSwipingEnabled}
+              setSwipingEnabled={setSwipingEnabled} // Pass the function here
             />
           );
         }}
         infinite={false}
         backgroundColor="transparent"
-        cardVerticalMargin={10}
+        cardVerticalMargin={0}
+        cardHorizontalMargin={0}
         stackSize={3}
-        stackSeparation={15}
+        stackScale={0}  // Add this to remove scaling of stacked cards
+        stackSeparation={0}  // Change this to 0 to make cards perfectly stack
+        overlayOpacityHorizontalThreshold={width / 8} // Reduced from width/6
+        overlayOpacityVerticalThreshold={SCREEN_HEIGHT / 8} // Reduced from SCREEN_HEIGHT/6
+        inputRotationRange={[-width / 2, 0, width / 2]}  // Add this for better rotation
+        outputRotationRange={["-10deg", "0deg", "10deg"]}  // Add this for better rotation
         onSwipedAll={fetchMoreMovies}
-        overlayLabels={{
-          left: {
-            title: 'NOPE',
-            style: {
-              label: {
-                color: 'red',
-                fontSize: 24,
-              },
-              wrapper: {
-                flexDirection: 'column',
-                alignItems: 'flex-end',
-                justifyContent: 'flex-start',
-                marginTop: 30,
-                marginLeft: -30,
-              },
-            },
-          },
-          right: {
-            title: 'LIKE',
-            style: {
-              label: {
-                color: 'green',
-                fontSize: 24,
-              },
-              wrapper: {
-                flexDirection: 'column',
-                alignItems: 'flex-start',
-                justifyContent: 'flex-start',
-                marginTop: 30,
-                marginLeft: 30,
-              },
-            },
-          },
-        }}
-        disableTopSwipe={true} // Disable up swipe
+        onSwipedTop={handleSwipedTop}
+        onSwipedBottom={handleSwipedBottom}
+        verticalSwipe={swipingEnabled}
+        horizontalSwipe={swipingEnabled}
+        disableTopSwipe={!swipingEnabled}
         disableBottomSwipe={!swipingEnabled}
         disableLeftSwipe={!swipingEnabled}
         disableRightSwipe={!swipingEnabled}
+        verticalThreshold={SCREEN_HEIGHT / 6}  // Reduced from SCREEN_HEIGHT/4
+        horizontalThreshold={width / 6}  // Reduced from width/4
+        overlayLabels={swipingEnabled ? {
+          left: {
+            element: (
+              <View style={[styles.overlayWrapper, { borderColor: '#FF4B4B' }]}>
+                <Ionicons name="close-circle" size={40} color="#FF4B4B" />
+                <Text style={[styles.overlayText, { color: '#FF4B4B' }]}>NOT SEEN</Text>
+              </View>
+            )
+          },
+          right: {
+            element: (
+              <View style={[styles.overlayWrapper, { borderColor: '#4BFF4B' }]}>
+                <Ionicons name="checkmark-circle" size={40} color="#4BFF4B" />
+                <Text style={[styles.overlayText, { color: '#4BFF4B' }]}>SEEN</Text>
+              </View>
+            )
+          },
+          top: {
+            element: (
+              <View style={[styles.overlayWrapper, { borderColor: '#FFD700' }]}>
+                <Ionicons name="help-circle" size={40} color="#FFD700" />
+                <Text style={[styles.overlayText, { color: '#FFD700' }]}>NOT SURE</Text>
+              </View>
+            )
+          },
+          bottom: {
+            element: (
+              <View style={[styles.overlayWrapper, { borderColor: '#00000' }]}>
+                <Ionicons name="time" size={40} color="#00BFFF" />
+                <Text style={[styles.overlayText, { color: '#00BFFF' }]}>WATCH LATER</Text>
+              </View>
+            )
+          },
+        } : undefined}
+        swipeAnimationDuration={swipingEnabled ? 350 : 0}
+        animateCardOpacity={true}
+        containerStyle={styles.swiperContainer}
+        cardStyle={styles.cardStyle}
+      />
+      <SideBar
+        onLove={handleLove}
+        onComment={handleComment}
+        onAddToList={handleAddToList}
       />
       {loading && (
         <View style={styles.loadingOverlay}>
@@ -267,24 +315,59 @@ const CineBrowseScreen: React.FC = () => {
   );
 };
 
+// Add these new styles
 const styles = StyleSheet.create({
   container: {
+    flex: 1,                    // Take up all available space
+    backgroundColor: '#000',    // Black background
+  },
+  swiperContainer: {
     flex: 1,
-    backgroundColor: '#000', // Dark background
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingTop: 20,
+    margin: 0,
+    padding: 0,
   },
   loadingContainer: {
-    flex: 1,
-    backgroundColor: '#000', // Dark background
-    justifyContent: 'center',
-    alignItems: 'center',
+    flex: 1,                    // Take up all available space
+    backgroundColor: '#000',    // Black background for loading screen
+    justifyContent: 'center',   // Center loading spinner vertically
+    alignItems: 'center',       // Center loading spinner horizontally
   },
   loadingOverlay: {
-    position: 'absolute',
-    top: '50%',
+    position: 'absolute',       // Position over other content
+    top: '50%',                // Center vertically
+    alignSelf: 'center',       // Center horizontally
+  },
+  cardStyle: {
+    width: width,
+    height: SCREEN_HEIGHT,
     alignSelf: 'center',
+    margin: 0,
+    padding: 0,
+  },
+  overlayWrapper: {
+    position: 'absolute',
+    top: '50%',  // Center vertically
+    left: '50%', // Center horizontally
+    transform: [{ translateX: -75 }, { translateY: -50 }], // Offset by half the size
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Semi-transparent black background
+    borderWidth: 2,
+    borderRadius: 15,
+    width: 150,
+    height: 100,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+  },
+  overlayText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginTop: 5,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
   },
 });
 
