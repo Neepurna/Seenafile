@@ -1,11 +1,17 @@
 // src/screens/CineFileScreen.tsx
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
+import MovieReview from '../components/MovieReview'; // Adjust the import path as necessary
 
 const CineFileScreen: React.FC = () => {
+  const sampleMovie = {
+    title: 'Inception',
+    // Include other movie properties if needed
+  };
+
   return (
     <View style={styles.container}>
-      <Text style={styles.text}>CineFile Screen</Text>
+      <MovieReview movie={sampleMovie} />
     </View>
   );
 };
@@ -15,10 +21,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  text: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    backgroundColor: '#f5f5f5', // Optional: set a background color
   },
 });
 

@@ -1,5 +1,8 @@
+// src/components/MovieCard.tsx
+
 import React from 'react';
-import { View, Text, Image, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, ImageBackground, StyleSheet, Dimensions } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 
 const { width, height } = Dimensions.get('window');
 
@@ -24,60 +27,59 @@ const MovieCard: React.FC<MovieCardProps> = ({ movie }) => {
 
   return (
     <View style={styles.card}>
-  <Image source={{ uri: imageUrl }} style={styles.image} />
-  <View style={styles.detailsContainer}>
-    <Text style={styles.title}>{movie.title}</Text>
-    <Text style={styles.rating}>Rating: {Math.floor(movie.vote_average)}/10</Text>
-  </View>
-</View>
+      <ImageBackground
+        source={{ uri: imageUrl }}
+        style={styles.image}
+        imageStyle={styles.imageStyle}
+      >
+        <LinearGradient
+          colors={['transparent', 'rgba(0, 0, 0, 0.8)']}
+          style={styles.gradient}
+        >
+          <Text style={styles.title} numberOfLines={2}>
+            {movie.title}
+          </Text>
+          <Text style={styles.rating}>⭐ {movie.vote_average.toFixed(1)}</Text>
+        </LinearGradient>
+      </ImageBackground>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   card: {
-    width: width * 0.85,
-    height: height * .85,
-    borderRadius: 15,
+    flex: 1,
+    borderRadius: 20,
     overflow: 'hidden',
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
-    position: 'relative',
+    backgroundColor: '#000',
   },
   image: {
-    width: '100%',
-    height: '85%',
-    borderTopLeftRadius: 15,
-    borderTopRightRadius: 15,
+    flex: 1,
+    justifyContent: 'flex-end',
   },
-  detailsContainer: {
-    width: '100%',
-    padding: 15,
-    alignItems: 'center',
-    backgroundColor: '#fff',
+  imageStyle: {
+    borderRadius: 20,
+  },
+  gradient: {
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    backgroundColor: 'transparent',
   },
   title: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#000',
-    textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.1)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 5,
   },
   rating: {
-    fontSize: 16,
-    color: '#555',
-    textAlign: 'center',
-    marginTop: 5,
+    fontSize: 22,
+    color: '#fff',
   },
   errorText: {
-    fontSize: 16,
+    fontSize: 18,
     color: '#888',
     textAlign: 'center',
-    padding: 20,
+    marginTop: 20,
   },
 });
 
