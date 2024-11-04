@@ -24,12 +24,12 @@ const MovieCard: React.FC<MovieCardProps> = ({ movie }) => {
 
   return (
     <View style={styles.card}>
-      <Image source={{ uri: imageUrl }} style={styles.image} />
-      <View style={styles.detailsContainer}>
-        <Text style={styles.title}>{movie.title}</Text>
-        <Text style={styles.rating}>Rating: {movie.vote_average}/10</Text>
-      </View>
-    </View>
+  <Image source={{ uri: imageUrl }} style={styles.image} />
+  <View style={styles.detailsContainer}>
+    <Text style={styles.title}>{movie.title}</Text>
+    <Text style={styles.rating}>Rating: {Math.floor(movie.vote_average)}/10</Text>
+  </View>
+</View>
   );
 };
 
@@ -48,7 +48,7 @@ const styles = StyleSheet.create({
   },
   image: {
     width: '100%',
-    height: '80%',
+    height: '85%',
     borderTopLeftRadius: 15,
     borderTopRightRadius: 15,
   },
