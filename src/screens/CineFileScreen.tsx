@@ -41,7 +41,7 @@ const CineFileScreen: React.FC = () => {
   return (
     <ScrollView style={styles.container}>
       <MovieGrid movies={movieLists.mostWatch} title="Most Watch" />
-      <MovieGrid movies={movieLists.watched} title="Watched Movies" />
+      <MovieGrid movies={movieLists.seen} title="Watched Movies" />
       <MovieGrid movies={movieLists.watchLater} title="Watch Later" />
     </ScrollView>
   );

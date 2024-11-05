@@ -211,12 +211,11 @@ const CineBrowseScreen: React.FC = () => {
 
   const handleSwipedRight = (index: number) => {
     console.log('Seen movie:', movies[index]);
-    addMovieToList('watched', movies[index]);
+    addMovieToList('seen', movies[index]);
   };
 
   const handleSwipedLeft = (index: number) => {
-    console.log('Critic movie:', movies[index]);
-    addMovieToList('NotWatched', movies[index]);
+    
   };
 
   const handleSwipedTop = (index: number) => {
@@ -282,7 +281,7 @@ const CineBrowseScreen: React.FC = () => {
             element: (
               <View style={[styles.overlayWrapper, { borderColor: '#FF4B4B' }]}>
                 <Ionicons name="close-circle" size={40} color="#FF4B4B" />
-                <Text style={[styles.overlayText, { color: '#FF4B4B' }]}>CRITIC</Text>
+                <Text style={[styles.overlayText, { color: '#FF4B4B' }]}>Not Watched</Text>
               </View>
             )
           },
@@ -290,7 +289,7 @@ const CineBrowseScreen: React.FC = () => {
             element: (
               <View style={[styles.overlayWrapper, { borderColor: '#4BFF4B' }]}>
                 <Ionicons name="checkmark-circle" size={40} color="#4BFF4B" />
-                <Text style={[styles.overlayText, { color: '#4BFF4B' }]}>WATCHED</Text>
+                <Text style={[styles.overlayText, { color: '#4BFF4B' }]}>Watched</Text>
               </View>
             )
           },
@@ -298,7 +297,7 @@ const CineBrowseScreen: React.FC = () => {
             element: (
               <View style={[styles.overlayWrapper, { borderColor: '#FFD700' }]}>
                 <Ionicons name="repeat" size={40} color="#FFD700" />
-                <Text style={[styles.overlayText, { color: '#FFD700' }]}>MOST WATCH</Text>
+                <Text style={[styles.overlayText, { color: '#FFD700' }]}>Most Watch</Text>
               </View>
             )
           },
@@ -306,7 +305,7 @@ const CineBrowseScreen: React.FC = () => {
             element: (
               <View style={[styles.overlayWrapper, { borderColor: '#00BFFF' }]}>
                 <Ionicons name="time" size={40} color="#00BFFF" />
-                <Text style={[styles.overlayText, { color: '#00BFFF' }]}>WATCH LATER</Text>
+                <Text style={[styles.overlayText, { color: '#00BFFF' }]}>Watch Later</Text>
               </View>
             )
           },

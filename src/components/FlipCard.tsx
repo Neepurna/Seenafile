@@ -17,18 +17,9 @@ import MovieReview from './MovieReview';
 import { useMovieLists, MovieListProvider } from '../context/MovieListContext';
 
 const { width, height } = Dimensions.get('window');
-const TAB_BAR_HEIGHT = 100; // Match with Tabs.tsx
-const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 44 : 0;
-const CARD_PADDING = 16; // Add padding around the card
-
-// Calculate dimensions for a more square-ish card that maintains movie poster aspect ratio (2:3)
+const CARD_PADDING = 16;
 const CARD_WIDTH = width - (CARD_PADDING * 2);
-const CARD_HEIGHT = (CARD_WIDTH * 1.5); // 2:3 aspect ratio common for movie posters
-
-interface Genre {
-  id: number;
-  name: string;
-}
+const CARD_HEIGHT = (CARD_WIDTH * 1.5);
 
 interface FlipCardProps {
   movie: {
@@ -39,11 +30,10 @@ interface FlipCardProps {
     overview: string;
     release_date: string;
     runtime: number;
-    genres: Genre[];
-    // Add other detailed fields if needed
+    genres: { id: number; name: string }[];
   };
   setSwipingEnabled: (enabled: boolean) => void;
-  onSwipeComplete?: () => void; // Add this prop
+  onSwipeComplete?: () => void;
 }
 
 const FlipCard = forwardRef<View, FlipCardProps>((props, ref) => {
@@ -92,24 +82,7 @@ const FlipCard = forwardRef<View, FlipCardProps>((props, ref) => {
     }
   };
 
-  const handleSwipe = (direction) => {
-    if (!movie) return; // Guard against undefined movie
-    
-    switch (direction) {
-      case 'up':
-        addMovieToList('mostWatch', movie);
-        break;
-      case 'right':
-        addMovieToList('watchLater', movie);
-        break;
-      case 'left':
-        addMovieToList('seen', movie);
-        break;
-    }
-    setSwipingEnabled(true);
-    onSwipeComplete?.(); // Call onSwipeComplete after handling the swipe
-  };
-
+  
   const frontInterpolate = flipAnim.interpolate({
     inputRange: [0, 180],
     outputRange: ['0deg', '180deg'],
@@ -171,7 +144,6 @@ FlipCard.displayName = 'FlipCard';
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    // ...existing cardContainer styles...
   },
   cardContainer: {
     width: CARD_WIDTH,
@@ -184,8 +156,8 @@ const styles = StyleSheet.create({
     marginVertical: CARD_PADDING,
     borderRadius: 20,
     position: 'absolute',
-    left: (width - CARD_WIDTH) / 2 - CARD_PADDING, // Center horizontally
-    top: (height - CARD_HEIGHT) / 2 - TAB_BAR_HEIGHT / 2, // Center vertically accounting for tab bar
+    left: (width - CARD_WIDTH) / 2 - CARD_PADDING,
+    top: (height - CARD_HEIGHT) / 2 - 50, // Simplified calculation
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
