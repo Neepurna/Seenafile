@@ -1,6 +1,6 @@
 // src/components/FlipCard.tsx
 
-import React from 'react';
+import React, { useRef, forwardRef } from 'react';
 import {
   View,
   Text,
@@ -12,8 +12,9 @@ import {
   ScrollView,
   Platform,
 } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { GestureHandlerRootView, PanGestureHandler, State, PanGestureHandlerGestureEvent } from 'react-native-gesture-handler';
 import MovieReview from './MovieReview';
+import { useMovieLists, MovieListProvider } from '../context/MovieListContext';
 
 const { width, height } = Dimensions.get('window');
 const TAB_BAR_HEIGHT = 100; // Match with Tabs.tsx
@@ -42,9 +43,12 @@ interface FlipCardProps {
     // Add other detailed fields if needed
   };
   setSwipingEnabled: (enabled: boolean) => void;
+  onSwipeComplete?: () => void; // Add this prop
 }
 
-const FlipCard: React.FC<FlipCardProps> = ({ movie, setSwipingEnabled }) => {
+const FlipCard = forwardRef<View, FlipCardProps>((props, ref) => {
+  const { movie, setSwipingEnabled, onSwipeComplete } = props;
+  const { addMovieToList } = useMovieLists(); // Only use addMovieToList
   const [flipped, setFlipped] = React.useState(false);
   const flipAnim = React.useRef(new Animated.Value(0)).current;
   const lastTap = React.useRef<number | null>(null);
@@ -88,6 +92,24 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, setSwipingEnabled }) => {
     }
   };
 
+  const handleSwipe = (direction) => {
+    if (!movie) return; // Guard against undefined movie
+    
+    switch (direction) {
+      case 'up':
+        addMovieToList('mostWatch', movie);
+        break;
+      case 'right':
+        addMovieToList('watchLater', movie);
+        break;
+      case 'left':
+        addMovieToList('seen', movie);
+        break;
+    }
+    setSwipingEnabled(true);
+    onSwipeComplete?.(); // Call onSwipeComplete after handling the swipe
+  };
+
   const frontInterpolate = flipAnim.interpolate({
     inputRange: [0, 180],
     outputRange: ['0deg', '180deg'],
@@ -109,8 +131,9 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, setSwipingEnabled }) => {
   const imageUrl = `https://image.tmdb.org/t/p/w500${movie.poster_path}`;
 
   return (
-    <TouchableWithoutFeedback onPress={handleDoubleTap}>
-      <GestureHandlerRootView 
+    <GestureHandlerRootView style={styles.container}>
+      <Animated.View 
+        ref={ref}
         style={[styles.cardContainer, flipped && styles.noGestures]}
       >
         {/* Front Side - Only Poster */}
@@ -129,7 +152,7 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, setSwipingEnabled }) => {
           <MovieReview movie={movie} />
         </Animated.View>
 
-        {/* Overlay - keep existing overlay code */}
+        {/* Overlay */}
         {flipped && (
           <View style={styles.overlay} pointerEvents="auto">
             <TouchableWithoutFeedback onPress={handleDoubleTap}>
@@ -137,12 +160,19 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, setSwipingEnabled }) => {
             </TouchableWithoutFeedback>
           </View>
         )}
-      </GestureHandlerRootView>
-    </TouchableWithoutFeedback>
+      </Animated.View>
+    </GestureHandlerRootView>
   );
-};
+});
+
+// Add display name for debugging
+FlipCard.displayName = 'FlipCard';
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    // ...existing cardContainer styles...
+  },
   cardContainer: {
     width: CARD_WIDTH,
     height: CARD_HEIGHT,

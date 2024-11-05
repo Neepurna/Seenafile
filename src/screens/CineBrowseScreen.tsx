@@ -11,6 +11,7 @@ import {
   fetchHighestRatedMovies,
 } from '../services/tmdb';
 import SideBar from '../components/SideBar';
+import { useMovieLists } from '../context/MovieListContext';
 
 const { width, height } = Dimensions.get('window');
 const TAB_BAR_HEIGHT = 67; // Match new tab bar height
@@ -62,6 +63,8 @@ const CineBrowseScreen: React.FC = () => {
   // Current pages for each category
   const [topRatedPage, setTopRatedPage] = useState(1);
   const [highestRatedPage, setHighestRatedPage] = useState(1);
+
+  const { addMovieToList } = useMovieLists();
 
   useEffect(() => {
     // Initial fetch
@@ -206,14 +209,24 @@ const CineBrowseScreen: React.FC = () => {
     console.log('Added to list');
   };
 
+  const handleSwipedRight = (index: number) => {
+    console.log('Seen movie:', movies[index]);
+    addMovieToList('watched', movies[index]);
+  };
+
+  const handleSwipedLeft = (index: number) => {
+    console.log('Critic movie:', movies[index]);
+    addMovieToList('NotWatched', movies[index]);
+  };
+
   const handleSwipedTop = (index: number) => {
-    console.log('Super liked movie:', movies[index]);
-    // Add your super like logic here
+    console.log('Most Watch movie:', movies[index]);
+    addMovieToList('mostWatch', movies[index]);
   };
 
   const handleSwipedBottom = (index: number) => {
-    console.log('Rejected movie:', movies[index]);
-    // Add your reject logic here
+    console.log('Watch Later movie:', movies[index]);
+    addMovieToList('watchLater', movies[index]);
   };
 
   if (loading && movies.length === 0) {
@@ -254,6 +267,8 @@ const CineBrowseScreen: React.FC = () => {
         onSwipedAll={fetchMoreMovies}
         onSwipedTop={handleSwipedTop}
         onSwipedBottom={handleSwipedBottom}
+        onSwipedRight={handleSwipedRight}
+        onSwipedLeft={handleSwipedLeft}
         verticalSwipe={swipingEnabled}
         horizontalSwipe={swipingEnabled}
         disableTopSwipe={!swipingEnabled}
@@ -267,7 +282,7 @@ const CineBrowseScreen: React.FC = () => {
             element: (
               <View style={[styles.overlayWrapper, { borderColor: '#FF4B4B' }]}>
                 <Ionicons name="close-circle" size={40} color="#FF4B4B" />
-                <Text style={[styles.overlayText, { color: '#FF4B4B' }]}>NOT SEEN</Text>
+                <Text style={[styles.overlayText, { color: '#FF4B4B' }]}>CRITIC</Text>
               </View>
             )
           },
@@ -275,21 +290,21 @@ const CineBrowseScreen: React.FC = () => {
             element: (
               <View style={[styles.overlayWrapper, { borderColor: '#4BFF4B' }]}>
                 <Ionicons name="checkmark-circle" size={40} color="#4BFF4B" />
-                <Text style={[styles.overlayText, { color: '#4BFF4B' }]}>SEEN</Text>
+                <Text style={[styles.overlayText, { color: '#4BFF4B' }]}>WATCHED</Text>
               </View>
             )
           },
           top: {
             element: (
               <View style={[styles.overlayWrapper, { borderColor: '#FFD700' }]}>
-                <Ionicons name="help-circle" size={40} color="#FFD700" />
-                <Text style={[styles.overlayText, { color: '#FFD700' }]}>NOT SURE</Text>
+                <Ionicons name="repeat" size={40} color="#FFD700" />
+                <Text style={[styles.overlayText, { color: '#FFD700' }]}>MOST WATCH</Text>
               </View>
             )
           },
           bottom: {
             element: (
-              <View style={[styles.overlayWrapper, { borderColor: '#00000' }]}>
+              <View style={[styles.overlayWrapper, { borderColor: '#00BFFF' }]}>
                 <Ionicons name="time" size={40} color="#00BFFF" />
                 <Text style={[styles.overlayText, { color: '#00BFFF' }]}>WATCH LATER</Text>
               </View>
@@ -318,11 +333,21 @@ const CineBrowseScreen: React.FC = () => {
 // Add these new styles
 const styles = StyleSheet.create({
   container: {
-    flex: 1,                    // Take up all available space
-    backgroundColor: '#000',    // Black background
+    flex: 1,
+    backgroundColor: '#000',
+    alignItems: 'center', // Center horizontally
+    justifyContent: 'center', // Center vertically
   },
   swiperContainer: {
     flex: 1,
+    margin: 0,
+    padding: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardStyle: {
+    alignSelf: 'center',
+    justifyContent: 'center',
     margin: 0,
     padding: 0,
   },
@@ -336,13 +361,6 @@ const styles = StyleSheet.create({
     position: 'absolute',       // Position over other content
     top: '50%',                // Center vertically
     alignSelf: 'center',       // Center horizontally
-  },
-  cardStyle: {
-    width: width,
-    height: SCREEN_HEIGHT,
-    alignSelf: 'center',
-    margin: 0,
-    padding: 0,
   },
   overlayWrapper: {
     position: 'absolute',
