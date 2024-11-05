@@ -1,141 +1,197 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   View, 
-  Text,  // Add this import
+  Text, 
   StyleSheet, 
   FlatList, 
   Image, 
   Dimensions, 
   TouchableOpacity, 
   ScrollView, 
+  PanResponder, 
   Animated 
 } from 'react-native';
 import { useMovieLists } from '../context/MovieListContext';
-import { PanGestureHandler, State, LongPressGestureHandler } from 'react-native-gesture-handler';
 
 const { width, height } = Dimensions.get('window');
 const POSTER_HEIGHT = height / 6; // Base height for posters
 const POSTER_WIDTH = POSTER_HEIGHT / 1.5; // Using standard movie poster ratio
-const COLLAPSED_COLUMNS = Math.floor((width - 50) / POSTER_WIDTH); // Calculate max columns that fit
 
-const TierRow = ({ tier, color, movies, onMovieDrop }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const expandAnim = new Animated.Value(0);
+const TierRow = ({ tier, color, movies, style, onMoveDrop }) => {
+  const [isDragging, setIsDragging] = useState(false);
+  const [draggedMovie, setDraggedMovie] = useState(null);
+  const pan = useRef(new Animated.ValueXY()).current;
+  const scale = useRef(new Animated.Value(1)).current;
 
-  const renderMovieItem = ({ item, index }) => (
-    <LongPressGestureHandler
-      minDurationMs={1000}
-      onHandlerStateChange={({ nativeEvent }) => {
-        if (nativeEvent.state === State.ACTIVE) {
-          // Enable drag mode
-        }
-      }}
-    >
-      <TouchableOpacity style={[styles.movieItem, 
-        isExpanded ? styles.expandedMovie : { width: POSTER_WIDTH }
-      ]}>
-        <Image
-          source={{ uri: `https://image.tmdb.org/t/p/w500${item.poster_path}` }}
-          style={[
-            styles.poster,
-            isExpanded ? styles.expandedPoster : { width: POSTER_WIDTH, height: POSTER_HEIGHT }
-          ]}
-        />
-        {isExpanded && (
-          <Text style={styles.movieTitle} numberOfLines={2}>
-            {item.title}
-          </Text>
-        )}
-      </TouchableOpacity>
-    </LongPressGestureHandler>
-  );
+  useEffect(() => {
+    pan.setValue({ x: 0, y: 0 });
+    scale.setValue(1);
+  }, [isDragging]);
 
-  return (
-    <Animated.View style={[styles.tierContainer, {
-      height: expandAnim.interpolate({
-        inputRange: [0, 1],
-        outputRange: [POSTER_HEIGHT + 10, height / 2]
-      })
-    }]}>
-      <View style={styles.tierRow}>
-        {isExpanded ? (
-          <FlatList
-            data={movies}
-            renderItem={renderMovieItem}
-            keyExtractor={(item) => `${tier}-expanded-${item.id}`}
-            style={styles.expandedList}
-            contentContainerStyle={styles.expandedContainer}
-          />
-        ) : (
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            style={styles.horizontalScroll}
-            decelerationRate="fast"
-            snapToInterval={POSTER_WIDTH}
-            snapToAlignment="start"
-          >
-            <View style={styles.collapsedRow}>
-              {movies.map((movie, index) => (
-                <View key={`${tier}-collapsed-${movie.id}-${index}`}>
-                  {renderMovieItem({ item: movie, index })}
-                </View>
-              ))}
-            </View>
-          </ScrollView>
-        )}
-        <TouchableOpacity 
-          style={[styles.tierLabel, { backgroundColor: color }]}
-          onPress={() => {
-            setIsExpanded(!isExpanded);
-            Animated.spring(expandAnim, {
-              toValue: isExpanded ? 0 : 1,
-              useNativeDriver: false,
-              tension: 50,
-              friction: 10
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        pan.setOffset({
+          x: pan.x._value,
+          y: pan.y._value
+        });
+      },
+      onPanResponderMove: Animated.event(
+        [
+          null,
+          { dx: pan.x, dy: pan.y }
+        ],
+        { useNativeDriver: false }
+      ),
+      onPanResponderRelease: (e, gesture) => {
+        pan.flattenOffset();
+        const dropPoint = { x: gesture.moveX, y: gesture.moveY };
+        onMoveDrop(draggedMovie, dropPoint);
+        setIsDragging(false);
+        setDraggedMovie(null);
+        pan.setValue({ x: 0, y: 0 });
+        scale.setValue(1);
+      }
+    })
+  ).current;
+
+  const renderMovie = (movie, index) => {
+    const isBeingDragged = isDragging && draggedMovie?.id === movie.id;
+    
+    return (
+      <View key={`${tier}-${movie.id}-${index}`} style={styles.movieItem}>
+        <TouchableOpacity
+          onLongPress={() => {
+            setDraggedMovie(movie);
+            setIsDragging(true);
+            Animated.spring(scale, {
+              toValue: 1.1,
+              useNativeDriver: true,
             }).start();
           }}
+          {...(isBeingDragged ? panResponder.panHandlers : {})}
         >
-          <Text style={styles.tierText}>{tier}</Text>
+          <Image
+            source={{ uri: `https://image.tmdb.org/t/p/w500${movie.poster_path}` }}
+            style={[styles.poster, { width: POSTER_WIDTH, height: POSTER_HEIGHT }]}
+          />
+          {isBeingDragged && (
+            <Animated.View
+              style={[
+                styles.draggedPoster,
+                {
+                  width: POSTER_WIDTH,
+                  height: POSTER_HEIGHT,
+                  transform: [
+                    { translateX: pan.x },
+                    { translateY: pan.y },
+                    { scale: scale }
+                  ]
+                }
+              ]}
+            >
+              <Image
+                source={{ uri: `https://image.tmdb.org/t/p/w500${movie.poster_path}` }}
+                style={[styles.poster, { width: POSTER_WIDTH, height: POSTER_HEIGHT }]}
+              />
+            </Animated.View>
+          )}
         </TouchableOpacity>
       </View>
-    </Animated.View>
+    );
+  };
+
+  return (
+    <View style={[styles.tierContainer, style]}>
+      <View style={styles.tierRow}>
+        <TouchableOpacity style={[styles.tierLabel, { backgroundColor: color }]}>
+          <View style={styles.textWrapper}>
+            <Text style={styles.tierText}>{tier}</Text>
+          </View>
+        </TouchableOpacity>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          style={styles.horizontalScroll}
+        >
+          <View style={styles.collapsedRow}>
+            {movies.map(renderMovie)}
+          </View>
+        </ScrollView>
+      </View>
+    </View>
   );
 };
 
 const CineFileScreen: React.FC = () => {
-  const { movieLists } = useMovieLists();
+  const { movieLists, moveMovie } = useMovieLists();
+  const [dropZones, setDropZones] = useState({});
 
-  const tiers = [
-    { tier: 'S', color: '#FF6B6B', movies: movieLists.mostWatch?.slice(0, 10) || [] },
-    { tier: 'A', color: '#FFA06B', movies: movieLists.mostWatch?.slice(10, 20) || [] },
-    { tier: 'B', color: '#FFD93D', movies: movieLists.seen?.slice(0, 10) || [] },
-    { tier: 'C', color: '#6BCB77', movies: movieLists.seen?.slice(10, 20) || [] },
-    { tier: 'D', color: '#4D96FF', movies: movieLists.watchLater?.slice(0, 10) || [] },
+  const handleMoveDrop = (movie, dropPoint) => {
+    // Find which list the movie was dropped on
+    Object.entries(dropZones).forEach(([listId, zone]) => {
+      // Prevent dropping if the drop point is below all valid zones
+      const mostWatchedZone = dropZones['MOST WATCHED'];
+      if (mostWatchedZone && dropPoint.y > mostWatchedZone.y + mostWatchedZone.height) {
+        return;
+      }
+      
+      if (isPointInZone(dropPoint, zone)) {
+        moveMovie(movie, listId);
+      }
+    });
+  };
+
+  const measureDropZone = (listId) => (event) => {
+    event.target.measure((x, y, width, height, pageX, pageY) => {
+      setDropZones(prev => ({
+        ...prev,
+        [listId]: { x: pageX, y: pageY, width, height }
+      }));
+    });
+  };
+
+  const allTiers = [
+    // Empty tier at the very top
+    { tier: '', color: 'transparent', movies: [], type: 'empty' },
+    // Custom list below empty tier
+    { tier: 'CUSTOM LIST', color: '#9C27B0', movies: movieLists.custom || [], type: 'custom' },
+    // Watch Later and other lists
+    { tier: 'WATCH LATER', color: '#4D96FF', movies: movieLists.watchLater || [], type: 'movie' },
+    { tier: 'WATCHED', color: '#FFA06B', movies: movieLists.seen || [], type: 'movie' },
+    { tier: 'MOST WATCHED', color: '#FF6B6B', movies: movieLists.mostWatch || [], type: 'movie' },
   ];
 
-  const renderTier = ({ item: tier }) => (
-    <TierRow 
-      tier={tier.tier}
-      color={tier.color}
-      movies={tier.movies}
-      onMovieDrop={(movieId, newTier) => {
-        // Handle movie tier change
-      }}
-    />
-  );
+  const renderItem = ({ item: tier }) => {
+    if (tier.type === 'bottom') return <View style={styles.bottomSpacer} />;
+    
+    return (
+      <View onLayout={measureDropZone(tier.tier)}>
+        <TierRow 
+          key={tier.tier || Math.random()}
+          tier={tier.tier}
+          color={tier.color}
+          movies={tier.movies}
+          onMoveDrop={handleMoveDrop}
+          style={[
+            tier.type === 'empty' ? styles.emptyTierRow : styles.movieTierRow,
+            tier.type === 'custom' && styles.customTierRow
+          ]}
+        />
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>
       <FlatList
-        data={tiers}
-        renderItem={renderTier}
-        keyExtractor={(item) => item.tier}
+        data={allTiers}
+        renderItem={renderItem}
+        keyExtractor={(item, index) => item.tier || `empty-${index}`}
+        contentContainerStyle={[styles.listContent]}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.tiersContainer}
-        snapToInterval={POSTER_HEIGHT + 10}
-        decelerationRate="fast"
-        snapToAlignment="start"
       />
     </View>
   );
@@ -146,48 +202,37 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#121212',
   },
-  tiersContainer: {
-    paddingBottom: 20, // Add some padding at the bottom
-  },
   tierContainer: {
+    marginHorizontal: 10,
+    marginBottom: 15,
     overflow: 'hidden',
-    marginBottom: 10,
-  },
-  tierRow: {
-    flexDirection: 'row',
-    flex: 1,
     backgroundColor: 'rgba(0,0,0,0.3)',
     borderRadius: 8,
+    height: POSTER_HEIGHT,
+  },
+  tierRow: {
+    flexDirection: 'row-reverse',
+    height: '100%',
   },
   tierLabel: {
-    width: 50,
+    width: 45,
     justifyContent: 'center',
     alignItems: 'center',
     borderTopRightRadius: 8,
     borderBottomRightRadius: 8,
   },
-  tierContent: {
-    flex: 1,
-    borderTopRightRadius: 8,
-    borderBottomRightRadius: 8,
+  textWrapper: {
+    height: '100%',
     justifyContent: 'center',
+    alignItems: 'center',
   },
   tierText: {
-    fontSize: 32,
-    fontWeight: 'bold',
+    fontSize: 14,
+    fontWeight: '900',
     color: '#fff',
-  },
-  gridContainer: {
-    flex: 1,
-    padding: 0,
-  },
-  movieItem: {
-    marginHorizontal: 2,
-  },
-  poster: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 0,
+    transform: [{ rotate: '-90deg' }],
+    width: POSTER_HEIGHT,
+    textAlign: 'center',
   },
   horizontalScroll: {
     flex: 1,
@@ -201,37 +246,52 @@ const styles = StyleSheet.create({
     height: POSTER_HEIGHT,
     paddingHorizontal: 4,
   },
-  dragItem: {
-    position: 'absolute',
-    zIndex: 999,
+  movieItem: {
+    marginHorizontal: 2,
+    position: 'relative',
   },
-  expandedList: {
-    flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderTopLeftRadius: 8,
-    borderBottomLeftRadius: 8,
-  },
-  expandedContainer: {
-    padding: 10,
-  },
-  expandedMovie: {
+  poster: {
     width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
+    height: '100%',
+    borderRadius: 0,
   },
-  expandedPoster: {
-    width: 60,
-    height: 90,
-    marginRight: 10,
-    borderRadius: 4,
+  emptyTierRow: {
+    opacity: 0.3,
   },
-  movieTitle: {
-    color: '#fff',
-    flex: 1,
-    fontSize: 16,
+  movieTierRow: {
+    opacity: 1,
+  },
+  bottomSpacer: {
+    height: POSTER_HEIGHT * 2,
+  },
+  listContent: {
+    paddingTop: height * 0.15,
+    paddingBottom: 20, // Reduced bottom padding
+  },
+  customTierRow: {
+    opacity: 1,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(156,39,176,0.1)', // Matching the purple color
+  },
+  draggingMovie: {
+    opacity: 0.7,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  draggedPoster: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    zIndex: 999,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
 });
 

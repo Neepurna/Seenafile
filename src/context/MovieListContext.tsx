@@ -10,11 +10,13 @@ interface MovieLists {
   seen: Movie[];
   watchLater: Movie[];
   mostWatch: Movie[];
+  custom: Movie[]; // Add this line
 }
 
 interface MovieListContextType {
   movieLists: MovieLists;
   addMovieToList: (listId: keyof MovieLists, movie: Movie) => void;
+  moveMovie: (movie: Movie, toListId: keyof MovieLists) => void;
 }
 
 const MovieListContext = createContext<MovieListContextType | undefined>(undefined);
@@ -24,6 +26,7 @@ const MovieListProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     seen: [],
     watchLater: [],
     mostWatch: [],
+    custom: [],
   });
 
   // Load saved movies when component mounts
@@ -38,6 +41,7 @@ const MovieListProvider: React.FC<{ children: React.ReactNode }> = ({ children }
             seen: parsed.seen || [],
             watchLater: parsed.watchLater || [],
             mostWatch: parsed.mostWatch || [],
+            custom: parsed.custom || [],
           });
         }
       } catch (error) {
@@ -62,8 +66,27 @@ const MovieListProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     }
   }, [movieLists]);
 
+  const moveMovie = useCallback(async (movie: Movie, toListId: keyof MovieLists) => {
+    try {
+      const updatedLists = { ...movieLists };
+      
+      // Remove from all lists
+      Object.keys(updatedLists).forEach(listId => {
+        updatedLists[listId] = updatedLists[listId].filter(m => m.id !== movie.id);
+      });
+      
+      // Add to new list
+      updatedLists[toListId] = [...updatedLists[toListId], movie];
+      
+      setMovieLists(updatedLists);
+      await AsyncStorage.setItem('movieLists', JSON.stringify(updatedLists));
+    } catch (error) {
+      console.error('Error moving movie:', error);
+    }
+  }, [movieLists]);
+
   return (
-    <MovieListContext.Provider value={{ movieLists, addMovieToList }}>
+    <MovieListContext.Provider value={{ movieLists, addMovieToList, moveMovie }}>
       {children}
     </MovieListContext.Provider>
   );
