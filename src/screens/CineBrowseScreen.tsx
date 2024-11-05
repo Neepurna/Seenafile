@@ -1,7 +1,7 @@
 // src/screens/CineBrowseScreen.tsx
 
 import React, { useEffect, useState, useRef } from 'react';
-import { View, StyleSheet, ActivityIndicator, Alert, Dimensions, SafeAreaView, Platform, Text } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Alert, Dimensions, Platform, Text } from 'react-native';
 import Swiper from 'react-native-deck-swiper';
 import FlipCard from '../components/FlipCard';
 import { Ionicons } from '@expo/vector-icons'; // Add this import
@@ -10,7 +10,6 @@ import {
   fetchMoviesByGenre,
   fetchHighestRatedMovies,
 } from '../services/tmdb';
-import SideBar from '../components/SideBar';
 import { useMovieLists } from '../context/MovieListContext';
 
 const { width, height } = Dimensions.get('window');
@@ -194,21 +193,6 @@ const CineBrowseScreen: React.FC = () => {
     return array.sort(() => Math.random() - 0.5);
   };
 
-  const handleLove = () => {
-    // Handle love action
-    console.log('Loved movie');
-  };
-
-  const handleComment = () => {
-    // Handle comment action
-    console.log('Comment on movie');
-  };
-
-  const handleAddToList = () => {
-    // Handle add to list action
-    console.log('Added to list');
-  };
-
   const handleSwipedRight = (index: number) => {
     console.log('Seen movie:', movies[index]);
     addMovieToList('seen', movies[index]);
@@ -314,11 +298,6 @@ const CineBrowseScreen: React.FC = () => {
         animateCardOpacity={true}
         containerStyle={styles.swiperContainer}
         cardStyle={styles.cardStyle}
-      />
-      <SideBar
-        onLove={handleLove}
-        onComment={handleComment}
-        onAddToList={handleAddToList}
       />
       {loading && (
         <View style={styles.loadingOverlay}>
