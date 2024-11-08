@@ -11,7 +11,6 @@ import {
   PanResponder, 
   Animated 
 } from 'react-native';
-import { useMovieLists } from '../context/MovieListContext';
 
 const { width, height } = Dimensions.get('window');
 const POSTER_HEIGHT = height / 6; // Base height for posters
@@ -126,7 +125,28 @@ const TierRow = ({ tier, color, movies, style, onMoveDrop }) => {
 };
 
 const CineFileScreen: React.FC = () => {
-  const { movieLists, moveMovie } = useMovieLists();
+  // Replace useMovieLists hook with local state
+  const [movieLists, setMovieLists] = useState({
+    custom: [],
+    watchLater: [],
+    seen: [],
+    mostWatch: []
+  });
+
+  const moveMovie = (movie, listId) => {
+    setMovieLists(prev => {
+      const newLists = { ...prev };
+      // Remove movie from all lists
+      Object.keys(newLists).forEach(key => {
+        newLists[key] = newLists[key].filter(m => m.id !== movie.id);
+      });
+      // Add movie to new list
+      const listKey = listId.toLowerCase().replace(' ', '');
+      newLists[listKey] = [...newLists[listKey], movie];
+      return newLists;
+    });
+  };
+
   const [dropZones, setDropZones] = useState({});
 
   const handleMoveDrop = (movie, dropPoint) => {

@@ -22,7 +22,6 @@ import {
   fetchMoviesByGenre,
   fetchHighestRatedMovies,
 } from '../services/tmdb';
-import { useMovieLists } from '../context/MovieListContext';
 import { TapGestureHandler, State } from 'react-native-gesture-handler';
 
 const { width, height } = Dimensions.get('window');
@@ -84,8 +83,6 @@ const CineBrowseScreen: React.FC = () => {
   // Current pages for each category
   const [topRatedPage, setTopRatedPage] = useState(1);
   const [highestRatedPage, setHighestRatedPage] = useState(1);
-
-  const { addMovieToList } = useMovieLists();
 
   useEffect(() => {
     // Initial fetch
@@ -217,7 +214,7 @@ const CineBrowseScreen: React.FC = () => {
 
   const handleSwipedRight = (index: number) => {
     console.log('Seen movie:', movies[index]);
-    addMovieToList('seen', movies[index]);
+    // Just log for now, remove addMovieToList
   };
 
   const handleSwipedLeft = (index: number) => {
@@ -226,12 +223,12 @@ const CineBrowseScreen: React.FC = () => {
 
   const handleSwipedTop = (index: number) => {
     console.log('Most Watch movie:', movies[index]);
-    addMovieToList('mostWatch', movies[index]);
+    // Just log for now, remove addMovieToList
   };
 
   const handleSwipedBottom = (index: number) => {
     console.log('Watch Later movie:', movies[index]);
-    addMovieToList('watchLater', movies[index]);
+    // Just log for now, remove addMovieToList
   };
 
   const handleMovieReview = (movie: Movie) => {
