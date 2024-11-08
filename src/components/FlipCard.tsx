@@ -32,7 +32,7 @@ const CARD_PADDING = 16;
 const CARD_WIDTH = width - (CARD_PADDING * 2);
 const CARD_HEIGHT = (CARD_WIDTH * 1.5);
 
-const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
+const FlipCard: React.FC<FlipCardProps> = ({ movie, swipingEnabled, onSwipingStateChange }) => {
   const [isFlipped, setIsFlipped] = useState(false);
   const animatedValue = useRef(new Animated.Value(0)).current;
   const lastTap = useRef(0);
@@ -56,7 +56,7 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
     if (isAnimating.current) return;
     
     isAnimating.current = true;
-    onSwipingStateChange(!isFlipped); // Invert current state immediately
+    onSwipingStateChange(!isFlipped); // Disable swiping when flipping to back
 
     Animated.spring(animatedValue, {
       toValue: isFlipped ? 0 : 180,
@@ -69,6 +69,10 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
       if (finished) {
         setIsFlipped(!isFlipped);
         isAnimating.current = false;
+        // Enable swiping when card is back to front face
+        if (isFlipped) {
+          onSwipingStateChange(true);
+        }
       }
     });
   };
