@@ -7,6 +7,9 @@ const { width } = Dimensions.get('window');
 const numColumns = 4; // Changed from 2 to 4
 const movieWidth = width / numColumns;
 
+const ITEMS_PER_PAGE = 20;
+const VISIBLE_PAGES = 2;
+
 const MovieCard = memo(({ item }: { item: TMDBMovie }) => (
   <View style={styles.movieCard}>
     <Image
@@ -25,6 +28,7 @@ const CineSearchScreen: React.FC = () => {
   const [page, setPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [hasMore, setHasMore] = useState(true);
+  const [visibleMovies, setVisibleMovies] = useState<ExtendedTMDBMovie[]>([]);
 
   useEffect(() => {
     loadMovies();
@@ -32,20 +36,31 @@ const CineSearchScreen: React.FC = () => {
 
   const loadMovies = async (nextPage = 1) => {
     try {
+      if (loadingMore) return;
+
       if (nextPage === 1) {
         setLoading(true);
+        setMovies([]); // Clear existing movies on refresh
       } else {
         setLoadingMore(true);
       }
 
       const response = await fetchMovies(nextPage);
+      const newMovies = response.results.map((movie: TMDBMovie, index: number) => ({
+        ...movie,
+        uniqueKey: `${nextPage}-${movie.id}-${Date.now()}-${index}`,
+      }));
+
       if (nextPage === 1) {
-        setMovies(response.results);
+        setMovies(newMovies);
       } else {
-        setMovies(prev => [...prev, ...response.results]);
+        // Keep only the movies from last VISIBLE_PAGES pages
+        setMovies(prev => {
+          const startIndex = Math.max(0, prev.length - (ITEMS_PER_PAGE * VISIBLE_PAGES));
+          return [...prev.slice(startIndex), ...newMovies];
+        });
       }
       
-      // Check if we have more pages
       setHasMore(response.page < response.total_pages);
       setPage(nextPage);
     } catch (error) {
@@ -71,8 +86,8 @@ const CineSearchScreen: React.FC = () => {
     []
   );
 
-  const keyExtractor = useCallback((item: TMDBMovie) => 
-    item.id.toString(),
+  const keyExtractor = useCallback((item: TMDBMovie & { uniqueKey?: string }) => 
+    item.uniqueKey || `${item.id}-${Math.random()}`,
     []
   );
 
@@ -84,12 +99,27 @@ const CineSearchScreen: React.FC = () => {
     if (!loadingMore) return null;
     return (
       <View style={styles.footerLoader}>
-        <View style={styles.loadingBar}>
-          <View style={styles.loadingBarInner} />
-        </View>
+        <ActivityIndicator size="small" color="#fff" />
       </View>
     );
   }, [loadingMore]);
+
+  // Update TMDBMovie type to include uniqueKey
+  type ExtendedTMDBMovie = TMDBMovie & { uniqueKey?: string };
+
+  const onViewableItemsChanged = useCallback(({ viewableItems }) => {
+    if (viewableItems.length > 0) {
+      const visibleIds = viewableItems.map((item: any) => item.item.id);
+      setVisibleMovies(prev => 
+        prev.filter(movie => visibleIds.includes(movie.id))
+      );
+    }
+  }, []);
+
+  const viewabilityConfig = {
+    itemVisiblePercentThreshold: 50,
+    minimumViewTime: 300,
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -105,7 +135,7 @@ const CineSearchScreen: React.FC = () => {
       {loading ? (
         <ActivityIndicator size="large" color="#fff" style={styles.loader} />
       ) : (
-        <FlatList
+        <FlatList<ExtendedTMDBMovie>
           key={`grid-${numColumns}`} // Add this line to fix the numColumns error
           data={movies}
           renderItem={renderMovieItem}
@@ -116,11 +146,17 @@ const CineSearchScreen: React.FC = () => {
           onEndReachedThreshold={0.5}
           ListFooterComponent={renderFooter}
           getItemLayout={getItemLayout}
-          removeClippedSubviews={false} // Changed to false to prevent disappearing
-          windowSize={21} // Increased window size
-          maxToRenderPerBatch={8}
-          updateCellsBatchingPeriod={100} // Increased batch period
-          initialNumToRender={12}
+          removeClippedSubviews={true}
+          windowSize={3}
+          maxToRenderPerBatch={16}
+          updateCellsBatchingPeriod={100}
+          initialNumToRender={16}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={viewabilityConfig}
+          maintainVisibleContentPosition={{
+            minIndexForVisible: 0,
+            autoscrollToTopThreshold: 10,
+          }}
         />
       )}
     </SafeAreaView>
@@ -163,29 +199,6 @@ const styles = StyleSheet.create({
   footerLoader: {
     paddingVertical: 20,
     alignItems: 'center',
-    width: '100%',
-  },
-  loadingBar: {
-    width: '50%',
-    height: 3,
-    backgroundColor: '#333',
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  loadingBarInner: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#fff',
-    borderRadius: 2,
-    animation: 'loading 1s infinite',
-  },
-  '@keyframes loading': {
-    '0%': {
-      transform: 'translateX(-100%)',
-    },
-    '100%': {
-      transform: 'translateX(100%)',
-    },
   },
 });
 
