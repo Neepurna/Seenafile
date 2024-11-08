@@ -20,17 +20,26 @@ const Stack = createStackNavigator<RootStackParamList>();
 
 export default function App() {
   return (
-    <GestureHandlerRootView style={styles.container}>
+    <GestureHandlerRootView style={{ flex: 1 }} shouldCancelWhenOutside={false}>
       <MovieListProvider>
         <NavigationContainer>
           <Stack.Navigator 
             initialRouteName="Login"
             screenOptions={{
-              headerShown: false
+              headerShown: false,
+              gestureEnabled: false, // Disable navigation gestures
             }}
           >
-            <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="Tabs" component={Tabs} />
+            <Stack.Screen 
+              name="Login" 
+              component={LoginScreen}
+              options={{ gestureEnabled: false }}
+            />
+            <Stack.Screen 
+              name="Tabs" 
+              component={Tabs}
+              options={{ gestureEnabled: false }}
+            />
           </Stack.Navigator>
         </NavigationContainer>
       </MovieListProvider>

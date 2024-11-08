@@ -1,16 +1,29 @@
 // src/screens/CineBrowseScreen.tsx
 
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import React, { useEffect, useState, useRef } from 'react';
-import { View, StyleSheet, ActivityIndicator, Alert, Dimensions, Platform, Text } from 'react-native';
+import { 
+  View, 
+  StyleSheet, 
+  ActivityIndicator, 
+  Alert, 
+  Dimensions, 
+  Platform, 
+  Text,
+  Animated // Add this import
+} from 'react-native';
 import Swiper from 'react-native-deck-swiper';
 import FlipCard from '../components/FlipCard';
 import { Ionicons } from '@expo/vector-icons'; // Add this import
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 import {
   fetchTopRatedMovies,
   fetchMoviesByGenre,
   fetchHighestRatedMovies,
 } from '../services/tmdb';
 import { useMovieLists } from '../context/MovieListContext';
+import { TapGestureHandler, State } from 'react-native-gesture-handler';
 
 const { width, height } = Dimensions.get('window');
 const TAB_BAR_HEIGHT = 67; // Match new tab bar height
@@ -44,7 +57,16 @@ const genres: Genre[] = [
 
 const MAX_PAGE = 500; // Maximum page number allowed by TMDB API
 
+// Add type for navigation
+type RootStackParamList = {
+  CineBrowse: undefined;
+  MovieReview: { movie: Movie };
+};
+
+type NavigationProp = StackNavigationProp<RootStackParamList, 'CineBrowse'>;
+
 const CineBrowseScreen: React.FC = () => {
+  const navigation = useNavigation<NavigationProp>();
   const [movies, setMovies] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(true);
   const [swipingEnabled, setSwipingEnabled] = useState(true);
@@ -212,99 +234,98 @@ const CineBrowseScreen: React.FC = () => {
     addMovieToList('watchLater', movies[index]);
   };
 
-  if (loading && movies.length === 0) {
-    // Show loading indicator only if no movies are loaded yet
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#000000" />
-      </View>
-    );
-  }
+  const handleMovieReview = (movie: Movie) => {
+    navigation.navigate('MovieReview', { movie });
+  };
 
   return (
-    <View style={styles.container}>
-      <Swiper
-        cards={movies}
-        renderCard={(movie) => {
-          if (!movie) {
-            return null; // Avoid rendering if movie is undefined
-          }
-          return (
-            <FlipCard
-              movie={movie}
-              setSwipingEnabled={setSwipingEnabled} // Pass the function here
-            />
-          );
-        }}
-        infinite={false}
-        backgroundColor="transparent"
-        cardVerticalMargin={0}
-        cardHorizontalMargin={0}
-        stackSize={3}
-        stackScale={0}  // Add this to remove scaling of stacked cards
-        stackSeparation={0}  // Change this to 0 to make cards perfectly stack
-        overlayOpacityHorizontalThreshold={width / 8} // Reduced from width/6
-        overlayOpacityVerticalThreshold={SCREEN_HEIGHT / 8} // Reduced from SCREEN_HEIGHT/6
-        inputRotationRange={[-width / 2, 0, width / 2]}  // Add this for better rotation
-        outputRotationRange={["-10deg", "0deg", "10deg"]}  // Add this for better rotation
-        onSwipedAll={fetchMoreMovies}
-        onSwipedTop={handleSwipedTop}
-        onSwipedBottom={handleSwipedBottom}
-        onSwipedRight={handleSwipedRight}
-        onSwipedLeft={handleSwipedLeft}
-        verticalSwipe={swipingEnabled}
-        horizontalSwipe={swipingEnabled}
-        disableTopSwipe={!swipingEnabled}
-        disableBottomSwipe={!swipingEnabled}
-        disableLeftSwipe={!swipingEnabled}
-        disableRightSwipe={!swipingEnabled}
-        verticalThreshold={SCREEN_HEIGHT / 6}  // Reduced from SCREEN_HEIGHT/4
-        horizontalThreshold={width / 6}  // Reduced from width/4
-        overlayLabels={swipingEnabled ? {
-          left: {
-            element: (
-              <View style={[styles.overlayWrapper, { borderColor: '#FF4B4B' }]}>
-                <Ionicons name="close-circle" size={40} color="#FF4B4B" />
-                <Text style={[styles.overlayText, { color: '#FF4B4B' }]}>Not Watched</Text>
-              </View>
-            )
-          },
-          right: {
-            element: (
-              <View style={[styles.overlayWrapper, { borderColor: '#4BFF4B' }]}>
-                <Ionicons name="checkmark-circle" size={40} color="#4BFF4B" />
-                <Text style={[styles.overlayText, { color: '#4BFF4B' }]}>Watched</Text>
-              </View>
-            )
-          },
-          top: {
-            element: (
-              <View style={[styles.overlayWrapper, { borderColor: '#FFD700' }]}>
-                <Ionicons name="repeat" size={40} color="#FFD700" />
-                <Text style={[styles.overlayText, { color: '#FFD700' }]}>Most Watch</Text>
-              </View>
-            )
-          },
-          bottom: {
-            element: (
-              <View style={[styles.overlayWrapper, { borderColor: '#00BFFF' }]}>
-                <Ionicons name="time" size={40} color="#00BFFF" />
-                <Text style={[styles.overlayText, { color: '#00BFFF' }]}>Watch Later</Text>
-              </View>
-            )
-          },
-        } : undefined}
-        swipeAnimationDuration={swipingEnabled ? 350 : 0}
-        animateCardOpacity={true}
-        containerStyle={styles.swiperContainer}
-        cardStyle={styles.cardStyle}
-      />
-      {loading && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#ffffff" />
-        </View>
-      )}
-    </View>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <View style={styles.container}>
+        <Swiper
+          cards={movies}
+          renderCard={(movie) => {
+            if (!movie) return null;
+            return (
+              <FlipCard
+                movie={movie}
+                swipingEnabled={swipingEnabled}
+                onSwipingStateChange={setSwipingEnabled}
+              />
+            );
+          }}
+          infinite={false}
+          backgroundColor="transparent"
+          cardVerticalMargin={0}
+          cardHorizontalMargin={0}
+          stackSize={3}
+          stackScale={0}  // Add this to remove scaling of stacked cards
+          stackSeparation={0}  // Change this to 0 to make cards perfectly stack
+          overlayOpacityHorizontalThreshold={width / 8} // Reduced from width/6
+          overlayOpacityVerticalThreshold={SCREEN_HEIGHT / 8} // Reduced from SCREEN_HEIGHT/6
+          inputRotationRange={[-width / 2, 0, width / 2]}  // Add this for better rotation
+          outputRotationRange={["-10deg", "0deg", "10deg"]}  // Add this for better rotation
+          onSwipedAll={fetchMoreMovies}
+          onSwipedTop={handleSwipedTop}
+          onSwipedBottom={handleSwipedBottom}
+          onSwipedRight={handleSwipedRight}
+          onSwipedLeft={handleSwipedLeft}
+          verticalSwipe={swipingEnabled}
+          horizontalSwipe={swipingEnabled}
+          disableTopSwipe={!swipingEnabled}
+          disableBottomSwipe={!swipingEnabled}
+          disableLeftSwipe={!swipingEnabled}
+          disableRightSwipe={!swipingEnabled}
+          verticalThreshold={SCREEN_HEIGHT / 6}  // Reduced from SCREEN_HEIGHT/4
+          horizontalThreshold={width / 6}  // Reduced from width/4
+          useViewOverflow={false}
+          preventSwiping={['up', 'down', 'left', 'right']} // Add this line
+          swipeBackCard={false} // Add this line
+          overlayLabels={swipingEnabled ? {
+            left: {
+              element: (
+                <View style={[styles.overlayWrapper, { borderColor: '#FF4B4B' }]}>
+                  <Ionicons name="close-circle" size={40} color="#FF4B4B" />
+                  <Text style={[styles.overlayText, { color: '#FF4B4B' }]}>Not Watched</Text>
+                </View>
+              )
+            },
+            right: {
+              element: (
+                <View style={[styles.overlayWrapper, { borderColor: '#4BFF4B' }]}>
+                  <Ionicons name="checkmark-circle" size={40} color="#4BFF4B" />
+                  <Text style={[styles.overlayText, { color: '#4BFF4B' }]}>Watched</Text>
+                </View>
+              )
+            },
+            top: {
+              element: (
+                <View style={[styles.overlayWrapper, { borderColor: '#FFD700' }]}>
+                  <Ionicons name="repeat" size={40} color="#FFD700" />
+                  <Text style={[styles.overlayText, { color: '#FFD700' }]}>Most Watch</Text>
+                </View>
+              )
+            },
+            bottom: {
+              element: (
+                <View style={[styles.overlayWrapper, { borderColor: '#00BFFF' }]}>
+                  <Ionicons name="time" size={40} color="#00BFFF" />
+                  <Text style={[styles.overlayText, { color: '#00BFFF' }]}>Watch Later</Text>
+                </View>
+              )
+            },
+          } : undefined}
+          swipeAnimationDuration={swipingEnabled ? 350 : 0}
+          animateCardOpacity={true}
+          containerStyle={styles.swiperContainer}
+          cardStyle={styles.cardStyle}
+        />
+        {loading && (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color="#ffffff" />
+          </View>
+        )}
+      </View>
+    </GestureHandlerRootView>
   );
 };
 
@@ -322,6 +343,13 @@ const styles = StyleSheet.create({
     padding: 0,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  cardWrapper: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: width,
+    height: SCREEN_HEIGHT,
   },
   cardStyle: {
     alignSelf: 'center',
