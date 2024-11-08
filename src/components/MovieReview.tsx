@@ -31,6 +31,7 @@ interface MovieReviewProps {
     id: number;
     title: string;
     vote_average: number;
+    vote_count: number; // Add this line
     genres: { id: number; name: string }[];
     release_date?: string;
     runtime?: number;
@@ -73,7 +74,10 @@ const MovieReview: React.FC<MovieReviewProps> = ({ movie }) => {
         <Text numberOfLines={2} style={styles.title}>
           {movie.title}
         </Text>
-        <Text style={styles.rating}>⭐ {movie.vote_average.toFixed(1)}</Text>
+        <View style={styles.ratingContainer}>
+          <Text style={styles.rating}>⭐ {movie.vote_average.toFixed(1)}</Text>
+          <Text style={styles.voteCount}>({movie.vote_count.toLocaleString()} votes)</Text>
+        </View>
 
         {/* Genres section */}
         {movie.genres && movie.genres.length > 0 && (
@@ -148,10 +152,22 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     letterSpacing: 0.5,
   },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   rating: {
     fontSize: 20,
     color: '#FFD700',
-    marginBottom: 8,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
+  },
+  voteCount: {
+    fontSize: 16,
+    color: '#B8B8B8',
+    marginLeft: 8,
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 3,
