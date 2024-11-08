@@ -74,13 +74,23 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
   };
 
   const frontInterpolate = animatedValue.interpolate({
-    inputRange: [0, 180],
-    outputRange: ['0deg', '180deg'],
+    inputRange: [0, 90, 180],
+    outputRange: ['0deg', '-90deg', '-180deg']
   });
 
   const backInterpolate = animatedValue.interpolate({
-    inputRange: [0, 180],
-    outputRange: ['180deg', '360deg'],
+    inputRange: [0, 90, 180],
+    outputRange: ['180deg', '90deg', '0deg']
+  });
+
+  const frontOpacity = animatedValue.interpolate({
+    inputRange: [0, 89.9, 90, 180],
+    outputRange: [1, 1, 0, 0]
+  });
+
+  const backOpacity = animatedValue.interpolate({
+    inputRange: [0, 89.9, 90, 180],
+    outputRange: [0, 0, 1, 1]
   });
 
   return (
@@ -95,12 +105,11 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
             styles.cardFace,
             {
               transform: [
-                { perspective: 1000 },
+                { perspective: 2000 },
                 { rotateY: frontInterpolate }
               ],
-              backfaceVisibility: 'hidden',
+              opacity: frontOpacity,
               zIndex: isFlipped ? 0 : 1,
-              opacity: isFlipped ? 0 : 1,
             }
           ]}
         >
@@ -116,12 +125,11 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
             styles.cardBack,
             {
               transform: [
-                { perspective: 1000 },
+                { perspective: 2000 },
                 { rotateY: backInterpolate }
               ],
-              backfaceVisibility: 'hidden',
+              opacity: backOpacity,
               zIndex: isFlipped ? 1 : 0,
-              opacity: isFlipped ? 1 : 0,
             }
           ]}
         >
