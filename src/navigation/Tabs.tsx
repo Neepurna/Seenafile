@@ -3,8 +3,8 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import CineBrowseScreen from '../screens/CineBrowseScreen';
 import CinePalScreen from '../screens/CinePalScreen';
+import CineSearchScreen from '../screens/CineSearchScreen';
 import CineFileScreen from '../screens/CineFileScreen';
-import CineGamesScreen from '../screens/CineGamesScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 
 const Tab = createBottomTabNavigator();
@@ -15,6 +15,8 @@ const Tabs: React.FC = () => {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: route.name === 'CineBrowse' ? false : true, // Hide header for CineBrowse
+        tabBarShowLabel: false, // Hide tab labels
+        headerTitle: '', // Remove header titles
         tabBarIcon: ({ color, size }) => {
           let iconName: string;
 
@@ -22,10 +24,10 @@ const Tabs: React.FC = () => {
             iconName = 'film-outline'; // Updated icon name
           } else if (route.name === 'CinePal') {
             iconName = 'people-outline'; // Updated icon name
+          } else if (route.name === 'CineSearch') {
+            iconName = 'search-outline';
           } else if (route.name === 'CineFile') {
             iconName = 'folder-outline'; // Updated icon name
-          } else if (route.name === 'CineGames') {
-            iconName = 'game-controller-outline'; // Updated icon name
           } else if (route.name === 'Profile') {
             iconName = 'person-outline'; // Updated icon name
           }
@@ -48,8 +50,8 @@ const Tabs: React.FC = () => {
     >
       <Tab.Screen name="CineBrowse" component={CineBrowseScreen} />
       <Tab.Screen name="CinePal" component={CinePalScreen} />
+      <Tab.Screen name="CineSearch" component={CineSearchScreen} />
       <Tab.Screen name="CineFile" component={CineFileScreen} />
-      <Tab.Screen name="CineGames" component={CineGamesScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
