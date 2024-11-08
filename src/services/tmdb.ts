@@ -20,24 +20,11 @@ export const fetchGenres = async () => {
 };
 
 // Function to fetch movies (e.g., popular movies) and include genres
-export const fetchMovies = async (page = 1) => {
+export const fetchMovies = async (page: number = 1) => {
   const response = await fetch(
-    `${TMDB_BASE_URL}/movie/popular?api_key=${TMDB_API_KEY}&language=en-US&page=${page}`
+    `${TMDB_BASE_URL}/movie/popular?api_key=${TMDB_API_KEY}&page=${page}`
   );
-  const data = await response.json();
-
-  // Map genre IDs to genre names
-  const genres = await fetchGenres();
-
-  const moviesWithGenres = data.results.map((movie: any) => {
-    const movieGenres = movie.genre_ids.map((genreId: number) => {
-      const genre = genres.find((g) => g.id === genreId);
-      return genre ? genre : null;
-    });
-    return { ...movie, genres: movieGenres.filter((g: any) => g !== null) };
-  });
-
-  return { ...data, results: moviesWithGenres };
+  return await response.json();
 };
 
 // Function to fetch top-rated movies and include genres
@@ -142,3 +129,17 @@ export const fetchMovieVideos = async (movieId: number) => {
   );
   return response.json();
 };
+
+export interface TMDBMovie {
+  id: number;
+  title: string;
+  poster_path: string;
+  vote_average: number;
+  overview: string;
+  release_date: string;
+  runtime?: number;
+  genres?: Array<{
+    id: number;
+    name: string;
+  }>;
+}
