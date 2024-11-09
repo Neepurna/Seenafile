@@ -67,34 +67,23 @@ export const signUp = async (email: string, password: string) => {
 
 export const resetPassword = async (email: string) => {
   try {
-    // Query Firestore to check if user exists with this email
-    const querySnapshot = await getDocs(
-      query(collection(db, 'users'), where('email', '==', email.toLowerCase()))
-    );
-
-    if (querySnapshot.empty) {
-      return { 
-        error: 'No account exists with this email address.',
-        message: null 
-      };
-    }
-
-    // If email exists, send reset email
-    await sendPasswordResetEmail(auth, email, actionCodeSettings);
+    // Send reset email directly through Firebase Auth
+    await sendPasswordResetEmail(auth, email.toLowerCase(), actionCodeSettings);
     return { 
       error: null, 
-      message: 'Password reset email sent! Please check your inbox.' 
+      message: 'If an account exists with this email, a password reset link will be sent.' 
     };
   } catch (error: any) {
-    switch (error.code) {
-      case 'auth/invalid-email':
-        return { error: 'Please enter a valid email address.' };
-      case 'auth/too-many-requests':
-        return { error: 'Too many attempts. Please try again later.' };
-      default:
-        console.error('Password reset error:', error);
-        return { error: 'Failed to send reset email. Please try again.' };
+    // Only show specific error for invalid email format
+    if (error.code === 'auth/invalid-email') {
+      return { error: 'Please enter a valid email address.' };
     }
+    
+    // For security, don't reveal if email exists or not
+    return { 
+      error: null,
+      message: 'If an account exists with this email, a password reset link will be sent.'
+    };
   }
 };
 
