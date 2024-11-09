@@ -43,6 +43,18 @@ interface Movie {
   }[];
 }
 
+interface Review {
+  id: string;
+  author: string;
+  content: string;
+  created_at: string;
+  rating?: number;
+  author_details?: {
+    rating?: number;
+    avatar_path?: string;
+  };
+}
+
 interface FlipCardProps {
   movie: Movie;
   onSwipingStateChange: (enabled: boolean) => void;
@@ -83,6 +95,9 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
   const [showInfo, setShowInfo] = useState(false);
   const [isLoadingCredits, setIsLoadingCredits] = useState(false);
   const [credits, setCredits] = useState<{ cast: any[], crew: any[] }>({ cast: [], crew: [] });
+  const [movieDetails, setMovieDetails] = useState<Movie | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const animatedValue = useRef(new Animated.Value(0)).current;
   const lastTap = useRef(0);
   const isAnimating = useRef(false);
@@ -186,6 +201,51 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
     }
   };
 
+  const fetchMovieDetailsAndReviews = async (movieId: number) => {
+    try {
+      setIsLoadingDetails(true);
+      
+      // Fetch both movie details and reviews in parallel
+      const [detailsResponse, reviewsResponse] = await Promise.all([
+        fetch(
+          `https://api.themoviedb.org/3/movie/${movieId}?api_key=${API_KEY}`,
+          {
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json'
+            },
+          }
+        ),
+        fetch(
+          `https://api.themoviedb.org/3/movie/${movieId}/reviews?api_key=${API_KEY}`,
+          {
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json'
+            },
+          }
+        )
+      ]);
+
+      if (!detailsResponse.ok || !reviewsResponse.ok) {
+        throw new Error('Failed to fetch movie data');
+      }
+
+      const [details, reviewsData] = await Promise.all([
+        detailsResponse.json(),
+        reviewsResponse.json()
+      ]);
+
+      setMovieDetails(details);
+      setReviews(reviewsData.results.slice(0, 5));
+
+    } catch (error) {
+      console.error('Error fetching movie details and reviews:', error);
+    } finally {
+      setIsLoadingDetails(false);
+    }
+  };
+
   const renderCastItem = ({ item }: { item: CastMember }) => (
     <View style={styles.castMember}>
       <Image
@@ -284,7 +344,7 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
               )}
               <Text style={styles.modalSection}>Genres</Text>
               <View style={styles.modalGenres}>
-                {genres.map(genre => (
+                {(movieDetails?.genres || []).map(genre => (
                   <View key={genre.id} style={styles.genreWrapper}>
                     <Text style={styles.modalGenre}>{genre.name}</Text>
                   </View>
@@ -294,6 +354,7 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
               <Text style={styles.modalText}>{overview}</Text>
               {renderCastSection()}
               {renderCrewSection()}
+              {renderReviews()}
             </View>
           </ScrollView>
           <TouchableOpacity
@@ -307,12 +368,44 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
     </Modal>
   );
 
+  // Add this new function to render reviews
+  const renderReviews = () => (
+    <>
+      <Text style={styles.modalSection}>User Reviews</Text>
+      {isLoadingDetails ? (
+        <ActivityIndicator size="small" color="#007AFF" />
+      ) : reviews.length > 0 ? (
+        reviews.map((review) => (
+          <View key={review.id} style={styles.reviewContainer}>
+            <View style={styles.reviewHeader}>
+              <Text style={styles.reviewAuthor}>{review.author}</Text>
+              {review.author_details?.rating && (
+                <Text style={styles.reviewRating}>
+                  ⭐ {review.author_details.rating.toFixed(1)}
+                </Text>
+              )}
+            </View>
+            <Text style={styles.reviewDate}>
+              {new Date(review.created_at).toLocaleDateString()}
+            </Text>
+            <Text style={styles.reviewContent} numberOfLines={5}>
+              {review.content}
+            </Text>
+          </View>
+        ))
+      ) : (
+        <Text style={styles.noDataText}>No reviews available</Text>
+      )}
+    </>
+  );
+
   // Update the info button press handler
   const handleInfoPress = (e: any) => {
     e.stopPropagation();
     setShowInfo(true);
     onSwipingStateChange(false); // Disable swiping when opening modal
     fetchMovieCredits(movie.id);
+    fetchMovieDetailsAndReviews(movie.id);
   };
 
   // Update the info button in renderFrontFace
@@ -626,6 +719,37 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     textAlign: 'center',
     marginVertical: 10,
+  },
+  reviewContainer: {
+    marginBottom: 20,
+    padding: 12,
+    backgroundColor: '#f8f8f8',
+    borderRadius: 8,
+  },
+  reviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  reviewAuthor: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  reviewRating: {
+    fontSize: 14,
+    color: '#666',
+  },
+  reviewDate: {
+    fontSize: 12,
+    color: '#888',
+    marginBottom: 8,
+  },
+  reviewContent: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#444',
   },
 });
 
