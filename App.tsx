@@ -21,13 +21,14 @@ const Stack = createStackNavigator<RootStackParamList>();
 
 export default function App() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }} shouldCancelWhenOutside={false}>
+    <GestureHandlerRootView style={styles.container}>
       <NavigationContainer>
         <Stack.Navigator 
           initialRouteName="Login"
           screenOptions={{
             headerShown: false,
             gestureEnabled: false,
+            cardStyle: { backgroundColor: '#000' },
           }}
         >
           <Stack.Screen 
@@ -54,5 +55,6 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#000',
   },
 });

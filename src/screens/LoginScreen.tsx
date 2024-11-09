@@ -1,6 +1,19 @@
 // src/screens/LoginScreen.tsx
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, SafeAreaView } from 'react-native';
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  TouchableOpacity, 
+  StyleSheet, 
+  Alert, 
+  SafeAreaView,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Keyboard,
+  TouchableWithoutFeedback
+} from 'react-native';
 import { signIn, signUp, resendVerificationEmail, resetPassword } from '../firebase';
 
 const LoginScreen = ({ navigation }) => {
@@ -103,55 +116,75 @@ const LoginScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.headerContainer}>
-        <Text style={styles.logoText}>Seenafile</Text>
-        <Text style={styles.tagline}>Where Movie Lovers Connect</Text>
-      </View>
-
-      <View style={styles.formContainer}>
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          placeholderTextColor="#666"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          placeholderTextColor="#666"
-        />
-        
-        <TouchableOpacity 
-          style={styles.forgotPasswordButton} 
-          onPress={handleForgotPassword}
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.keyboardView}
+      >
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="always"
+          showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-        </TouchableOpacity>
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.contentWrapper}>
+              <View style={styles.headerContainer}>
+                <Text style={styles.logoText}>SEENAFILE</Text>
+                <Text style={styles.tagline}>Where Movie Lovers Connect</Text>
+              </View>
 
-        <TouchableOpacity 
-          style={[styles.button, styles.loginButton]} 
-          onPress={handleLogin}
-          disabled={isLoading}
-        >
-          <Text style={styles.buttonText}>
-            {isLoading ? "Please wait..." : "Sign In"}
-          </Text>
-        </TouchableOpacity>
+              <View style={styles.formContainer}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Email"
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="email-address"
+                  textContentType="emailAddress"
+                  autoComplete="email"
+                  placeholderTextColor="#999"
+                  returnKeyType="next"
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Password"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                  placeholderTextColor="#999"
+                />
+                
+                <TouchableOpacity 
+                  style={styles.forgotPasswordButton} 
+                  onPress={handleForgotPassword}
+                >
+                  <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+                </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={[styles.button, styles.signupButton]} 
-          onPress={() => navigation.navigate('SignUp')}
-        >
-          <Text style={[styles.buttonText, styles.signupText]}>
-            Create Account
-          </Text>
-        </TouchableOpacity>
-      </View>
+                <TouchableOpacity 
+                  style={[styles.button, styles.loginButton]} 
+                  onPress={handleLogin}
+                  disabled={isLoading}
+                >
+                  <Text style={styles.buttonText}>
+                    {isLoading ? "Please wait..." : "Sign In"}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={[styles.button, styles.signupButton]} 
+                  onPress={() => navigation.navigate('SignUp')}
+                >
+                  <Text style={[styles.buttonText, styles.signupText]}>
+                    Create Account
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -161,66 +194,85 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  headerContainer: {
-    flex: 0.4,
+  keyboardView: {
+    flex: 1,
+    width: '100%',
+  },
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
+    minHeight: '100%',
+  },
+  contentWrapper: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 40 : 20,
+    paddingBottom: Platform.OS === 'ios' ? 20 : 40,
+  },
+  headerContainer: {
     alignItems: 'center',
+    marginBottom: 40,
   },
   logoText: {
-    fontSize: 42,
-    fontWeight: 'bold',
-    color: '#E50914',
-    letterSpacing: 1,
+    fontSize: 36,
+    fontWeight: '700',
+    color: '#FFF',
+    letterSpacing: 3,
   },
   tagline: {
-    fontSize: 16,
-    color: '#FFF',
-    marginTop: 10,
+    fontSize: 14,
+    color: '#999',
+    marginTop: 8,
+    letterSpacing: 1,
   },
   formContainer: {
-    flex: 0.6,
-    backgroundColor: '#141414',
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    padding: 20,
-    paddingTop: 40,
+    width: '100%',
+    maxWidth: 340,
+    alignSelf: 'center',
+    marginTop: 20,
   },
   input: {
-    backgroundColor: '#333',
-    borderRadius: 8,
-    padding: 15,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    padding: 16,
     marginBottom: 16,
     color: '#FFF',
     fontSize: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    width: '100%',
+    height: Platform.OS === 'ios' ? 50 : 56,
   },
   button: {
-    padding: 15,
-    borderRadius: 8,
+    padding: 16,
+    borderRadius: 12,
     alignItems: 'center',
     marginVertical: 8,
   },
   loginButton: {
-    backgroundColor: '#E50914',
+    backgroundColor: '#FFF',
   },
   signupButton: {
     backgroundColor: 'transparent',
-    borderWidth: 2,
-    borderColor: '#E50914',
+    borderWidth: 1,
+    borderColor: '#FFF',
   },
   buttonText: {
-    color: '#FFF',
+    color: '#000',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    letterSpacing: 0.5,
   },
   signupText: {
-    color: '#E50914',
+    color: '#FFF',
   },
   forgotPasswordButton: {
     alignSelf: 'flex-end',
-    marginBottom: 20,
+    marginBottom: 24,
   },
   forgotPasswordText: {
-    color: '#E50914',
+    color: '#999',
     fontSize: 14,
   },
 });

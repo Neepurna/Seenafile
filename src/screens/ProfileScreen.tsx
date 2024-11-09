@@ -71,7 +71,7 @@ const ProfileScreen: React.FC = () => {
   if (isLoading) {
     return (
       <View style={[styles.container, styles.centerContent]}>
-        <Text>Loading profile...</Text>
+        <Text style={{ color: '#FFF' }}>Loading profile...</Text>
       </View>
     );
   }
@@ -86,7 +86,6 @@ const ProfileScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      {/* Profile Header */}
       <View style={styles.profileHeader}>
         <View style={styles.profileImageContainer}>
           <Image
@@ -94,32 +93,32 @@ const ProfileScreen: React.FC = () => {
             style={styles.profileImage}
           />
           <TouchableOpacity style={styles.editButton}>
-            <Icon name="edit" size={20} color="#FFF" />
+            <Icon name="edit" size={18} color="#000" />
           </TouchableOpacity>
         </View>
         <Text style={styles.userName}>{userProfile?.name || 'Loading...'}</Text>
         <Text style={styles.userHandle}>{userProfile?.email}</Text>
       </View>
 
-      {/* Dashboard Stats */}
       <View style={styles.dashboard}>
         <View style={styles.statItem}>
           <Text style={styles.statNumber}>150</Text>
-          <Text style={styles.statLabel}>Movies Watched</Text>
+          <Text style={styles.statLabel}>Movies</Text>
         </View>
+        <View style={styles.separator} />
         <View style={styles.statItem}>
           <Text style={styles.statNumber}>45</Text>
           <Text style={styles.statLabel}>Matches</Text>
         </View>
+        <View style={styles.separator} />
         <View style={styles.statItem}>
           <Text style={styles.statNumber}>24</Text>
           <Text style={styles.statLabel}>Watchlist</Text>
         </View>
       </View>
 
-      {/* Sign Out Button */}
       <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-        <Icon name="logout" size={24} color="#FF375F" />
+        <Icon name="logout" size={24} color="#FFF" />
         <Text style={styles.signOutText}>Sign Out</Text>
       </TouchableOpacity>
     </View>
@@ -129,77 +128,87 @@ const ProfileScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#000',
+    paddingTop: 50,
   },
   profileHeader: {
     alignItems: 'center',
-    paddingVertical: 30,
+    paddingVertical: 40,
   },
   profileImageContainer: {
     position: 'relative',
-    marginBottom: 15,
+    marginBottom: 20,
+    padding: 3,
+    borderRadius: 75,
+    borderWidth: 2,
+    borderColor: '#FFF',
   },
   profileImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
   },
   editButton: {
     position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: '#FF375F',
+    bottom: 5,
+    right: 5,
+    backgroundColor: '#FFF',
     padding: 8,
     borderRadius: 20,
   },
   userName: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: 'bold',
-    marginBottom: 5,
+    color: '#FFF',
+    marginBottom: 8,
   },
   userHandle: {
     fontSize: 16,
-    color: '#666',
+    color: '#888',
   },
   dashboard: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: 20,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#eee',
-    marginHorizontal: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 30,
+    marginHorizontal: 30,
+    backgroundColor: '#111',
+    borderRadius: 15,
   },
   statItem: {
+    flex: 1,
     alignItems: 'center',
   },
+  separator: {
+    width: 1,
+    height: 40,
+    backgroundColor: '#333',
+  },
   statNumber: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#FF375F',
+    color: '#FFF',
+    marginBottom: 5,
   },
   statLabel: {
     fontSize: 14,
-    color: '#666',
-    marginTop: 5,
+    color: '#888',
   },
   signOutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 'auto',
-    marginBottom: 30,
-    marginHorizontal: 20,
-    padding: 15,
-    backgroundColor: '#FFF',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#FF375F',
+    marginBottom: 40,
+    marginHorizontal: 30,
+    padding: 16,
+    backgroundColor: '#222',
+    borderRadius: 12,
   },
   signOutText: {
     marginLeft: 10,
     fontSize: 16,
-    color: '#FF375F',
+    color: '#FFF',
     fontWeight: '600',
   },
   centerContent: {
@@ -207,7 +216,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   errorText: {
-    color: '#FF375F',
+    color: '#FFF',
     fontSize: 16,
   },
 });
