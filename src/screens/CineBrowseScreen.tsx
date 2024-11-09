@@ -43,6 +43,8 @@ const CineBrowseScreen: React.FC = () => {
   const [movies, setMovies] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(true);
   const [swipingEnabled, setSwipingEnabled] = useState(true);
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [isFetching, setIsFetching] = useState<boolean>(false);
 
   const displayedMovieIds = useRef<Set<number>>(new Set());
 
@@ -60,7 +62,10 @@ const CineBrowseScreen: React.FC = () => {
   }, []);
 
   const fetchMoreMovies = async () => {
+    if (isFetching) return;
+    
     try {
+      setIsFetching(true);
       setLoading(true);
 
       const [popularMovies, topRatedMovies, highestVotedMovies] = await Promise.all([
@@ -96,6 +101,7 @@ const CineBrowseScreen: React.FC = () => {
       console.error('Error fetching more movies:', error);
       Alert.alert('Error', 'Failed to load more movies. Please try again.');
     } finally {
+      setIsFetching(false);
       setLoading(false);
     }
   };
@@ -140,6 +146,15 @@ const CineBrowseScreen: React.FC = () => {
     navigation.navigate('MovieReview', { movie });
   };
 
+  const handleSwiped = (index: number) => {
+    setCurrentIndex(index + 1);
+    
+    // Pre-fetch more cards when we're running low
+    if (movies.length - (index + 1) <= 5) {
+      fetchMoreMovies();
+    }
+  };
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={styles.container}>
@@ -165,11 +180,16 @@ const CineBrowseScreen: React.FC = () => {
           overlayOpacityVerticalThreshold={SCREEN_HEIGHT / 8}
           inputRotationRange={[-width / 2, 0, width / 2]}
           outputRotationRange={["-10deg", "0deg", "10deg"]}
-          onSwipedAll={fetchMoreMovies}
+          onSwipedAll={() => {
+            setCurrentIndex(0);
+            fetchMoreMovies();
+          }}
           onSwipedTop={handleSwipedTop}
           onSwipedBottom={handleSwipedBottom}
           onSwipedRight={handleSwipedRight}
           onSwipedLeft={handleSwipedLeft}
+          onSwiped={handleSwiped}
+          cardIndex={currentIndex}
           verticalSwipe={swipingEnabled}
           horizontalSwipe={swipingEnabled}
           disableTopSwipe={!swipingEnabled}
@@ -244,7 +264,7 @@ const CineBrowseScreen: React.FC = () => {
           containerStyle={styles.swiperContainer}
           cardStyle={styles.cardStyle}
         />
-        {loading && (
+        {(loading || isFetching) && (
           <View style={styles.loadingOverlay}>
             <ActivityIndicator size="large" color="#ffffff" />
           </View>
