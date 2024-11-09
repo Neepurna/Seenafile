@@ -10,6 +10,12 @@ import {
   ScrollView,
   Text,
   Platform,
+  TextInput,
+  TouchableOpacity,
+  Share,
+  KeyboardAvoidingView,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from 'react-native';
 import { fetchMovieImages } from '../services/tmdb'; // Add this import at the top with other imports
 
@@ -42,6 +48,9 @@ interface MovieReviewProps {
 const MovieReview: React.FC<MovieReviewProps> = ({ movie }) => {
   const [backdrops, setBackdrops] = useState<Backdrop[]>([]);
   const [loading, setLoading] = useState(true);
+  const [rating, setRating] = useState(0);
+  const [review, setReview] = useState('');
+  const [isPublic, setIsPublic] = useState(true);
 
   useEffect(() => {
     const fetchImages = async () => {
@@ -58,6 +67,33 @@ const MovieReview: React.FC<MovieReviewProps> = ({ movie }) => {
     fetchImages();
   }, [movie.id]);
 
+  const handleShare = async () => {
+    try {
+      await Share.share({
+        message: `Check out my review of ${movie.title}!\nRating: ${rating}/5\nReview: ${review}`,
+      });
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const renderStars = () => {
+    return (
+      <View style={styles.starsContainer}>
+        {[1, 2, 3, 4, 5].map((star) => (
+          <TouchableOpacity
+            key={star}
+            onPress={() => setRating(star)}
+          >
+            <Text style={[styles.star, rating >= star ? styles.starFilled : styles.starEmpty]}>
+              ★
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -67,62 +103,77 @@ const MovieReview: React.FC<MovieReviewProps> = ({ movie }) => {
   }
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Movie Details Section */}
-      <View style={styles.detailsContainer}>
-        {/* Title and Rating section */}
-        <Text numberOfLines={2} style={styles.title}>
-          {movie.title}
-        </Text>
-        <View style={styles.ratingContainer}>
-          <Text style={styles.rating}>⭐ {movie.vote_average.toFixed(1)}</Text>
-          <Text style={styles.voteCount}>({movie.vote_count.toLocaleString()} votes)</Text>
-        </View>
+    <View style={styles.container}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.keyboardAvoidingView}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
+      >
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollViewContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          bounces={false}
+        >
+          <View style={styles.contentContainer}>
+            {/* Header */}
+            <Text style={styles.headerTitle}>Report Card</Text>
+            <Text style={styles.movieTitle}>{movie.title}</Text>
+            
+            {/* Rating Stars */}
+            {renderStars()}
 
-        {/* Genres section */}
-        {movie.genres && movie.genres.length > 0 && (
-          <View style={styles.genresContainer}>
-            {movie.genres.slice(0, 3).map((genre) => (
-              <View key={genre.id} style={styles.genreBadge}>
-                <Text style={styles.genreText}>{genre.name}</Text>
+            {/* Review Input */}
+            <View style={styles.reviewContainer}>
+              <TextInput
+                style={styles.reviewInput}
+                multiline
+                placeholder="Write your review here..."
+                placeholderTextColor="#999"
+                value={review}
+                onChangeText={setReview}
+              />
+            </View>
+
+            {/* Backdrop Image */}
+            {backdrops.length > 0 && (
+              <View style={styles.backdropContainer}>
+                <Image
+                  source={{ uri: `https://image.tmdb.org/t/p/w780${backdrops[0].file_path}` }}
+                  style={styles.backdropImage}
+                />
               </View>
-            ))}
+            )}
+
+            {/* Action Buttons */}
+            <View style={styles.actionButtons}>
+              <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={() => setIsPublic(!isPublic)}
+              >
+                <Text style={styles.buttonText}>
+                  {isPublic ? '🌎 Public' : '🔒 Private'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={handleShare}
+              >
+                <Text style={styles.buttonText}>Share</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.saveButton]}
+              >
+                <Text style={styles.buttonText}>Save</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        )}
-
-        {/* Movie Additional Details */}
-        <View style={styles.additionalDetails}>
-          {movie.release_date && (
-            <Text style={styles.detailText}>
-              Released: {new Date(movie.release_date).getFullYear()}
-            </Text>
-          )}
-          {movie.runtime && (
-            <Text style={styles.detailText}>
-              Runtime: {movie.runtime} min
-            </Text>
-          )}
-        </View>
-
-        {/* Movie Overview */}
-        {movie.overview && (
-          <View style={styles.overviewContainer}>
-            <Text style={styles.overviewTitle}>Overview</Text>
-            <Text style={styles.overviewText}>{movie.overview}</Text>
-          </View>
-        )}
-      </View>
-
-      {/* Single Backdrop Image */}
-      {backdrops.length > 0 && (
-        <View style={styles.backdropContainer}>
-          <Image
-            source={{ uri: `https://image.tmdb.org/t/p/w780${backdrops[0].file_path}` }}
-            style={styles.backdropImage}
-          />
-        </View>
-      )}
-    </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 };
 
@@ -133,6 +184,16 @@ const styles = StyleSheet.create({
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
     borderRadius: 20,
+    overflow: 'hidden',
+  },
+  keyboardAvoidingView: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollViewContent: {
+    flexGrow: 1,
   },
   loadingContainer: {
     flex: 1,
@@ -140,100 +201,79 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  detailsContainer: {
-    padding: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    borderRadius: 20,
-  },
-  title: {
+  headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 8,
-    letterSpacing: 0.5,
+    textAlign: 'center',
+    marginBottom: 10,
   },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
+  contentContainer: {
+    padding: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    flexGrow: 1,
   },
-  rating: {
+  movieTitle: {
     fontSize: 20,
-    color: '#FFD700',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 15,
   },
-  voteCount: {
-    fontSize: 16,
-    color: '#B8B8B8',
-    marginLeft: 8,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
-  },
-  genresContainer: {
+  starsContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 4,
+    justifyContent: 'center',
+    marginBottom: 20,
   },
-  genreBadge: {
-    backgroundColor: 'rgba(51, 51, 51, 0.8)',
-    borderRadius: 15,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    marginRight: 8,
-    marginBottom: 8,
+  star: {
+    fontSize: 40,
+    marginHorizontal: 5,
   },
-  genreText: {
-    color: '#ffffff',
-    fontSize: 14,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+  starEmpty: {
+    color: '#666',
+  },
+  starFilled: {
+    color: '#FFD700',
+  },
+  reviewContainer: {
+    marginVertical: 15,
+  },
+  reviewInput: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 10,
+    padding: 15,
+    color: '#fff',
+    height: 120,
+    textAlignVertical: 'top',
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+  },
+  actionButton: {
+    backgroundColor: '#444',
+    padding: 12,
+    borderRadius: 8,
+    flex: 1,
+    marginHorizontal: 5,
+    alignItems: 'center',
+  },
+  saveButton: {
+    backgroundColor: '#007AFF',
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   backdropContainer: {
-    marginTop: CARD_HEIGHT * 0.02, // Adjust margin for backdrop
-    paddingBottom: 20,
-    backgroundColor: '#000000', // Changed to black
+    width: '100%',
+    marginVertical: 15,
   },
   backdropImage: {
     width: CARD_WIDTH,
-    height: CARD_HEIGHT * 0.35,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-  },
-  additionalDetails: {
-    marginTop: 15,
-    marginBottom: 15,
-  },
-  detailText: {
-    color: '#ffffff',
-    fontSize: 16,
-    marginBottom: 5,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
-  },
-  overviewContainer: {
-    marginTop: 10,
-  },
-  overviewTitle: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
-  },
-  overviewText: {
-    color: '#ffffff',
-    fontSize: 16,
-    lineHeight: 24,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+    height: CARD_WIDTH * 0.6,
+    resizeMode: 'cover',
   },
 });
 

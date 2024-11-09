@@ -245,7 +245,6 @@ const CineBrowseScreen: React.FC = () => {
             return (
               <FlipCard
                 movie={movie}
-                swipingEnabled={swipingEnabled}
                 onSwipingStateChange={setSwipingEnabled}
               />
             );
@@ -255,8 +254,8 @@ const CineBrowseScreen: React.FC = () => {
           cardVerticalMargin={0}
           cardHorizontalMargin={0}
           stackSize={3}
-          stackScale={0}  // Add this to remove scaling of stacked cards
-          stackSeparation={0}  // Change this to 0 to make cards perfectly stack
+          stackScale={10}
+          stackSeparation={14}
           overlayOpacityHorizontalThreshold={width / 8} // Reduced from width/6
           overlayOpacityVerticalThreshold={SCREEN_HEIGHT / 8} // Reduced from SCREEN_HEIGHT/6
           inputRotationRange={[-width / 2, 0, width / 2]}  // Add this for better rotation
@@ -336,8 +335,11 @@ const styles = StyleSheet.create({
   },
   swiperContainer: {
     flex: 1,
-    margin: 0,
-    padding: 0,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -349,6 +351,8 @@ const styles = StyleSheet.create({
     height: SCREEN_HEIGHT,
   },
   cardStyle: {
+    top: 0,
+    left: 0,
     alignSelf: 'center',
     justifyContent: 'center',
     margin: 0,

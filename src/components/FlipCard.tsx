@@ -8,6 +8,9 @@ import {
   Animated,
   Platform,
   Text,
+  Modal,
+  TouchableOpacity,
+  ScrollView,
 } from 'react-native';
 import MovieReview from './MovieReview';
 
@@ -24,7 +27,6 @@ interface Movie {
 
 interface FlipCardProps {
   movie: Movie;
-  swipingEnabled: boolean;
   onSwipingStateChange: (enabled: boolean) => void;
 }
 
@@ -34,11 +36,17 @@ const CARD_WIDTH = width - (CARD_PADDING * 2);
 const CARD_HEIGHT = height * 0.75; // Increased to 75% of screen height
 const DETAILS_HEIGHT = 120; // Fixed height for details section
 
-const FlipCard: React.FC<FlipCardProps> = ({ movie, swipingEnabled, onSwipingStateChange }) => {
+const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
   const [isFlipped, setIsFlipped] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
   const animatedValue = useRef(new Animated.Value(0)).current;
   const lastTap = useRef(0);
   const isAnimating = useRef(false);
+
+  useEffect(() => {
+    // Update parent component whenever flip state changes
+    onSwipingStateChange(!isFlipped);
+  }, [isFlipped, onSwipingStateChange]);
 
   const handleDoubleTap = () => {
     const currentTime = Date.now();
@@ -58,7 +66,6 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, swipingEnabled, onSwipingSta
     if (isAnimating.current) return;
     
     isAnimating.current = true;
-    onSwipingStateChange(!isFlipped); // Disable swiping when flipping to back
 
     Animated.spring(animatedValue, {
       toValue: isFlipped ? 0 : 180,
@@ -71,10 +78,6 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, swipingEnabled, onSwipingSta
       if (finished) {
         setIsFlipped(!isFlipped);
         isAnimating.current = false;
-        // Enable swiping when card is back to front face
-        if (isFlipped) {
-          onSwipingStateChange(true);
-        }
       }
     });
   };
@@ -98,6 +101,42 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, swipingEnabled, onSwipingSta
     inputRange: [0, 89.9, 90, 180],
     outputRange: [0, 0, 1, 1]
   });
+
+  const renderMovieDetails = () => (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={showInfo}
+      onRequestClose={() => setShowInfo(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <ScrollView>
+            <Text style={styles.modalTitle}>{movie.title}</Text>
+            <Text style={styles.modalSubtitle}>Released: {movie.release_date}</Text>
+            <Text style={styles.modalRating}>Rating: ⭐ {movie.vote_average.toFixed(1)} ({movie.vote_average} votes)</Text>
+            {movie.runtime && (
+              <Text style={styles.modalText}>Runtime: {movie.runtime} minutes</Text>
+            )}
+            <Text style={styles.modalSection}>Genres</Text>
+            <View style={styles.modalGenres}>
+              {movie.genres.map(genre => (
+                <Text key={genre.id} style={styles.modalGenre}>{genre.name}</Text>
+              ))}
+            </View>
+            <Text style={styles.modalSection}>Overview</Text>
+            <Text style={styles.modalText}>{movie.overview}</Text>
+          </ScrollView>
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={() => setShowInfo(false)}
+          >
+            <Text style={styles.closeButtonText}>Close</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
 
   const renderFrontFace = () => (
     <View style={styles.frontFaceContainer}>
@@ -125,6 +164,16 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, swipingEnabled, onSwipingSta
           {new Date(movie.release_date).getFullYear()}
         </Text>
       </View>
+      <TouchableOpacity
+        style={styles.infoButton}
+        onPress={(e) => {
+          e.stopPropagation();
+          setShowInfo(true);
+        }}
+      >
+        <Text style={styles.infoIcon}>ⓘ</Text>
+      </TouchableOpacity>
+      {renderMovieDetails()}
     </View>
   );
 
@@ -178,7 +227,7 @@ const styles = StyleSheet.create({
     height: CARD_HEIGHT,
     position: 'relative',
     alignSelf: 'center',
-    marginTop: height * 0.05, // Reduced top margin to move card up
+    justifyContent: 'center',
   },
   cardFace: {
     width: '100%',
@@ -261,6 +310,92 @@ const styles = StyleSheet.create({
   releaseDate: {
     fontSize: 15, // Increased size
     color: '#cccccc',
+  },
+  infoButton: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  infoIcon: {
+    fontSize: 20,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '90%',
+    maxHeight: '80%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  modalSubtitle: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 10,
+  },
+  modalRating: {
+    fontSize: 16,
+    marginBottom: 10,
+  },
+  modalSection: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginTop: 15,
+    marginBottom: 8,
+  },
+  modalText: {
+    fontSize: 16,
+    lineHeight: 24,
+    color: '#333',
+  },
+  modalGenres: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 10,
+  },
+  modalGenre: {
+    fontSize: 14,
+    backgroundColor: '#f0f0f0',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 15,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  closeButton: {
+    marginTop: 20,
+    padding: 10,
+    backgroundColor: '#007AFF',
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 
