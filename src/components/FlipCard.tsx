@@ -11,18 +11,36 @@ import {
   Modal,
   TouchableOpacity,
   ScrollView,
+  ActivityIndicator,
+  FlatList,
 } from 'react-native';
 import MovieReview from './MovieReview';
+
+const API_KEY = '559819d48b95a2e3440df0504dea30fd';
 
 interface Movie {
   id: number;
   title: string;
-  poster_path: string;
+  poster_path: string | null;
   vote_average: number;
   overview: string;
   release_date: string;
-  runtime: number;
+  runtime?: number;
   genres: { id: number; name: string }[];
+  category?: 'Popular' | 'Highest Rated' | 'Most Voted';
+  vote_count?: number;
+  cast?: {
+    id: number;
+    name: string;
+    character: string;
+    profile_path: string | null;
+  }[];
+  crew?: {
+    id: number;
+    name: string;
+    job: string;
+    department: string;
+  }[];
 }
 
 interface FlipCardProps {
@@ -30,33 +48,63 @@ interface FlipCardProps {
   onSwipingStateChange: (enabled: boolean) => void;
 }
 
+type CastMember = {
+  id: number;
+  name: string;
+  character: string;
+  profile_path: string | null;
+};
+
+type CrewMember = {
+  id: number;
+  name: string;
+  job: string;
+  department: string;
+};
+
 const { width, height } = Dimensions.get('window');
 const CARD_PADDING = 16;
 const CARD_WIDTH = width - (CARD_PADDING * 2);
-const CARD_HEIGHT = height * 0.75; // Increased to 75% of screen height
-const DETAILS_HEIGHT = 120; // Fixed height for details section
+const CARD_HEIGHT = height * 0.75;
+const DETAILS_HEIGHT = 120;
 
 const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
+  const {
+    title = '',
+    poster_path = null,
+    vote_average = 0,
+    overview = '',
+    release_date = '',
+    runtime = 0,
+    genres = []
+  } = movie || {};
+
   const [isFlipped, setIsFlipped] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
+  const [isLoadingCredits, setIsLoadingCredits] = useState(false);
+  const [credits, setCredits] = useState<{ cast: any[], crew: any[] }>({ cast: [], crew: [] });
   const animatedValue = useRef(new Animated.Value(0)).current;
   const lastTap = useRef(0);
   const isAnimating = useRef(false);
 
   useEffect(() => {
-    // Update parent component whenever flip state changes
     onSwipingStateChange(!isFlipped);
   }, [isFlipped, onSwipingStateChange]);
+
+  // Add useEffect to handle swipe disabling when modal is open
+  useEffect(() => {
+    onSwipingStateChange(!showInfo && !isFlipped);
+  }, [showInfo, isFlipped, onSwipingStateChange]);
 
   const handleDoubleTap = () => {
     const currentTime = Date.now();
     const tapInterval = currentTime - lastTap.current;
     
-    if (tapInterval < 200) { // Shorter delay for more responsive double-tap
+    if (tapInterval < 200) {
       if (!isAnimating.current) {
         performFlip();
       }
-      lastTap.current = 0; // Reset after successful double-tap
+      lastTap.current = 0;
     } else {
       lastTap.current = currentTime;
     }
@@ -102,34 +150,155 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
     outputRange: [0, 0, 1, 1]
   });
 
+  const formatVoteCount = (count: number) => {
+    return count?.toString() || '0';
+  };
+
+  const fetchMovieCredits = async (movieId: number) => {
+    try {
+      setIsLoadingCredits(true);
+      const response = await fetch(
+        `https://api.themoviedb.org/3/movie/${movieId}/credits?api_key=${API_KEY}`,
+        {
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setCredits({
+        cast: data.cast?.slice(0, 10) || [],
+        crew: data.crew?.filter((c: CrewMember) => 
+          ['Director', 'Producer', 'Screenplay'].includes(c.job)
+        ).slice(0, 5) || []
+      });
+    } catch (error) {
+      console.error('Error fetching credits:', error);
+      setCredits({ cast: [], crew: [] });
+    } finally {
+      setIsLoadingCredits(false);
+    }
+  };
+
+  const renderCastItem = ({ item }: { item: CastMember }) => (
+    <View style={styles.castMember}>
+      <Image
+        source={{
+          uri: item.profile_path
+            ? `https://image.tmdb.org/t/p/w185${item.profile_path}`
+            : 'https://via.placeholder.com/185x278?text=No+Image'
+        }}
+        style={styles.castImage}
+      />
+      <Text style={styles.castName} numberOfLines={1}>{item.name}</Text>
+      <Text style={styles.castCharacter} numberOfLines={1}>{item.character}</Text>
+    </View>
+  );
+
+  const renderCrewItem = ({ item }: { item: CrewMember }) => (
+    <Text style={styles.crewMember}>
+      {item.job}: {item.name}
+    </Text>
+  );
+
+  const renderCastSection = () => (
+    <>
+      <Text style={styles.modalSection}>Cast</Text>
+      {isLoadingCredits ? (
+        <ActivityIndicator size="small" color="#007AFF" />
+      ) : credits.cast.length > 0 ? (
+        <FlatList
+          data={credits.cast}
+          renderItem={renderCastItem}
+          keyExtractor={(item) => `cast-${item.id}`}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          initialNumToRender={5}
+          maxToRenderPerBatch={5}
+          windowSize={5}
+          contentContainerStyle={styles.castContainer}
+        />
+      ) : (
+        <Text style={styles.noDataText}>No cast information available</Text>
+      )}
+    </>
+  );
+
+  const renderCrewSection = () => (
+    <>
+      <Text style={styles.modalSection}>Crew</Text>
+      {isLoadingCredits ? (
+        <ActivityIndicator size="small" color="#007AFF" />
+      ) : credits.crew.length > 0 ? (
+        <FlatList
+          data={credits.crew}
+          renderItem={renderCrewItem}
+          keyExtractor={(item) => `crew-${item.id}-${item.job}`}
+          scrollEnabled={false}
+          initialNumToRender={5}
+        />
+      ) : (
+        <Text style={styles.noDataText}>No crew information available</Text>
+      )}
+    </>
+  );
+
+  // Update the modal close handler
+  const handleModalClose = () => {
+    setShowInfo(false);
+    onSwipingStateChange(!isFlipped); // Re-enable swiping if card isn't flipped
+  };
+
+  // Update renderMovieDetails with new close handler
   const renderMovieDetails = () => (
     <Modal
       animationType="slide"
       transparent={true}
       visible={showInfo}
-      onRequestClose={() => setShowInfo(false)}
+      onRequestClose={handleModalClose}
     >
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
-          <ScrollView>
-            <Text style={styles.modalTitle}>{movie.title}</Text>
-            <Text style={styles.modalSubtitle}>Released: {movie.release_date}</Text>
-            <Text style={styles.modalRating}>Rating: ⭐ {movie.vote_average.toFixed(1)} ({movie.vote_average} votes)</Text>
-            {movie.runtime && (
-              <Text style={styles.modalText}>Runtime: {movie.runtime} minutes</Text>
-            )}
-            <Text style={styles.modalSection}>Genres</Text>
-            <View style={styles.modalGenres}>
-              {movie.genres.map(genre => (
-                <Text key={genre.id} style={styles.modalGenre}>{genre.name}</Text>
-              ))}
+          <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+            <View>
+              <Text style={styles.modalTitle}>{title}</Text>
+              <Text style={styles.modalSubtitle}>
+                Released: {release_date}
+              </Text>
+              <Text style={styles.modalRating}>
+                Rating: ⭐ {vote_average.toFixed(1)}
+              </Text>
+              <Text style={styles.modalRating}>
+                Votes: {movie.vote_count || 0}
+              </Text>
+              {runtime > 0 && (
+                <Text style={styles.modalText}>
+                  Runtime: {runtime} minutes
+                </Text>
+              )}
+              <Text style={styles.modalSection}>Genres</Text>
+              <View style={styles.modalGenres}>
+                {genres.map(genre => (
+                  <View key={genre.id} style={styles.genreWrapper}>
+                    <Text style={styles.modalGenre}>{genre.name}</Text>
+                  </View>
+                ))}
+              </View>
+              <Text style={styles.modalSection}>Overview</Text>
+              <Text style={styles.modalText}>{overview}</Text>
+              {renderCastSection()}
+              {renderCrewSection()}
             </View>
-            <Text style={styles.modalSection}>Overview</Text>
-            <Text style={styles.modalText}>{movie.overview}</Text>
           </ScrollView>
           <TouchableOpacity
             style={styles.closeButton}
-            onPress={() => setShowInfo(false)}
+            onPress={handleModalClose}
           >
             <Text style={styles.closeButtonText}>Close</Text>
           </TouchableOpacity>
@@ -138,38 +307,49 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
     </Modal>
   );
 
+  // Update the info button press handler
+  const handleInfoPress = (e: any) => {
+    e.stopPropagation();
+    setShowInfo(true);
+    onSwipingStateChange(false); // Disable swiping when opening modal
+    fetchMovieCredits(movie.id);
+  };
+
+  // Update the info button in renderFrontFace
   const renderFrontFace = () => (
     <View style={styles.frontFaceContainer}>
       <Image 
-        source={{ uri: `https://image.tmdb.org/t/p/w500${movie.poster_path}` }}
+        source={{ 
+          uri: poster_path 
+            ? `https://image.tmdb.org/t/p/w500${poster_path}`
+            : 'https://via.placeholder.com/500x750?text=No+Image'
+        }}
         style={styles.poster}
       />
+      {movie.category && (
+        <View style={styles.categoryBadge}>
+          <Text style={styles.categoryText}>{movie.category}</Text>
+        </View>
+      )}
       <View style={styles.overlay} />
       <View style={styles.detailsContainer}>
         <Text style={styles.title} numberOfLines={2}>
-          {movie.title}
+          {title || 'Untitled'}
         </Text>
-        <View style={styles.ratingContainer}>
-          <Text style={styles.rating}>⭐ {movie.vote_average.toFixed(1)}</Text>
-          <Text style={styles.votes}>({movie.vote_average} votes)</Text>
-        </View>
         <View style={styles.genreContainer}>
-          {movie.genres.slice(0, 3).map((genre, index) => (
+          {(genres || []).slice(0, 3).map((genre, index) => (
             <Text key={genre.id} style={styles.genre}>
-              {genre.name}{index < Math.min(movie.genres.length - 1, 2) ? ' • ' : ''}
+              {genre.name}{index < Math.min((genres || []).length - 1, 2) ? ' • ' : ''}
             </Text>
           ))}
         </View>
         <Text style={styles.releaseDate}>
-          {new Date(movie.release_date).getFullYear()}
+          {release_date ? new Date(release_date).getFullYear() : 'N/A'}
         </Text>
       </View>
       <TouchableOpacity
         style={styles.infoButton}
-        onPress={(e) => {
-          e.stopPropagation();
-          setShowInfo(true);
-        }}
+        onPress={handleInfoPress}
       >
         <Text style={styles.infoIcon}>ⓘ</Text>
       </TouchableOpacity>
@@ -257,7 +437,7 @@ const styles = StyleSheet.create({
   },
   poster: {
     width: '100%',
-    height: CARD_HEIGHT - DETAILS_HEIGHT, // Adjust poster height to leave space for details
+    height: CARD_HEIGHT - DETAILS_HEIGHT,
     resizeMode: 'cover',
   },
   overlay: {
@@ -288,27 +468,18 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
   },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 3,
-  },
-  votes: {
-    fontSize: 15, // Increased size
-    color: '#cccccc',
-  },
   genreContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     marginBottom: 3,
   },
   genre: {
-    fontSize: 16, // Increased size
+    fontSize: 16,
     color: '#ffffff',
     opacity: 0.9,
   },
   releaseDate: {
-    fontSize: 15, // Increased size
+    fontSize: 15,
     color: '#cccccc',
   },
   infoButton: {
@@ -396,6 +567,65 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  categoryBadge: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    zIndex: 2,
+  },
+  categoryText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  genreWrapper: {
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  castContainer: {
+    paddingVertical: 10,
+  },
+  castMember: {
+    width: 100,
+    marginRight: 15,
+    alignItems: 'center',
+  },
+  castImage: {
+    width: 80,
+    height: 120,
+    borderRadius: 10,
+    marginBottom: 5,
+  },
+  castName: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 2,
+  },
+  castCharacter: {
+    fontSize: 11,
+    color: '#666',
+    textAlign: 'center',
+  },
+  crewContainer: {
+    marginBottom: 15,
+  },
+  crewMember: {
+    fontSize: 14,
+    marginBottom: 5,
+    color: '#333',
+  },
+  noDataText: {
+    fontSize: 14,
+    color: '#666',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginVertical: 10,
   },
 });
 

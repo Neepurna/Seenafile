@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback, memo } from 'react';
 import { View, StyleSheet, TextInput, FlatList, Image, Dimensions, ActivityIndicator } from 'react-native';
-import { fetchMovies, TMDBMovie } from '../services/tmdb';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Movie } from '../services/api';
+import { fetchMoviesByQuery, fetchRandomMovies } from '../services/helper';
 
 const { width } = Dimensions.get('window');
 const numColumns = 4; // Changed from 2 to 4
@@ -10,7 +11,7 @@ const movieWidth = width / numColumns;
 const ITEMS_PER_PAGE = 20;
 const VISIBLE_PAGES = 2;
 
-const MovieCard = memo(({ item }: { item: TMDBMovie }) => (
+const MovieCard = memo(({ item }: { item: Movie }) => (
   <View style={styles.movieCard}>
     <Image
       source={{
@@ -21,14 +22,17 @@ const MovieCard = memo(({ item }: { item: TMDBMovie }) => (
   </View>
 ));
 
+// Update type definition
+type ExtendedMovie = Movie & { uniqueKey?: string };
+
 const CineSearchScreen: React.FC = () => {
-  const [movies, setMovies] = useState<TMDBMovie[]>([]);
+  const [movies, setMovies] = useState<ExtendedMovie[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [hasMore, setHasMore] = useState(true);
-  const [visibleMovies, setVisibleMovies] = useState<ExtendedTMDBMovie[]>([]);
+  const [visibleMovies, setVisibleMovies] = useState<ExtendedMovie[]>([]);
 
   useEffect(() => {
     loadMovies();
@@ -45,23 +49,28 @@ const CineSearchScreen: React.FC = () => {
         setLoadingMore(true);
       }
 
-      const response = await fetchMovies(nextPage);
-      const newMovies = response.results.map((movie: TMDBMovie, index: number) => ({
+      let newMovies: Movie[];
+      if (searchQuery.trim()) {
+        const response = await fetchMoviesByQuery(searchQuery);
+        newMovies = response;
+      } else {
+        // If no search query, fetch random popular movies
+        newMovies = await fetchRandomMovies('popular', ITEMS_PER_PAGE);
+      }
+
+      // Add uniqueKey to movies for FlatList optimization
+      const moviesWithKeys = newMovies.map((movie, index) => ({
         ...movie,
         uniqueKey: `${nextPage}-${movie.id}-${Date.now()}-${index}`,
       }));
 
       if (nextPage === 1) {
-        setMovies(newMovies);
+        setMovies(moviesWithKeys);
       } else {
-        // Keep only the movies from last VISIBLE_PAGES pages
-        setMovies(prev => {
-          const startIndex = Math.max(0, prev.length - (ITEMS_PER_PAGE * VISIBLE_PAGES));
-          return [...prev.slice(startIndex), ...newMovies];
-        });
+        setMovies(prev => [...prev, ...moviesWithKeys]);
       }
       
-      setHasMore(response.page < response.total_pages);
+      setHasMore(newMovies.length === ITEMS_PER_PAGE);
       setPage(nextPage);
     } catch (error) {
       console.error('Error loading movies:', error);
@@ -86,12 +95,12 @@ const CineSearchScreen: React.FC = () => {
     []
   );
 
-  const keyExtractor = useCallback((item: TMDBMovie & { uniqueKey?: string }) => 
+  const keyExtractor = useCallback((item: Movie & { uniqueKey?: string }) => 
     item.uniqueKey || `${item.id}-${Math.random()}`,
     []
   );
 
-  const renderMovieItem = useCallback(({ item }: { item: TMDBMovie }) => (
+  const renderMovieItem = useCallback(({ item }: { item: Movie }) => (
     <MovieCard item={item} />
   ), []);
 
@@ -103,9 +112,6 @@ const CineSearchScreen: React.FC = () => {
       </View>
     );
   }, [loadingMore]);
-
-  // Update TMDBMovie type to include uniqueKey
-  type ExtendedTMDBMovie = TMDBMovie & { uniqueKey?: string };
 
   const onViewableItemsChanged = useCallback(({ viewableItems }) => {
     if (viewableItems.length > 0) {
@@ -135,7 +141,7 @@ const CineSearchScreen: React.FC = () => {
       {loading ? (
         <ActivityIndicator size="large" color="#fff" style={styles.loader} />
       ) : (
-        <FlatList<ExtendedTMDBMovie>
+        <FlatList<ExtendedMovie>
           key={`grid-${numColumns}`} // Add this line to fix the numColumns error
           data={movies}
           renderItem={renderMovieItem}

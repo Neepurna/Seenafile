@@ -2,27 +2,14 @@
 
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import React, { useEffect, useState, useRef } from 'react';
-import { 
-  View, 
-  StyleSheet, 
-  ActivityIndicator, 
-  Alert, 
-  Dimensions, 
-  Platform, 
-  Text,
-  Animated // Add this import
-} from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Alert, Dimensions, Platform, Text } from 'react-native';
 import Swiper from 'react-native-deck-swiper';
 import FlipCard from '../components/FlipCard';
-import { Ionicons } from '@expo/vector-icons'; // Add this import
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import {
-  fetchTopRatedMovies,
-  fetchMoviesByGenre,
-  fetchHighestRatedMovies,
-} from '../services/tmdb';
-import { TapGestureHandler, State } from 'react-native-gesture-handler';
+import { Movie } from '../services/api';
+import { fetchRandomMovies, shuffleArray } from '../services/helper';
 
 const { width, height } = Dimensions.get('window');
 const TAB_BAR_HEIGHT = 67; // Match new tab bar height
@@ -36,18 +23,6 @@ interface Genre {
   id: number;
 }
 
-interface Movie {
-  id: number;
-  title: string;
-  poster_path: string;
-  vote_average: number;
-  overview: string;
-  release_date: string;
-  runtime: number;
-  genres: { id: number; name: string }[];
-  // Add other detailed fields if needed
-}
-
 const genres: Genre[] = [
   { label: 'Action', id: 28 },
   { label: 'Adventure', id: 12 },
@@ -56,7 +31,6 @@ const genres: Genre[] = [
 
 const MAX_PAGE = 500; // Maximum page number allowed by TMDB API
 
-// Add type for navigation
 type RootStackParamList = {
   CineBrowse: undefined;
   MovieReview: { movie: Movie };
@@ -70,22 +44,18 @@ const CineBrowseScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [swipingEnabled, setSwipingEnabled] = useState(true);
 
-  // Use useRef to persist across renders
   const displayedMovieIds = useRef<Set<number>>(new Set());
 
-  // Initialize genrePages directly
   const initialGenrePages: { [key: number]: number } = {};
   genres.forEach((genre) => {
     initialGenrePages[genre.id] = 1;
   });
   const [genrePages, setGenrePages] = useState<{ [key: number]: number }>(initialGenrePages);
 
-  // Current pages for each category
   const [topRatedPage, setTopRatedPage] = useState(1);
   const [highestRatedPage, setHighestRatedPage] = useState(1);
 
   useEffect(() => {
-    // Initial fetch
     fetchMoreMovies();
   }, []);
 
@@ -93,93 +63,35 @@ const CineBrowseScreen: React.FC = () => {
     try {
       setLoading(true);
 
-      // Number of pages to fetch per category
-      const pagesToFetch = 2; // Adjust as needed
-
-      // Fetch movies from different categories
-      const topRatedPromises = [];
-      const highestRatedPromises = [];
-      const genrePromises = [];
-
-      // Fetch multiple pages for top-rated movies
-      for (let i = 0; i < pagesToFetch; i++) {
-        let page = topRatedPage + i;
-        if (page > MAX_PAGE) {
-          page = 1; // Reset to 1 if exceeding MAX_PAGE
-        }
-        topRatedPromises.push(fetchTopRatedMovies(page));
-      }
-
-      // Fetch multiple pages for highest-rated movies
-      for (let i = 0; i < pagesToFetch; i++) {
-        let page = highestRatedPage + i;
-        if (page > MAX_PAGE) {
-          page = 1;
-        }
-        highestRatedPromises.push(fetchHighestRatedMovies(page));
-      }
-
-      // Fetch multiple pages for each genre
-      genres.forEach((genre) => {
-        for (let i = 0; i < pagesToFetch; i++) {
-          let page = genrePages[genre.id] + i;
-          if (page > MAX_PAGE) {
-            page = 1;
-          }
-          genrePromises.push(fetchMoviesByGenre(genre.id, page));
-        }
-      });
-
-      const [
-        topRatedResponses,
-        highestRatedResponses,
-        genreResponses,
-      ] = await Promise.all([
-        Promise.all(topRatedPromises),
-        Promise.all(highestRatedPromises),
-        Promise.all(genrePromises),
+      const [popularMovies, topRatedMovies, highestVotedMovies] = await Promise.all([
+        fetchRandomMovies('popular', 10),
+        fetchRandomMovies('top_rated', 10),
+        fetchRandomMovies('discover', 10, {
+          sort_by: 'vote_count.desc',
+          'vote_count.gte': 1000,
+          with_original_language: 'en' // Add language filter for better results
+        })
       ]);
 
-      // Process responses
-      const topRatedMovies = flattenAndFilterResponses(topRatedResponses);
-      const highestRatedMovies = flattenAndFilterResponses(highestRatedResponses);
-      const genreMovies = flattenAndFilterResponses(genreResponses);
+      // Filter out any undefined/null results
+      const validMovies = [
+        ...(popularMovies || []).map(m => ({ ...m, category: 'Popular' })),
+        ...(topRatedMovies || []).map(m => ({ ...m, category: 'Highest Rated' })),
+        ...(highestVotedMovies || []).map(m => ({ ...m, category: 'Most Voted' }))
+      ].filter(movie => 
+        movie && 
+        movie.poster_path && 
+        !displayedMovieIds.current.has(movie.id)
+      );
 
-      // Combine and shuffle movies
-      const newMovies = shuffleArray([
-        ...topRatedMovies,
-        ...highestRatedMovies,
-        ...genreMovies,
-      ]);
-
-      // Update state
-      setMovies((prevMovies) => [...prevMovies, ...newMovies]);
-
-      // Update displayed movie IDs
-      newMovies.forEach((movie) => displayedMovieIds.current.add(movie.id));
-
-      // Update pages
-      let newTopRatedPage = topRatedPage + pagesToFetch;
-      if (newTopRatedPage > MAX_PAGE) {
-        newTopRatedPage = 1;
+      if (validMovies.length === 0) {
+        console.warn('No new movies fetched');
+        return;
       }
-      setTopRatedPage(newTopRatedPage);
 
-      let newHighestRatedPage = highestRatedPage + pagesToFetch;
-      if (newHighestRatedPage > MAX_PAGE) {
-        newHighestRatedPage = 1;
-      }
-      setHighestRatedPage(newHighestRatedPage);
+      setMovies(prevMovies => [...prevMovies, ...shuffleArray(validMovies)]);
+      validMovies.forEach(movie => displayedMovieIds.current.add(movie.id));
 
-      const newGenrePages = { ...genrePages };
-      genres.forEach((genre) => {
-        let newPage = newGenrePages[genre.id] + pagesToFetch;
-        if (newPage > MAX_PAGE) {
-          newPage = 1;
-        }
-        newGenrePages[genre.id] = newPage;
-      });
-      setGenrePages(newGenrePages);
     } catch (error) {
       console.error('Error fetching more movies:', error);
       Alert.alert('Error', 'Failed to load more movies. Please try again.');
@@ -208,13 +120,8 @@ const CineBrowseScreen: React.FC = () => {
     });
   };
 
-  const shuffleArray = (array: Movie[]): Movie[] => {
-    return array.sort(() => Math.random() - 0.5);
-  };
-
   const handleSwipedRight = (index: number) => {
     console.log('Seen movie:', movies[index]);
-    // Just log for now, remove addMovieToList
   };
 
   const handleSwipedLeft = (index: number) => {
@@ -223,12 +130,10 @@ const CineBrowseScreen: React.FC = () => {
 
   const handleSwipedTop = (index: number) => {
     console.log('Most Watch movie:', movies[index]);
-    // Just log for now, remove addMovieToList
   };
 
   const handleSwipedBottom = (index: number) => {
     console.log('Watch Later movie:', movies[index]);
-    // Just log for now, remove addMovieToList
   };
 
   const handleMovieReview = (movie: Movie) => {
@@ -256,10 +161,10 @@ const CineBrowseScreen: React.FC = () => {
           stackSize={3}
           stackScale={10}
           stackSeparation={14}
-          overlayOpacityHorizontalThreshold={width / 8} // Reduced from width/6
-          overlayOpacityVerticalThreshold={SCREEN_HEIGHT / 8} // Reduced from SCREEN_HEIGHT/6
-          inputRotationRange={[-width / 2, 0, width / 2]}  // Add this for better rotation
-          outputRotationRange={["-10deg", "0deg", "10deg"]}  // Add this for better rotation
+          overlayOpacityHorizontalThreshold={width / 8}
+          overlayOpacityVerticalThreshold={SCREEN_HEIGHT / 8}
+          inputRotationRange={[-width / 2, 0, width / 2]}
+          outputRotationRange={["-10deg", "0deg", "10deg"]}
           onSwipedAll={fetchMoreMovies}
           onSwipedTop={handleSwipedTop}
           onSwipedBottom={handleSwipedBottom}
@@ -271,41 +176,65 @@ const CineBrowseScreen: React.FC = () => {
           disableBottomSwipe={!swipingEnabled}
           disableLeftSwipe={!swipingEnabled}
           disableRightSwipe={!swipingEnabled}
-          verticalThreshold={SCREEN_HEIGHT / 6}  // Reduced from SCREEN_HEIGHT/4
-          horizontalThreshold={width / 6}  // Reduced from width/4
+          verticalThreshold={SCREEN_HEIGHT / 6}
+          horizontalThreshold={width / 6}
           useViewOverflow={false}
-          preventSwiping={['up', 'down', 'left', 'right']} // Add this line
-          swipeBackCard={false} // Add this line
+          preventSwiping={['up', 'down', 'left', 'right']}
+          swipeBackCard={false}
           overlayLabels={swipingEnabled ? {
             left: {
               element: (
                 <View style={[styles.overlayWrapper, { borderColor: '#FF4B4B' }]}>
-                  <Ionicons name="close-circle" size={40} color="#FF4B4B" />
-                  <Text style={[styles.overlayText, { color: '#FF4B4B' }]}>Not Watched</Text>
+                  <View>
+                    <Ionicons name="close-circle" size={40} color="#FF4B4B" />
+                  </View>
+                  <View>
+                    <Text style={[styles.overlayText, { color: '#FF4B4B' }]}>
+                      Not Watched
+                    </Text>
+                  </View>
                 </View>
               )
             },
             right: {
               element: (
                 <View style={[styles.overlayWrapper, { borderColor: '#4BFF4B' }]}>
-                  <Ionicons name="checkmark-circle" size={40} color="#4BFF4B" />
-                  <Text style={[styles.overlayText, { color: '#4BFF4B' }]}>Watched</Text>
+                  <View>
+                    <Ionicons name="checkmark-circle" size={40} color="#4BFF4B" />
+                  </View>
+                  <View>
+                    <Text style={[styles.overlayText, { color: '#4BFF4B' }]}>
+                      Watched
+                    </Text>
+                  </View>
                 </View>
               )
             },
             top: {
               element: (
                 <View style={[styles.overlayWrapper, { borderColor: '#FFD700' }]}>
-                  <Ionicons name="repeat" size={40} color="#FFD700" />
-                  <Text style={[styles.overlayText, { color: '#FFD700' }]}>Most Watch</Text>
+                  <View>
+                    <Ionicons name="repeat" size={40} color="#FFD700" />
+                  </View>
+                  <View>
+                    <Text style={[styles.overlayText, { color: '#FFD700' }]}>
+                      Most Watch
+                    </Text>
+                  </View>
                 </View>
               )
             },
             bottom: {
               element: (
                 <View style={[styles.overlayWrapper, { borderColor: '#00BFFF' }]}>
-                  <Ionicons name="time" size={40} color="#00BFFF" />
-                  <Text style={[styles.overlayText, { color: '#00BFFF' }]}>Watch Later</Text>
+                  <View>
+                    <Ionicons name="time" size={40} color="#00BFFF" />
+                  </View>
+                  <View>
+                    <Text style={[styles.overlayText, { color: '#00BFFF' }]}>
+                      Watch Later
+                    </Text>
+                  </View>
                 </View>
               )
             },
@@ -325,13 +254,12 @@ const CineBrowseScreen: React.FC = () => {
   );
 };
 
-// Add these new styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
-    alignItems: 'center', // Center horizontally
-    justifyContent: 'center', // Center vertically
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   swiperContainer: {
     flex: 1,
@@ -359,25 +287,25 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   loadingContainer: {
-    flex: 1,                    // Take up all available space
-    backgroundColor: '#000',    // Black background for loading screen
-    justifyContent: 'center',   // Center loading spinner vertically
-    alignItems: 'center',       // Center loading spinner horizontally
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   loadingOverlay: {
-    position: 'absolute',       // Position over other content
-    top: '50%',                // Center vertically
-    alignSelf: 'center',       // Center horizontally
+    position: 'absolute',
+    top: '50%',
+    alignSelf: 'center',
   },
   overlayWrapper: {
     position: 'absolute',
-    top: '50%',  // Center vertically
-    left: '50%', // Center horizontally
-    transform: [{ translateX: -75 }, { translateY: -50 }], // Offset by half the size
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -75 }, { translateY: -50 }],
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Semi-transparent black background
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     borderWidth: 2,
     borderRadius: 15,
     width: 150,
