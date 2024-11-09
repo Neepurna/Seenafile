@@ -594,46 +594,49 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)', // Darker overlay
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalContent: {
     width: '90%',
     maxHeight: '80%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1a1a1a', // Dark background
     borderRadius: 20,
     padding: 20,
     elevation: 5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.5,
     shadowRadius: 4,
   },
   modalTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 10,
+    color: '#ffffff', // White text
   },
   modalSubtitle: {
     fontSize: 16,
-    color: '#666',
+    color: '#9e9e9e', // Light gray text
     marginBottom: 10,
   },
   modalRating: {
     fontSize: 16,
     marginBottom: 10,
+    color: '#ffffff', // White text
   },
   modalSection: {
     fontSize: 18,
     fontWeight: 'bold',
     marginTop: 15,
     marginBottom: 8,
+    color: '#ffffff', // White text
   },
   modalText: {
     fontSize: 16,
     lineHeight: 24,
-    color: '#333',
+    color: '#e0e0e0', // Light gray text
   },
   modalGenres: {
     flexDirection: 'row',
@@ -642,7 +645,8 @@ const styles = StyleSheet.create({
   },
   modalGenre: {
     fontSize: 14,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#333333', // Dark gray background
+    color: '#ffffff', // White text
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 15,
@@ -652,12 +656,12 @@ const styles = StyleSheet.create({
   closeButton: {
     marginTop: 20,
     padding: 10,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#333333', // Dark gray background
     borderRadius: 10,
     alignItems: 'center',
   },
   closeButtonText: {
-    color: '#FFFFFF',
+    color: '#ffffff', // White text
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -699,10 +703,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 2,
+    color: '#ffffff', // White text
   },
   castCharacter: {
     fontSize: 11,
-    color: '#666',
+    color: '#9e9e9e', // Light gray text
     textAlign: 'center',
   },
   crewContainer: {
@@ -711,11 +716,11 @@ const styles = StyleSheet.create({
   crewMember: {
     fontSize: 14,
     marginBottom: 5,
-    color: '#333',
+    color: '#e0e0e0', // Light gray text
   },
   noDataText: {
     fontSize: 14,
-    color: '#666',
+    color: '#9e9e9e', // Light gray text
     fontStyle: 'italic',
     textAlign: 'center',
     marginVertical: 10,
@@ -723,7 +728,7 @@ const styles = StyleSheet.create({
   reviewContainer: {
     marginBottom: 20,
     padding: 12,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: '#333333', // Dark gray background
     borderRadius: 8,
   },
   reviewHeader: {
@@ -735,21 +740,21 @@ const styles = StyleSheet.create({
   reviewAuthor: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#ffffff', // White text
   },
   reviewRating: {
     fontSize: 14,
-    color: '#666',
+    color: '#9e9e9e', // Light gray text
   },
   reviewDate: {
     fontSize: 12,
-    color: '#888',
+    color: '#757575', // Medium gray text
     marginBottom: 8,
   },
   reviewContent: {
     fontSize: 14,
     lineHeight: 20,
-    color: '#444',
+    color: '#e0e0e0', // Light gray text
   },
 });
 
