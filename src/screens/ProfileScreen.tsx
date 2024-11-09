@@ -1,13 +1,50 @@
 // src/screens/ProfileScreen.tsx
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { auth, getUserProfile } from '../firebase';
 
 const ProfileScreen: React.FC = () => {
   const navigation = useNavigation();
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSignOut = () => {
+  useEffect(() => {
+    const loadUserProfile = async () => {
+      if (!auth.currentUser) {
+        navigation.navigate('Login');
+        return;
+      }
+
+      try {
+        setIsLoading(true);
+        const profile = await getUserProfile(auth.currentUser.uid);
+        if (!profile) {
+          // If profile doesn't exist, create a default one
+          setUserProfile({
+            name: auth.currentUser.displayName || 'New User',
+            email: auth.currentUser.email,
+            moviesWatched: 0,
+            matches: 0,
+            watchlist: 0,
+          });
+        } else {
+          setUserProfile(profile);
+        }
+      } catch (err) {
+        setError('Failed to load profile');
+        Alert.alert('Error', 'Failed to load profile data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadUserProfile();
+  }, []);
+
+  const handleSignOut = async () => {
     Alert.alert(
       "Sign Out",
       "Are you sure you want to sign out?",
@@ -15,17 +52,37 @@ const ProfileScreen: React.FC = () => {
         { text: "Cancel", style: "cancel" },
         { 
           text: "Sign Out", 
-          onPress: () => {
-            // Navigate to login screen
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'Login' }],
-            });
+          onPress: async () => {
+            try {
+              await auth.signOut();
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Login' }],
+              });
+            } catch (error) {
+              Alert.alert('Error', 'Failed to sign out');
+            }
           }
         }
       ]
     );
   };
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <Text>Loading profile...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <Text style={styles.errorText}>{error}</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -40,8 +97,8 @@ const ProfileScreen: React.FC = () => {
             <Icon name="edit" size={20} color="#FFF" />
           </TouchableOpacity>
         </View>
-        <Text style={styles.userName}>John Doe</Text>
-        <Text style={styles.userHandle}>@johndoe</Text>
+        <Text style={styles.userName}>{userProfile?.name || 'Loading...'}</Text>
+        <Text style={styles.userHandle}>{userProfile?.email}</Text>
       </View>
 
       {/* Dashboard Stats */}
@@ -144,6 +201,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#FF375F',
     fontWeight: '600',
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorText: {
+    color: '#FF375F',
+    fontSize: 16,
   },
 });
 

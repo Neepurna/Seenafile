@@ -8,11 +8,12 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet } from 'react-native';
 
 import LoginScreen from './src/screens/LoginScreen';
+import SignUpScreen from './src/screens/SignUpScreen';
 import Tabs from './src/navigation/Tabs';
-
 
 type RootStackParamList = {
   Login: undefined;
+  SignUp: undefined;
   Tabs: undefined;
 };
 
@@ -26,12 +27,17 @@ export default function App() {
           initialRouteName="Login"
           screenOptions={{
             headerShown: false,
-            gestureEnabled: false, // Disable navigation gestures
+            gestureEnabled: false,
           }}
         >
           <Stack.Screen 
             name="Login" 
             component={LoginScreen}
+            options={{ gestureEnabled: false }}
+          />
+          <Stack.Screen 
+            name="SignUp" 
+            component={SignUpScreen}
             options={{ gestureEnabled: false }}
           />
           <Stack.Screen 
