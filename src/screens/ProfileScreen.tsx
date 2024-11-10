@@ -6,7 +6,11 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { auth, db } from '../firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
-const ProfileScreen: React.FC = () => {
+interface ProfileScreenProps {
+  onClose: () => void;
+}
+
+const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
   const navigation = useNavigation();
   const [userProfile, setUserProfile] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -92,6 +96,13 @@ const ProfileScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
+      <TouchableOpacity 
+        style={styles.closeButton} 
+        onPress={onClose}
+      >
+        <Icon name="close" size={24} color="#FFF" />
+      </TouchableOpacity>
+
       <View style={styles.profileHeader}>
         <View style={styles.profileImageContainer}>
           <Image
@@ -127,24 +138,32 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
-    paddingTop: 50,
+    paddingTop: 20,
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    zIndex: 1,
+    padding: 10,
   },
   profileHeader: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: 20,
+    marginTop: 40,
   },
   profileImageContainer: {
     position: 'relative',
-    marginBottom: 20,
-    padding: 3,
-    borderRadius: 75,
+    marginBottom: 15,
+    padding: 2,
+    borderRadius: 52,
     borderWidth: 2,
     borderColor: '#FFF',
   },
   profileImage: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
   },
   editButton: {
     position: 'absolute',
@@ -155,7 +174,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   userName: {
-    fontSize: 26,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#FFF',
     marginBottom: 8,
