@@ -1,10 +1,84 @@
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Basic user profile rules
     match /users/{userId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      // Read rules
+      allow read: if isSignedIn() && (isOwner(userId) || isEmailLookup());
+      
+      // Write rules
+      allow create: if isSignedIn() && isOwner(userId) && isValidUser();
+      allow update: if isSignedIn() && isOwner(userId) && isValidUserUpdate();
+      allow delete: if isSignedIn() && isOwner(userId);
+    }
+
+    // Movie collection rules
+    match /movies/{movieId} {
+      // Allow reading individual movie documents and queries
+      allow read: if isSignedIn();
+      allow get: if isSignedIn();
+      
+      // Only admin can create/update/delete movies
+      allow create, update, delete: if false;  // Restrict movie modifications to backend only
+      
+      // Movie metadata subcollection
+      match /metadata/{metadataId} {
+        allow read: if isSignedIn();
+        allow write: if false;
+      }
+    }
+
+    // User-movie interactions (likes, matches, etc.)
+    match /users/{userId}/movieInteractions/{movieId} {
+      allow read: if isSignedIn() && isOwner(userId);
+      allow write: if isSignedIn() && isOwner(userId) && isValidMovieInteraction();
+    }
+
+    // Update the user's movie collections rules
+    match /users/{userId}/movies/{movieId} {
+      allow read: if isSignedIn() && isOwner(userId);
+      allow write: if isSignedIn() && isOwner(userId);
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function isEmailLookup() {
+      return request.query.limit == 1 
+        && request.query.filters.size() == 1
+        && request.query.filters[0].op == "=="
+        && request.query.filters[0].path[0] == "email";
+    }
+
+    function isValidUser() {
+      let user = request.resource.data;
+      return user.keys().hasAll(['email', 'displayName'])
+        && user.email is string
+        && user.displayName is string;
+    }
+
+    function isValidUserUpdate() {
+      let user = request.resource.data;
+      return user.diff(resource.data).affectedKeys()
+        .hasAny(['displayName', 'photoURL', 'preferences', 'matches'])
+        && (!user.keys().hasAny(['email']) || user.email == resource.data.email);
+    }
+
+    // Additional helper function for movie interactions
+    function isValidMovieInteraction() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['movieId', 'title', 'poster_path', 'category', 'timestamp']) 
+        && data.movieId is string
+        && data.title is string
+        && data.poster_path is string
+        && data.category in ['watched', 'most_watch', 'watch_later', 'custom']
+        && data.timestamp is timestamp;
     }
   }
 }

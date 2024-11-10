@@ -3,10 +3,10 @@ module.exports = function (api) {
   return {
     presets: [
       'babel-preset-expo',
-      'nativewind/babel', // NativeWind plugin added as a preset
+      'nativewind/babel'
     ],
     plugins: [
-      'react-native-reanimated/plugin' // Add Reanimated plugin here
+      'react-native-reanimated/plugin'
     ],
   };
 };

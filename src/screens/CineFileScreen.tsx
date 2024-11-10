@@ -11,6 +11,8 @@ import {
   PanResponder, 
   Animated 
 } from 'react-native';
+import { auth, db } from '../firebase';
+import { collection, getDocs, doc, updateDoc, arrayUnion, onSnapshot } from 'firebase/firestore';
 
 const { width, height } = Dimensions.get('window');
 const POSTER_HEIGHT = height / 6; // Base height for posters
@@ -133,18 +135,82 @@ const CineFileScreen: React.FC = () => {
     mostWatch: []
   });
 
-  const moveMovie = (movie, listId) => {
-    setMovieLists(prev => {
-      const newLists = { ...prev };
-      // Remove movie from all lists
-      Object.keys(newLists).forEach(key => {
-        newLists[key] = newLists[key].filter(m => m.id !== movie.id);
+  useEffect(() => {
+    let unsubscribe: () => void;
+
+    const setupMoviesListener = () => {
+      if (!auth.currentUser) return;
+
+      const userDocRef = doc(db, 'users', auth.currentUser.uid);
+      const moviesCollectionRef = collection(userDocRef, 'movies');
+
+      unsubscribe = onSnapshot(moviesCollectionRef, (snapshot) => {
+        const moviesList = {
+          custom: [],
+          watchLater: [],
+          seen: [],
+          mostWatch: []
+        };
+
+        snapshot.forEach(doc => {
+          const movieData = { id: doc.id, ...doc.data() };
+          switch(movieData.category) {
+            case 'watch_later':
+              moviesList.watchLater.push(movieData);
+              break;
+            case 'watched':
+              moviesList.seen.push(movieData);
+              break;
+            case 'most_watch':
+              moviesList.mostWatch.push(movieData);
+              break;
+            case 'custom':
+              moviesList.custom.push(movieData);
+              break;
+          }
+        });
+
+        setMovieLists(moviesList);
+      }, (error) => {
+        console.error('Error listening to movies:', error);
       });
-      // Add movie to new list
-      const listKey = listId.toLowerCase().replace(' ', '');
-      newLists[listKey] = [...newLists[listKey], movie];
-      return newLists;
-    });
+    };
+
+    setupMoviesListener();
+
+    // Cleanup subscription on unmount
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, []);
+
+  const moveMovie = async (movie, listId) => {
+    if (!auth.currentUser) return;
+  
+    try {
+      const userDocRef = doc(db, 'users', auth.currentUser.uid);
+      const movieDocRef = doc(collection(userDocRef, 'movies'), movie.id);
+      
+      const category = listId.toLowerCase().replace(' ', '_');
+      await updateDoc(movieDocRef, {
+        category: category,
+        updatedAt: new Date()
+      });
+  
+      setMovieLists(prev => {
+        const newLists = { ...prev };
+        Object.keys(newLists).forEach(key => {
+          newLists[key] = newLists[key].filter(m => m.id !== movie.id);
+        });
+        const listKey = listId.toLowerCase().replace(' ', '');
+        newLists[listKey] = [...newLists[listKey], {...movie, category}];
+        return newLists;
+      });
+    } catch (error) {
+      console.error('Error moving movie:', error);
+    }
   };
 
   const [dropZones, setDropZones] = useState({});

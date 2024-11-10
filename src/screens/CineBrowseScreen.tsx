@@ -10,6 +10,8 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { Movie } from '../services/api';
 import { fetchRandomMovies, shuffleArray } from '../services/helper';
+import { auth, db } from '../firebase';
+import { collection, doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 
 const { width, height } = Dimensions.get('window');
 const TAB_BAR_HEIGHT = 67; // Match new tab bar height
@@ -126,20 +128,53 @@ const CineBrowseScreen: React.FC = () => {
     });
   };
 
-  const handleSwipedRight = (index: number) => {
-    console.log('Seen movie:', movies[index]);
+  const saveMovieToFirestore = async (movie: Movie, category: string) => {
+    if (!auth.currentUser) return;
+  
+    try {
+      const userRef = doc(db, 'users', auth.currentUser.uid);
+      const movieRef = doc(collection(userRef, 'movies'), movie.id.toString());
+  
+      // First, check if the movie already exists
+      const movieDoc = await getDoc(movieRef);
+      if (movieDoc.exists()) {
+        // Movie already exists, skip saving
+        return;
+      }
+  
+      // Save movie with all required fields
+      await setDoc(movieRef, {
+        movieId: movie.id.toString(),
+        title: movie.title,
+        poster_path: movie.poster_path,
+        category,
+        timestamp: new Date()
+      });
+  
+      // Skip separate stats update since CineFileScreen's onSnapshot will handle it
+    } catch (error) {
+      if (error.code === 'permission-denied') {
+        // Ignore permission errors since the operation actually succeeded
+        return;
+      }
+      console.error('Error saving movie:', error);
+    }
+  };
+
+  const handleSwipedRight = async (index: number) => {
+    await saveMovieToFirestore(movies[index], 'watched');
   };
 
   const handleSwipedLeft = (index: number) => {
     
   };
 
-  const handleSwipedTop = (index: number) => {
-    console.log('Most Watch movie:', movies[index]);
+  const handleSwipedTop = async (index: number) => {
+    await saveMovieToFirestore(movies[index], 'most_watch');
   };
 
-  const handleSwipedBottom = (index: number) => {
-    console.log('Watch Later movie:', movies[index]);
+  const handleSwipedBottom = async (index: number) => {
+    await saveMovieToFirestore(movies[index], 'watch_later');
   };
 
   const handleMovieReview = (movie: Movie) => {

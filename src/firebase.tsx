@@ -10,7 +10,17 @@ import {
   fetchSignInMethodsForEmail
 } from 'firebase/auth';
 import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
-import { getFirestore, setDoc, doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { 
+  getFirestore, 
+  setDoc, 
+  doc, 
+  getDoc, 
+  collection, 
+  query, 
+  where, 
+  getDocs,
+  updateDoc
+} from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: "AIzaSyD-frQ7fze6ZMh9FWsTjUuGicXAKAHYQW8",
@@ -145,5 +155,113 @@ export const getUserProfile = async (userId) => {
   } catch (error) {
     console.error('Error fetching user profile:', error);
     throw error; // Propagate error to component
+  }
+};
+
+export const initializeUserProfile = async (userId: string) => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userRef);
+    
+    if (!userDoc.exists()) {
+      await setDoc(userRef, {
+        stats: {
+          moviesWatched: 0,
+          matches: 0,
+          achievements: 0
+        },
+        createdAt: new Date()
+      });
+    }
+    return true;
+  } catch (error) {
+    console.error('Error initializing user profile:', error);
+    return false;
+  }
+};
+
+export const updateUserStats = async (userId: string, category: string) => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userRef);
+    const currentStats = userDoc.data()?.stats || { 
+      moviesWatched: 0, 
+      matches: 0, 
+      achievements: 0 
+    };
+
+    const updatedStats = {
+      ...currentStats,
+      moviesWatched: category === 'watched' ? currentStats.moviesWatched + 1 : currentStats.moviesWatched,
+      matches: category === 'most_watch' ? currentStats.matches + 1 : currentStats.matches,
+      achievements: category === 'watch_later' ? currentStats.achievements + 1 : currentStats.achievements,
+    };
+
+    await updateDoc(userRef, { stats: updatedStats });
+    return updatedStats;
+  } catch (error) {
+    console.error('Error updating user stats:', error);
+    return null;
+  }
+};
+
+export const getUserMovies = async (userId: string) => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    const moviesCollection = collection(userRef, 'movies');
+    const moviesSnapshot = await getDocs(moviesCollection);
+    
+    const movies = moviesSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    return movies;
+  } catch (error) {
+    console.error('Error fetching user movies:', error);
+    return [];
+  }
+};
+
+// Add these validation helpers to match firestore.rules
+const isValidUserData = (userData: any) => {
+  return userData.email && userData.name;
+};
+
+const isValidMovieInteraction = (data: any) => {
+  return data.status && 
+         data.movieId && 
+         typeof data.status === 'string' &&
+         typeof data.movieId === 'string';
+};
+
+export const saveMovie = async (userId: string, movie: any, category: string) => {
+  // Verify user is owner
+  if (auth.currentUser?.uid !== userId) {
+    throw new Error('Unauthorized access');
+  }
+
+  try {
+    const movieRef = doc(db, 'users', userId, 'movies', movie.id.toString());
+    const movieData = {
+      movieId: movie.id.toString(),
+      title: movie.title,
+      poster_path: movie.poster_path,
+      category,
+      status: category, // Add status to match rules
+      timestamp: new Date()
+    };
+
+    // Validate data matches rules
+    if (!isValidMovieInteraction(movieData)) {
+      throw new Error('Invalid movie data');
+    }
+
+    await setDoc(movieRef, movieData, { merge: true });
+    await updateUserStats(userId, category);
+    return true;
+  } catch (error) {
+    console.error('Error saving movie:', error);
+    throw error;
   }
 };

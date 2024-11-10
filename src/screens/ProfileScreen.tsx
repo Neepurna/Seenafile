@@ -3,7 +3,8 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { auth, getUserProfile } from '../firebase';
+import { auth, db } from '../firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 const ProfileScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -14,26 +15,31 @@ const ProfileScreen: React.FC = () => {
   useEffect(() => {
     const loadUserProfile = async () => {
       if (!auth.currentUser) {
-        navigation.navigate('Login');
+        navigation.navigate('Login' as never);
         return;
       }
 
       try {
         setIsLoading(true);
-        const profile = await getUserProfile(auth.currentUser.uid);
-        if (!profile) {
-          // If profile doesn't exist, create a default one
-          setUserProfile({
+        setError(null);
+        
+        const userRef = doc(db, 'users', auth.currentUser.uid);
+        const userDoc = await getDoc(userRef);
+        
+        if (!userDoc.exists()) {
+          const defaultProfile = {
             name: auth.currentUser.displayName || 'New User',
             email: auth.currentUser.email,
-            moviesWatched: 0,
-            matches: 0,
-            watchlist: 0,
-          });
+            createdAt: serverTimestamp()
+          };
+          
+          await setDoc(userRef, defaultProfile);
+          setUserProfile(defaultProfile);
         } else {
-          setUserProfile(profile);
+          setUserProfile(userDoc.data());
         }
       } catch (err) {
+        console.error('Profile loading error:', err);
         setError('Failed to load profile');
         Alert.alert('Error', 'Failed to load profile data');
       } finally {
@@ -42,7 +48,7 @@ const ProfileScreen: React.FC = () => {
     };
 
     loadUserProfile();
-  }, []);
+  }, [navigation]);
 
   const handleSignOut = async () => {
     Alert.alert(
@@ -102,18 +108,10 @@ const ProfileScreen: React.FC = () => {
 
       <View style={styles.dashboard}>
         <View style={styles.statItem}>
-          <Text style={styles.statNumber}>150</Text>
-          <Text style={styles.statLabel}>Movies</Text>
-        </View>
-        <View style={styles.separator} />
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>45</Text>
-          <Text style={styles.statLabel}>Matches</Text>
-        </View>
-        <View style={styles.separator} />
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>24</Text>
-          <Text style={styles.statLabel}>Watchlist</Text>
+          <Text style={styles.statNumber}>
+            {userProfile?.joinDate ? new Date(userProfile.joinDate).getFullYear() : new Date().getFullYear()}
+          </Text>
+          <Text style={styles.statLabel}>Member Since</Text>
         </View>
       </View>
 
