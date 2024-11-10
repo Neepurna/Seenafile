@@ -1,6 +1,6 @@
 // src/screens/SignUpScreen.tsx
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, SafeAreaView, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, SafeAreaView, ScrollView, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { createUserWithProfile } from '../firebase';
 
@@ -43,96 +43,108 @@ const SignUpScreen = ({ navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.keyboardView}
-      >
-        <ScrollView 
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="always"
-          showsVerticalScrollIndicator={false}
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <SafeAreaView style={styles.container}>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.keyboardView}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
         >
-          <View style={styles.contentWrapper}>
-            <View style={styles.headerContainer}>
-              <Text style={styles.headerText}>Create Account</Text>
-              <Text style={styles.subHeaderText}>Join the community of movie lovers</Text>
-            </View>
+          <ScrollView 
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          >
+            <View style={styles.contentWrapper}>
+              <View style={styles.headerContainer}>
+                <Text style={styles.headerText}>Create Account</Text>
+                <Text style={styles.subHeaderText}>Join the community of movie lovers</Text>
+              </View>
 
-            <View style={styles.formContainer}>
-              <TextInput
-                style={styles.input}
-                placeholder="Full Name"
-                placeholderTextColor="#999"
-                value={formData.name}
-                onChangeText={(text) => setFormData(prev => ({...prev, name: text}))}
-              />
-
-              <TouchableOpacity 
-                style={styles.input} 
-                onPress={() => setShowDatePicker(true)}
-              >
-                <Text style={[styles.inputText, !formData.dob && styles.placeholder]}>
-                  {formData.dob.toLocaleDateString()}
-                </Text>
-              </TouchableOpacity>
-
-              {showDatePicker && (
-                <DateTimePicker
-                  value={formData.dob}
-                  mode="date"
-                  display="default"
-                  onChange={handleDateChange}
-                  maximumDate={new Date()}
+              <View style={styles.formContainer}>
+                <TextInput
+                  style={[styles.input, Platform.OS === 'android' && styles.androidInput]}
+                  placeholder="Full Name"
+                  placeholderTextColor="#999"
+                  value={formData.name}
+                  onChangeText={(text) => setFormData(prev => ({...prev, name: text}))}
+                  returnKeyType="next"
+                  blurOnSubmit={false}
+                  enablesReturnKeyAutomatically
                 />
-              )}
 
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                placeholderTextColor="#999"
-                value={formData.email}
-                onChangeText={(text) => setFormData(prev => ({...prev, email: text}))}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                textContentType="emailAddress"
-                autoComplete="email"
-                returnKeyType="next"
-              />
+                <TouchableOpacity 
+                  style={styles.input} 
+                  onPress={() => setShowDatePicker(true)}
+                >
+                  <Text style={[styles.inputText, !formData.dob && styles.placeholder]}>
+                    {formData.dob.toLocaleDateString()}
+                  </Text>
+                </TouchableOpacity>
 
-              <TextInput
-                style={styles.input}
-                placeholder="Password"
-                placeholderTextColor="#999"
-                value={formData.password}
-                onChangeText={(text) => setFormData(prev => ({...prev, password: text}))}
-                secureTextEntry
-              />
+                {showDatePicker && (
+                  <DateTimePicker
+                    value={formData.dob}
+                    mode="date"
+                    display="default"
+                    onChange={handleDateChange}
+                    maximumDate={new Date()}
+                  />
+                )}
 
-              <TouchableOpacity 
-                style={[styles.button, styles.signUpButton]}
-                onPress={handleSignUp}
-                disabled={isLoading}
-              >
-                <Text style={styles.buttonText}>
-                  {isLoading ? 'Creating Account...' : 'Create Account'}
-                </Text>
-              </TouchableOpacity>
+                <TextInput
+                  style={[styles.input, Platform.OS === 'android' && styles.androidInput]}
+                  placeholder="Email"
+                  placeholderTextColor="#999"
+                  value={formData.email}
+                  onChangeText={(text) => setFormData(prev => ({...prev, email: text.trim()}))}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="email-address"
+                  textContentType="emailAddress"
+                  autoComplete="email"
+                  returnKeyType="next"
+                  blurOnSubmit={false}
+                  enablesReturnKeyAutomatically
+                />
 
-              <TouchableOpacity 
-                style={styles.loginLink}
-                onPress={() => navigation.navigate('Login')}
-              >
-                <Text style={styles.loginLinkText}>
-                  Already have an account? Sign In
-                </Text>
-              </TouchableOpacity>
+                <TextInput
+                  style={[styles.input, Platform.OS === 'android' && styles.androidInput]}
+                  placeholder="Password"
+                  placeholderTextColor="#999"
+                  value={formData.password}
+                  onChangeText={(text) => setFormData(prev => ({...prev, password: text}))}
+                  secureTextEntry
+                  returnKeyType="done"
+                  blurOnSubmit={true}
+                  enablesReturnKeyAutomatically
+                />
+
+                <TouchableOpacity 
+                  style={[styles.button, styles.signUpButton]}
+                  onPress={handleSignUp}
+                  disabled={isLoading}
+                >
+                  <Text style={styles.buttonText}>
+                    {isLoading ? 'Creating Account...' : 'Create Account'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.loginLink}
+                  onPress={() => navigation.navigate('Login')}
+                >
+                  <Text style={styles.loginLinkText}>
+                    Already have an account? Sign In
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </TouchableWithoutFeedback>
   );
 };
 
@@ -143,18 +155,17 @@ const styles = StyleSheet.create({
   },
   keyboardView: {
     flex: 1,
-    width: '100%',
   },
   scrollContent: {
     flexGrow: 1,
-    minHeight: '100%',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 40 : 20,
+    paddingBottom: 20,
   },
   contentWrapper: {
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 40 : 20,
-    paddingBottom: Platform.OS === 'ios' ? 20 : 40,
+    minHeight: Platform.OS === 'ios' ? '100%' : 'auto',
   },
   headerContainer: {
     alignItems: 'center',
@@ -186,6 +197,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
+    height: Platform.OS === 'ios' ? 50 : 56,
+    width: '100%',
+    textAlignVertical: 'center',
+  },
+  androidInput: {
+    paddingVertical: 8,
   },
   inputText: {
     color: '#FFF',

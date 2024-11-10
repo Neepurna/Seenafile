@@ -115,77 +115,86 @@ const LoginScreen = ({ navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.keyboardView}
-      >
-        <ScrollView 
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="always"
-          showsVerticalScrollIndicator={false}
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <SafeAreaView style={styles.container}>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.keyboardView}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
         >
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-            <View style={styles.contentWrapper}>
-              <View style={styles.headerContainer}>
-                <Text style={styles.logoText}>SEENAFILE</Text>
-                <Text style={styles.tagline}>Where Movie Lovers Connect</Text>
+          <ScrollView 
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          >
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+              <View style={styles.contentWrapper}>
+                <View style={styles.headerContainer}>
+                  <Text style={styles.logoText}>SEENAFILE</Text>
+                  <Text style={styles.tagline}>Where Movie Lovers Connect</Text>
+                </View>
+
+                <View style={styles.formContainer}>
+                  <TextInput
+                    style={[styles.input, Platform.OS === 'android' && styles.androidInput]}
+                    placeholder="Email"
+                    value={email}
+                    onChangeText={(text) => setEmail(text.trim())}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="email-address"
+                    textContentType="emailAddress"
+                    autoComplete="email"
+                    placeholderTextColor="#999"
+                    returnKeyType="next"
+                    blurOnSubmit={false}
+                    enablesReturnKeyAutomatically
+                  />
+                  <TextInput
+                    style={[styles.input, Platform.OS === 'android' && styles.androidInput]}
+                    placeholder="Password"
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry
+                    placeholderTextColor="#999"
+                    returnKeyType="done"
+                    blurOnSubmit={true}
+                    enablesReturnKeyAutomatically
+                  />
+                  
+                  <TouchableOpacity 
+                    style={styles.forgotPasswordButton} 
+                    onPress={handleForgotPassword}
+                  >
+                    <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={[styles.button, styles.loginButton]} 
+                    onPress={handleLogin}
+                    disabled={isLoading}
+                  >
+                    <Text style={styles.buttonText}>
+                      {isLoading ? "Please wait..." : "Sign In"}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={[styles.button, styles.signupButton]} 
+                    onPress={() => navigation.navigate('SignUp')}
+                  >
+                    <Text style={[styles.buttonText, styles.signupText]}>
+                      Create Account
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-
-              <View style={styles.formContainer}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Email"
-                  value={email}
-                  onChangeText={setEmail}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  keyboardType="email-address"
-                  textContentType="emailAddress"
-                  autoComplete="email"
-                  placeholderTextColor="#999"
-                  returnKeyType="next"
-                />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Password"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                  placeholderTextColor="#999"
-                />
-                
-                <TouchableOpacity 
-                  style={styles.forgotPasswordButton} 
-                  onPress={handleForgotPassword}
-                >
-                  <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={[styles.button, styles.loginButton]} 
-                  onPress={handleLogin}
-                  disabled={isLoading}
-                >
-                  <Text style={styles.buttonText}>
-                    {isLoading ? "Please wait..." : "Sign In"}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={[styles.button, styles.signupButton]} 
-                  onPress={() => navigation.navigate('SignUp')}
-                >
-                  <Text style={[styles.buttonText, styles.signupText]}>
-                    Create Account
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </TouchableWithoutFeedback>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+            </TouchableWithoutFeedback>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </TouchableWithoutFeedback>
   );
 };
 
@@ -196,19 +205,17 @@ const styles = StyleSheet.create({
   },
   keyboardView: {
     flex: 1,
-    width: '100%',
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
-    minHeight: '100%',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 40 : 20,
+    paddingBottom: 20,
   },
   contentWrapper: {
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 40 : 20,
-    paddingBottom: Platform.OS === 'ios' ? 20 : 40,
+    minHeight: Platform.OS === 'ios' ? '100%' : 'auto',
   },
   headerContainer: {
     alignItems: 'center',
@@ -243,6 +250,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.2)',
     width: '100%',
     height: Platform.OS === 'ios' ? 50 : 56,
+    textAlignVertical: 'center',
+  },
+  androidInput: {
+    paddingVertical: 8,
   },
   button: {
     padding: 16,
