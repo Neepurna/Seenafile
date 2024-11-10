@@ -12,13 +12,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { TouchableOpacity, Text } from 'react-native';
 import CineBrowseScreen from '../screens/CineBrowseScreen';
 import CinePalScreen from '../screens/CinePalScreen';
-import CineSearchScreen from '../screens/CineSearchScreen';
+import MovieChatScreen from '../screens/MovieChatScreen';
 import CineFileScreen from '../screens/CineFileScreen';
 import CineGamesScreen from '../screens/CineGamesScreen';
 
 const Tab = createBottomTabNavigator();
-const TAB_BAR_HEIGHT = 100; // Keep this value as is
-const HEADER_HEIGHT = 100; // Match the header height
+const TAB_BAR_HEIGHT = 100; // Increased by 2% from 66 to 67
 
 const Tabs: React.FC = () => {
   const [isProfileVisible, setIsProfileVisible] = useState(false);
@@ -105,8 +104,8 @@ const Tabs: React.FC = () => {
               iconName = 'film-outline'; // Updated icon name
             } else if (route.name === 'CinePal') {
               iconName = 'people-outline'; // Updated icon name
-            } else if (route.name === 'CineSearch') {
-              iconName = 'search-outline';
+            } else if (route.name === 'MovieChat') {  // Updated name
+              iconName = 'chatbubble-outline';  // Updated icon
             } else if (route.name === 'CineFile') {
               iconName = 'folder-outline'; // Updated icon name
             } else if (route.name === 'CineGames') {
@@ -119,22 +118,20 @@ const Tabs: React.FC = () => {
             height: TAB_BAR_HEIGHT,
             backgroundColor: '#000',
             paddingBottom: 10, // Add some padding for better touch targets
-            borderTopWidth: 0, // Add this to remove the top border
           },
           tabBarItemStyle: {
             padding: 5,
           },
           headerStyle: {
             backgroundColor: '#000', // Make header black for other screens
-            height: HEADER_HEIGHT, // Match the header height
-            borderBottomWidth: 0, // Add this to remove the bottom border
+            height: 100, // Increased header height
           },
           headerTintColor: '#fff', // Make header text white for other screens
         })}
       >
         <Tab.Screen name="CineBrowse" component={CineBrowseScreen} />
         <Tab.Screen name="CinePal" component={CinePalScreen} />
-        <Tab.Screen name="CineSearch" component={CineSearchScreen} />
+        <Tab.Screen name="MovieChat" component={MovieChatScreen} />
         <Tab.Screen name="CineFile" component={CineFileScreen} />
         <Tab.Screen name="CineGames" component={CineGamesScreen} />
       </Tab.Navigator>
