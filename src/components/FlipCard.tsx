@@ -75,10 +75,13 @@ type CrewMember = {
 };
 
 const { width, height } = Dimensions.get('window');
-const CARD_PADDING = 16;
-const CARD_WIDTH = width - (CARD_PADDING * 2);
-const CARD_HEIGHT = height * 0.75;
-const DETAILS_HEIGHT = 120;
+const HEADER_HEIGHT = Platform.OS === 'ios' ? 44 : 56;
+const TAB_BAR_HEIGHT = 67;
+const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 44 : 0;
+const AVAILABLE_HEIGHT = height - TAB_BAR_HEIGHT - HEADER_HEIGHT - STATUS_BAR_HEIGHT;
+const CARD_WIDTH = width * 0.9;
+const CARD_HEIGHT = AVAILABLE_HEIGHT * 0.85; // Use 85% of available height
+const DETAILS_HEIGHT = CARD_HEIGHT * 0.2; // 20% of card height for details
 
 const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
   const {
@@ -503,8 +506,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cardFace: {
-    width: '100%',
-    height: '100%',
+    width: CARD_WIDTH,
+    height: CARD_HEIGHT,
     position: 'absolute',
     borderRadius: 20,
     overflow: 'hidden',

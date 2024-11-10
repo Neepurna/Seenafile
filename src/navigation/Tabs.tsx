@@ -17,7 +17,8 @@ import CineFileScreen from '../screens/CineFileScreen';
 import CineGamesScreen from '../screens/CineGamesScreen';
 
 const Tab = createBottomTabNavigator();
-const TAB_BAR_HEIGHT = 100; // Increased by 2% from 66 to 67
+const TAB_BAR_HEIGHT = 100; // Keep this value as is
+const HEADER_HEIGHT = 100; // Match the header height
 
 const Tabs: React.FC = () => {
   const [isProfileVisible, setIsProfileVisible] = useState(false);
@@ -118,13 +119,15 @@ const Tabs: React.FC = () => {
             height: TAB_BAR_HEIGHT,
             backgroundColor: '#000',
             paddingBottom: 10, // Add some padding for better touch targets
+            borderTopWidth: 0, // Add this to remove the top border
           },
           tabBarItemStyle: {
             padding: 5,
           },
           headerStyle: {
             backgroundColor: '#000', // Make header black for other screens
-            height: 100, // Increased header height
+            height: HEADER_HEIGHT, // Match the header height
+            borderBottomWidth: 0, // Add this to remove the bottom border
           },
           headerTintColor: '#fff', // Make header text white for other screens
         })}

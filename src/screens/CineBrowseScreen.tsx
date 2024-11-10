@@ -15,10 +15,9 @@ import { collection, doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 
 const { width, height } = Dimensions.get('window');
 const TAB_BAR_HEIGHT = 67; // Match new tab bar height
-const SCREEN_HEIGHT = Platform.select({
-  ios: height - TAB_BAR_HEIGHT - (Platform.OS === 'ios' ? 44 : 0), // Account for iOS status bar
-  android: height - TAB_BAR_HEIGHT,
-});
+const HEADER_HEIGHT = Platform.OS === 'ios' ? 44 : 56; // Standard header heights
+const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 44 : 0;
+const SCREEN_HEIGHT = height - TAB_BAR_HEIGHT - HEADER_HEIGHT - STATUS_BAR_HEIGHT;
 
 interface Genre {
   label: string;
@@ -313,18 +312,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   swiperContainer: {
     flex: 1,
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingBottom: SCREEN_HEIGHT * 0.05, // Add some bottom padding for visual balance
   },
   cardWrapper: {
     flex: 1,
@@ -334,8 +327,8 @@ const styles = StyleSheet.create({
     height: SCREEN_HEIGHT,
   },
   cardStyle: {
-    top: 0,
-    left: 0,
+    height: SCREEN_HEIGHT * 0.9, // Match FlipCard height
+    width: width - 32,
     alignSelf: 'center',
     justifyContent: 'center',
     margin: 0,
