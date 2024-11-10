@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Movie } from '../services/api';
 import { fetchRandomMovies } from '../services/helper';
 import nlp from 'compromise';
+import { chatbotService } from '../services/ChatbotService';
 
 const { width } = Dimensions.get('window');
 
@@ -27,6 +28,7 @@ const MovieChatScreen: React.FC = () => {
 
   useEffect(() => {
     initializeChat();
+    chatbotService.initialize();
   }, []);
 
   const initializeChat = async () => {
@@ -52,34 +54,32 @@ const MovieChatScreen: React.FC = () => {
     }
   };
 
-  const processMessage = (input: string) => {
-    const doc = nlp(input.toLowerCase());
-    
-    if (doc.has('recommend') || doc.has('suggestion')) {
-      return "Based on the latest releases, I'd recommend checking out the movies shown above!";
+  const processMessage = async (input: string) => {
+    try {
+      const response = await chatbotService.processMessage(input);
+      
+      if (response.movies) {
+        setRecommendedMovies(response.movies);
+      }
+
+      return response.text;
+    } catch (error) {
+      console.error('Error processing message:', error);
+      return "Sorry, I'm having trouble processing your request right now.";
     }
-    if (doc.has('latest') || doc.has('new')) {
-      return "You can see the latest releases in the recommendations section at the top.";
-    }
-    if (doc.has('hello') || doc.has('hi')) {
-      return "Hi! I'm your movie chat assistant. Feel free to ask about movies!";
-    }
-    return "I understand you're interested in movies. Could you please rephrase your question?";
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!userInput.trim()) return;
     
-    const newMessages = [
-      ...messages,
-      { text: userInput, isBot: false },
-      { text: processMessage(userInput), isBot: true }
-    ];
-    
-    setMessages(newMessages);
+    const userMessage = { text: userInput, isBot: false };
+    setMessages(prev => [...prev, userMessage]);
     setUserInput('');
+
+    const botResponse = await processMessage(userInput);
+    const botMessage = { text: botResponse, isBot: true };
+    setMessages(prev => [...prev, botMessage]);
     
-    // Scroll to bottom after message is sent
     setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
     }, 100);
