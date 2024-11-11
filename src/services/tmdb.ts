@@ -130,6 +130,29 @@ export const fetchMovieVideos = async (movieId: number) => {
   return response.json();
 };
 
+// Function to search movies
+export const searchMovies = async (query: string, page: number = 1) => {
+  if (!query.trim()) return { results: [] };
+  
+  const response = await fetch(
+    `${TMDB_BASE_URL}/search/movie?api_key=${TMDB_API_KEY}&language=en-US&query=${encodeURIComponent(query)}&page=${page}`
+  );
+  const data = await response.json();
+
+  // Map genre IDs to genre names
+  const genres = await fetchGenres();
+  
+  const moviesWithGenres = data.results.map((movie: any) => {
+    const movieGenres = movie.genre_ids.map((genreId: number) => {
+      const genre = genres.find((g) => g.id === genreId);
+      return genre ? genre : null;
+    });
+    return { ...movie, genres: movieGenres.filter((g: any) => g !== null) };
+  });
+
+  return { ...data, results: moviesWithGenres };
+};
+
 export interface TMDBMovie {
   id: number;
   title: string;
