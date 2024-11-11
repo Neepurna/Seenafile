@@ -2,7 +2,7 @@ import React, { useEffect, useState, memo, useCallback } from 'react';
 import { View, StyleSheet, TextInput, Image, Dimensions, ActivityIndicator, Text, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Movie } from '../services/api';
-import { fetchRandomMovies } from '../services/helper';
+import { fetchRandomMovies, fetchTrendingMovies } from '../services/helper';
 import { searchMoviesAndShows } from '../services/tmdb';
 import debounce from 'lodash/debounce';
 
@@ -32,10 +32,10 @@ const MovieSearchScreen: React.FC = () => {
 
   const initializeMovies = async () => {
     try {
-      const popularMovies = await fetchRandomMovies('popular', 10);
-      setMovies(popularMovies);
+      const trendingMovies = await fetchTrendingMovies(10);
+      setMovies(trendingMovies);
     } catch (error) {
-      console.error('Error fetching movies:', error);
+      console.error('Error fetching trending content:', error);
     } finally {
       setLoading(false);
     }
@@ -97,7 +97,7 @@ const MovieSearchScreen: React.FC = () => {
           keyboardShouldPersistTaps="handled"
         >
           <Text style={styles.sectionTitle}>
-            {searchQuery ? 'Search Results' : 'Popular Movies'}
+            {searchQuery ? 'Search Results' : 'Trending Today'}
           </Text>
           {isSearching ? (
             <ActivityIndicator size="large" color="#fff" style={styles.searchSpinner} />

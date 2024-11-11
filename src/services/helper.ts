@@ -151,10 +151,10 @@ const fetchPopularMovies = async (): Promise<Movie[]> => {
   }
 };
 
-const fetchTrendingMovies = async (timeframe: 'day' | 'week'= 'day'): Promise<Movie[]> => {
+const fetchTrendingMovies = async (limit: number = 10, timeframe: 'day' | 'week' = 'day'): Promise<Movie[]> => {
   try {
     const response = await axiosInstance.get<{ results: Movie[] }>(`/trending/movie/${timeframe}`);
-    return response.data.results;
+    return response.data.results.slice(0, limit);
   } catch (error) {
     console.error(`Error fetching trending content for ${timeframe}:`, error);
     throw error;
