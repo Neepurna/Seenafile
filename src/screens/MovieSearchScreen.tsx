@@ -3,7 +3,7 @@ import { View, StyleSheet, TextInput, Image, Dimensions, ActivityIndicator, Text
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Movie } from '../services/api';
 import { fetchRandomMovies } from '../services/helper';
-import { searchMovies } from '../services/tmdb';
+import { searchMoviesAndShows } from '../services/tmdb';
 import debounce from 'lodash/debounce';
 
 const { width } = Dimensions.get('window');
@@ -14,7 +14,8 @@ const MovieBanner = memo(({ movie }: { movie: Movie }) => (
       source={{ uri: `https://image.tmdb.org/t/p/w500${movie.poster_path}` }}
       style={styles.bannerImage}
     />
-    <Text style={styles.movieTitle}>{movie.title}</Text>
+    <Text style={styles.movieTitle}>{movie.title || movie.name}</Text>
+    <Text style={styles.mediaType}>{movie.media_type === 'tv' ? 'TV Show' : 'Movie'}</Text>
   </View>
 ));
 
@@ -23,6 +24,7 @@ const MovieSearchScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [movies, setMovies] = useState<Movie[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     initializeMovies();
@@ -43,15 +45,24 @@ const MovieSearchScreen: React.FC = () => {
     debounce(async (query: string) => {
       if (!query.trim()) {
         initializeMovies();
+        setError(null);
         return;
       }
 
       setIsSearching(true);
+      setError(null);
       try {
-        const response = await searchMovies(query);
-        setMovies(response.results);
+        const response = await searchMoviesAndShows(query);
+        if (response?.results) {
+          setMovies(response.results);
+        } else {
+          setMovies([]);
+          setError('No results found');
+        }
       } catch (error) {
-        console.error('Error searching movies:', error);
+        console.error('Error searching:', error);
+        setMovies([]);
+        setError('Failed to search');
       } finally {
         setIsSearching(false);
       }
@@ -90,6 +101,8 @@ const MovieSearchScreen: React.FC = () => {
           </Text>
           {isSearching ? (
             <ActivityIndicator size="large" color="#fff" style={styles.searchSpinner} />
+          ) : error ? (
+            <Text style={styles.errorText}>{error}</Text>
           ) : (
             <View style={styles.movieGrid}>
               {movies.map(movie => (
@@ -183,6 +196,17 @@ const styles = StyleSheet.create({
   },
   searchSpinner: {
     marginTop: 20,
+  },
+  errorText: {
+    color: '#ff6b6b',
+    textAlign: 'center',
+    marginTop: 20,
+    fontSize: 16,
+  },
+  mediaType: {
+    color: '#888',
+    fontSize: 10,
+    marginTop: 4,
   },
 });
 

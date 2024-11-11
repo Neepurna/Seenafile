@@ -153,6 +153,57 @@ export const searchMovies = async (query: string, page: number = 1) => {
   return { ...data, results: moviesWithGenres };
 };
 
+// Function to search TV shows
+export const searchTVShows = async (query: string, page: number = 1) => {
+  if (!query.trim()) return { results: [] };
+  
+  const response = await fetch(
+    `${TMDB_BASE_URL}/search/tv?api_key=${TMDB_API_KEY}&language=en-US&query=${encodeURIComponent(query)}&page=${page}`
+  );
+  const data = await response.json();
+
+  // Map genre IDs to genre names
+  const genres = await fetchGenres();
+  
+  const showsWithGenres = data.results.map((show: any) => ({
+    ...show,
+    title: show.name, // Map TV show name to title for consistency
+    poster_path: show.poster_path,
+    media_type: 'tv',
+    genres: show.genre_ids.map((genreId: number) => {
+      const genre = genres.find((g) => g.id === genreId);
+      return genre ? genre : null;
+    }).filter((g: any) => g !== null)
+  }));
+
+  return { ...data, results: showsWithGenres };
+};
+
+// Updated search function to combine movies and TV shows
+export const searchMoviesAndShows = async (query: string, page: number = 1) => {
+  if (!query.trim()) return { results: [] };
+
+  try {
+    const [moviesData, tvShowsData] = await Promise.all([
+      searchMovies(query, page),
+      searchTVShows(query, page)
+    ]);
+
+    const combinedResults = [
+      ...(moviesData.results || []).map(item => ({ ...item, media_type: 'movie' })),
+      ...(tvShowsData.results || [])
+    ];
+
+    // Sort by popularity (assuming vote_average as popularity metric)
+    combinedResults.sort((a, b) => b.vote_average - a.vote_average);
+
+    return { results: combinedResults };
+  } catch (error) {
+    console.error('Search error:', error);
+    return { results: [] };
+  }
+};
+
 export interface TMDBMovie {
   id: number;
   title: string;
