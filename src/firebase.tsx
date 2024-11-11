@@ -20,7 +20,9 @@ import {
   where, 
   getDocs,
   updateDoc,
-  addDoc
+  addDoc,
+  orderBy,
+  onSnapshot
 } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -267,7 +269,17 @@ export const saveMovie = async (userId: string, movie: any, category: string) =>
   }
 };
 
-// Add new review functions
+// Add this validation helper
+const isValidReview = (reviewData: any) => {
+  return (
+    reviewData.movieId &&
+    reviewData.movieTitle &&
+    reviewData.rating > 0 &&
+    reviewData.rating <= 5 &&
+    reviewData.review?.trim().length > 0
+  );
+};
+
 export const saveReview = async (reviewData: {
   movieId: number;
   movieTitle: string;
@@ -278,29 +290,74 @@ export const saveReview = async (reviewData: {
   userId: string;
 }) => {
   try {
+    // Check authentication
     if (!auth.currentUser) {
       throw new Error('User must be authenticated');
     }
 
-    const reviewsRef = collection(db, 'reviews');
+    // Validate review data
+    if (!isValidReview(reviewData)) {
+      throw new Error('Please provide both rating and review');
+    }
+
+    // Get user data for username
+    const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+    const username = userDoc.data()?.name || 'Anonymous';
+
+    // Create review document
     const newReview = {
       ...reviewData,
-      createdAt: new Date(),
+      username,
       userId: auth.currentUser.uid,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      likes: 0
     };
 
-    const docRef = await addDoc(reviewsRef, newReview);
-    return { id: docRef.id, error: null };
+    // Save private review
+    const userReviewRef = doc(db, 'users', auth.currentUser.uid, 'reviews', `movie_${reviewData.movieId}`);
+    await setDoc(userReviewRef, newReview);
+
+    // If public, save to shared collection
+    if (reviewData.isPublic) {
+      const sharedReviewsRef = collection(db, 'sharedReviews');
+      await addDoc(sharedReviewsRef, newReview);
+    }
+
+    return { id: userReviewRef.id, error: null };
   } catch (error: any) {
     console.error('Error saving review:', error);
     return { error: error.message };
   }
 };
 
+export const getSharedReviews = (callback: (reviews: any[]) => void) => {
+  try {
+    const reviewsRef = collection(db, 'sharedReviews');
+    const q = query(reviewsRef, orderBy('createdAt', 'desc'));
+    
+    return onSnapshot(q, (snapshot) => {
+      const reviews = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      callback(reviews);
+    });
+  } catch (error) {
+    console.error('Error setting up shared reviews listener:', error);
+    callback([]);
+    return () => {}; // Return empty unsubscribe function
+  }
+};
+
 export const getUserReviews = async (userId: string) => {
   try {
     const reviewsRef = collection(db, 'reviews');
-    const q = query(reviewsRef, where('userId', '==', userId));
+    const q = query(
+      reviewsRef, 
+      where('userId', '==', userId),
+      orderBy('createdAt', 'desc')
+    );
     const querySnapshot = await getDocs(q);
     
     return querySnapshot.docs.map(doc => ({

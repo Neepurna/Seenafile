@@ -54,38 +54,40 @@ const CineGamesScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#121212', // Dark background
   },
   header: {
     fontSize: 24,
     fontWeight: 'bold',
     textAlign: 'center',
     padding: 20,
-    color: '#333',
+    color: '#ffffff', // White text
   },
   gamesContainer: {
     padding: 16,
     gap: 16,
   },
   gameCard: {
-    backgroundColor: 'white',
+    backgroundColor: '#1E1E1E', // Dark card background
     padding: 20,
     borderRadius: 12,
     elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.5,
     shadowRadius: 3.84,
+    borderWidth: 1,
+    borderColor: '#333333', // Subtle border
   },
   gameTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 8,
-    color: '#333',
+    color: '#ffffff', // White text
   },
   gameDescription: {
     fontSize: 14,
-    color: '#666',
+    color: '#B3B3B3', // Light gray text
   },
 });
 

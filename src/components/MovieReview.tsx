@@ -19,9 +19,15 @@ import {
   Alert,
 } from 'react-native';
 import { fetchMovieImages } from '../services/tmdb'; // Add this import at the top with other imports
-import { firebase } from '@react-native-firebase/firestore';
-import { db } from '../config/firebase';
-import { saveReview } from '../firebase';
+import { 
+  collection, 
+  doc, 
+  getDoc, 
+  addDoc, 
+  Timestamp 
+} from 'firebase/firestore';
+import { auth, db } from '../firebase';
+import { saveReview } from '../firebase'; // Changed from '../config/firebase'
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
@@ -49,6 +55,18 @@ interface MovieReviewProps {
     overview?: string;
   };
   onDoubleTap?: () => void; // Add this prop
+}
+
+interface SharedReview {
+  movieId: number;
+  movieTitle: string;
+  backdrop: string | null;
+  rating: number;
+  review: string;
+  userId: string;
+  username: string;
+  timestamp: Timestamp;
+  likes: number;
 }
 
 const MovieReview: React.FC<MovieReviewProps> = ({ movie, onDoubleTap }) => {
@@ -88,44 +106,90 @@ const MovieReview: React.FC<MovieReviewProps> = ({ movie, onDoubleTap }) => {
     fetchImages();
   }, [movie.id]);
 
-  const handleShare = async () => {
-    try {
-      await Share.share({
-        message: `Check out my review of ${movie.title}!\nRating: ${rating}/5\nReview: ${review}`,
-      });
-    } catch (error) {
-      console.error(error);
+  const validateReview = () => {
+    if (!rating || rating < 1) {
+      Alert.alert('Error', 'Please add a rating');
+      return false;
     }
+    if (!review.trim()) {
+      Alert.alert('Error', 'Please write a review');
+      return false;
+    }
+    return true;
   };
 
   const handleSave = async () => {
     try {
-      const { error } = await saveReview({
+      if (!validateReview()) return;
+
+      const userId = auth.currentUser?.uid;
+      if (!userId) {
+        Alert.alert('Error', 'Please sign in to save reviews');
+        return;
+      }
+
+      const reviewData = {
+        movieId: movie.id,
+        movieTitle: movie.title,
+        rating,
+        review: review.trim(),
+        isPublic: true,
+        userId,
+        createdAt: Timestamp.now()
+      };
+
+      // Add directly to Firestore
+      await addDoc(collection(db, 'reviews'), reviewData);
+
+      // Save to AsyncStorage
+      await AsyncStorage.setItem(`review_${movie.id}`, JSON.stringify({
+        rating,
+        text: review,
+        isPublic: true
+      }));
+
+      Alert.alert('Success', 'Your review has been saved!');
+    } catch (error) {
+      console.error('Error saving review:', error);
+      Alert.alert('Error', 'Failed to save your review. Please try again.');
+    }
+  };
+
+  const handleShare = async () => {
+    try {
+      if (!validateReview()) return;
+
+      const userId = auth.currentUser?.uid;
+      if (!userId) {
+        Alert.alert('Error', 'Please sign in to share reviews');
+        return;
+      }
+
+      const userDoc = await getDoc(doc(db, 'users', userId));
+      const username = userDoc.data()?.displayName || 'Anonymous';
+
+      const sharedReview: SharedReview = {
         movieId: movie.id,
         movieTitle: movie.title,
         backdrop: backdrops[0]?.file_path || null,
         rating,
-        review,
-        isPublic: true, // Always set to true now
-        userId: '' // This will be set by the saveReview function
-      });
+        review: review.trim(),
+        userId,
+        username,
+        timestamp: Timestamp.now(),
+        likes: 0
+      };
 
-      if (error) {
-        throw new Error(error);
-      }
-
-      // Save to local storage
-      await AsyncStorage.setItem(`review_${movie.id}`, JSON.stringify({
-        rating,
-        text: review,
-        isPublic: true // Always set to true
-      }));
-
-      Alert.alert('Success', 'Your review has been saved!');
+      const docRef = await addDoc(collection(db, 'sharedReviews'), sharedReview);
       
+      if (docRef.id) {
+        Alert.alert('Success', 'Your review has been shared to CineWall!');
+      } else {
+        throw new Error('Failed to get document reference');
+      }
     } catch (error) {
-      console.error('Error saving review:', error);
-      Alert.alert('Error', 'Failed to save your review. Please try again.');
+      console.error('Error sharing review:', error);
+      Alert.alert('Error', 'Failed to share your review. Please try again.');
     }
   };
 
