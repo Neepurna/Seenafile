@@ -16,17 +16,22 @@ import {
   KeyboardAvoidingView,
   TouchableWithoutFeedback,
   Keyboard,
+  Alert,
 } from 'react-native';
 import { fetchMovieImages } from '../services/tmdb'; // Add this import at the top with other imports
+import { firebase } from '@react-native-firebase/firestore';
+import { db } from '../config/firebase';
+import { saveReview } from '../firebase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
+const HEADER_HEIGHT = Platform.OS === 'ios' ? 100 : 100;
 const TAB_BAR_HEIGHT = 100; // Match with Tabs.tsx
 const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 44 : 0;
-
-// Match CARD_HEIGHT exactly with FlipCard
-const CARD_PADDING = 16;
-const CARD_WIDTH = width - (CARD_PADDING * 2);
-const CARD_HEIGHT = (CARD_WIDTH * 1.5);
+const SCREEN_HEIGHT = height - TAB_BAR_HEIGHT - HEADER_HEIGHT - STATUS_BAR_HEIGHT;
+const FILTER_HEIGHT = 70;
+const CARD_HEIGHT = SCREEN_HEIGHT - FILTER_HEIGHT;
+const CARD_WIDTH = width;
 
 interface Backdrop {
   file_path: string;
@@ -43,16 +48,32 @@ interface MovieReviewProps {
     runtime?: number;
     overview?: string;
   };
+  onDoubleTap?: () => void; // Add this prop
 }
 
-const MovieReview: React.FC<MovieReviewProps> = ({ movie }) => {
+const MovieReview: React.FC<MovieReviewProps> = ({ movie, onDoubleTap }) => {
   const [backdrops, setBackdrops] = useState<Backdrop[]>([]);
   const [loading, setLoading] = useState(true);
   const [rating, setRating] = useState(0);
   const [review, setReview] = useState('');
-  const [isPublic, setIsPublic] = useState(true);
+  // Remove isPublic state
 
   useEffect(() => {
+    const loadSavedReview = async () => {
+      try {
+        const savedReview = await AsyncStorage.getItem(`review_${movie.id}`);
+        if (savedReview) {
+          const { rating: savedRating, text: savedText, isPublic: savedIsPublic } = JSON.parse(savedReview);
+          setRating(savedRating);
+          setReview(savedText);
+        }
+      } catch (error) {
+        console.error('Error loading saved review:', error);
+      }
+    };
+
+    loadSavedReview();
+
     const fetchImages = async () => {
       try {
         const imagesData = await fetchMovieImages(movie.id);
@@ -77,6 +98,37 @@ const MovieReview: React.FC<MovieReviewProps> = ({ movie }) => {
     }
   };
 
+  const handleSave = async () => {
+    try {
+      const { error } = await saveReview({
+        movieId: movie.id,
+        movieTitle: movie.title,
+        backdrop: backdrops[0]?.file_path || null,
+        rating,
+        review,
+        isPublic: true, // Always set to true now
+        userId: '' // This will be set by the saveReview function
+      });
+
+      if (error) {
+        throw new Error(error);
+      }
+
+      // Save to local storage
+      await AsyncStorage.setItem(`review_${movie.id}`, JSON.stringify({
+        rating,
+        text: review,
+        isPublic: true // Always set to true
+      }));
+
+      Alert.alert('Success', 'Your review has been saved!');
+      
+    } catch (error) {
+      console.error('Error saving review:', error);
+      Alert.alert('Error', 'Failed to save your review. Please try again.');
+    }
+  };
+
   const renderStars = () => {
     return (
       <View style={styles.starsContainer}>
@@ -94,6 +146,14 @@ const MovieReview: React.FC<MovieReviewProps> = ({ movie }) => {
     );
   };
 
+  const handleContentPress = () => {
+    Keyboard.dismiss();
+    // Wait a bit before handling double tap to avoid conflicts
+    setTimeout(() => {
+      if (onDoubleTap) onDoubleTap();
+    }, 10);
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -104,75 +164,70 @@ const MovieReview: React.FC<MovieReviewProps> = ({ movie }) => {
 
   return (
     <View style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.keyboardAvoidingView}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
-      >
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollViewContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          bounces={false}
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardAvoidingView}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 20}
         >
-          <View style={styles.contentContainer}>
-            {/* Header */}
-            <Text style={styles.headerTitle}>Report Card</Text>
-            <Text style={styles.movieTitle}>{movie.title}</Text>
-            
-            {/* Rating Stars */}
-            {renderStars()}
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollViewContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="never"
+            bounces={false}
+          >
+            <TouchableWithoutFeedback onPress={handleContentPress}>
+              <View style={styles.contentContainer}>
+                {/* Backdrop Image */}
+                {backdrops.length > 0 && (
+                  <View style={styles.backdropContainer}>
+                    <Image
+                      source={{ uri: `https://image.tmdb.org/t/p/w780${backdrops[0].file_path}` }}
+                      style={styles.backdropImage}
+                    />
+                  </View>
+                )}
 
-            {/* Review Input */}
-            <View style={styles.reviewContainer}>
-              <TextInput
-                style={styles.reviewInput}
-                multiline
-                placeholder="Write your review here..."
-                placeholderTextColor="#999"
-                value={review}
-                onChangeText={setReview}
-              />
-            </View>
+                {/* Title - removed Report Card */}
+                <Text style={styles.movieTitle}>{movie.title}</Text>
+                
+                {/* Rating Stars */}
+                {renderStars()}
 
-            {/* Backdrop Image */}
-            {backdrops.length > 0 && (
-              <View style={styles.backdropContainer}>
-                <Image
-                  source={{ uri: `https://image.tmdb.org/t/p/w780${backdrops[0].file_path}` }}
-                  style={styles.backdropImage}
-                />
+                {/* Review Input */}
+                <View style={styles.reviewContainer}>
+                  <TextInput
+                    style={styles.reviewInput}
+                    multiline
+                    placeholder="Write your review here..."
+                    placeholderTextColor="#999"
+                    value={review}
+                    onChangeText={setReview}
+                  />
+                </View>
+
+                {/* Action Buttons */}
+                <View style={styles.actionButtons}>
+                  <TouchableOpacity 
+                    style={styles.actionButton}
+                    onPress={handleShare}
+                  >
+                    <Text style={styles.buttonText}>Share</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity 
+                    style={[styles.actionButton, styles.saveButton]}
+                    onPress={handleSave}
+                  >
+                    <Text style={styles.buttonText}>Save</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            )}
-
-            {/* Action Buttons */}
-            <View style={styles.actionButtons}>
-              <TouchableOpacity 
-                style={styles.actionButton}
-                onPress={() => setIsPublic(!isPublic)}
-              >
-                <Text style={styles.buttonText}>
-                  {isPublic ? '🌎 Public' : '🔒 Private'}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={styles.actionButton}
-                onPress={handleShare}
-              >
-                <Text style={styles.buttonText}>Share</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={[styles.actionButton, styles.saveButton]}
-              >
-                <Text style={styles.buttonText}>Save</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+            </TouchableWithoutFeedback>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </TouchableWithoutFeedback>
     </View>
   );
 };
@@ -183,8 +238,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
-    borderRadius: 20,
-    overflow: 'hidden',
+    borderRadius: 0, // Remove border radius
   },
   keyboardAvoidingView: {
     flex: 1,
@@ -201,28 +255,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-    textAlign: 'center',
-    marginBottom: 10,
-  },
   contentContainer: {
-    padding: 20,
+    padding: 16,
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
     flexGrow: 1,
   },
   movieTitle: {
-    fontSize: 20,
+    fontSize: 20, // Slightly larger since it's now the main title
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 15,
+    marginBottom: 16,
+    textAlign: 'center',
   },
   starsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   star: {
     fontSize: 40,
@@ -235,20 +283,22 @@ const styles = StyleSheet.create({
     color: '#FFD700',
   },
   reviewContainer: {
-    marginVertical: 15,
+    marginBottom: 16,
+    flex: 1, // Allow review container to flex
   },
   reviewInput: {
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 10,
-    padding: 15,
+    borderRadius: 8,
+    padding: 12,
     color: '#fff',
-    height: 120,
+    minHeight: 150, // Increased from 80
+    maxHeight: 200, // Increased from 120
     textAlignVertical: 'top',
   },
   actionButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 20,
+    paddingBottom: Platform.OS === 'ios' ? 20 : 0, // Add padding for iOS
   },
   actionButton: {
     backgroundColor: '#444',
@@ -268,12 +318,13 @@ const styles = StyleSheet.create({
   },
   backdropContainer: {
     width: '100%',
-    marginVertical: 15,
+    marginBottom: 16,
   },
   backdropImage: {
-    width: CARD_WIDTH,
-    height: CARD_WIDTH * 0.6,
+    width: CARD_WIDTH - 32,
+    height: (CARD_WIDTH - 32) * 0.4, // Made slightly shorter
     resizeMode: 'cover',
+    borderRadius: 8,
   },
 });
 

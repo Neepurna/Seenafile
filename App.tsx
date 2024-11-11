@@ -21,8 +21,8 @@ const Stack = createStackNavigator<RootStackParamList>();
 
 export default function App() {
   return (
-    <GestureHandlerRootView style={styles.container}>
-      <NavigationContainer>
+    <NavigationContainer>
+      <GestureHandlerRootView style={styles.container}>
         <Stack.Navigator 
           initialRouteName="Login"
           screenOptions={{
@@ -47,8 +47,8 @@ export default function App() {
             options={{ gestureEnabled: false }}
           />
         </Stack.Navigator>
-      </NavigationContainer>
-    </GestureHandlerRootView>
+      </GestureHandlerRootView>
+    </NavigationContainer>
   );
 }
 

@@ -19,7 +19,8 @@ import {
   query, 
   where, 
   getDocs,
-  updateDoc
+  updateDoc,
+  addDoc
 } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -263,5 +264,51 @@ export const saveMovie = async (userId: string, movie: any, category: string) =>
   } catch (error) {
     console.error('Error saving movie:', error);
     throw error;
+  }
+};
+
+// Add new review functions
+export const saveReview = async (reviewData: {
+  movieId: number;
+  movieTitle: string;
+  backdrop: string | null;
+  rating: number;
+  review: string;
+  isPublic: boolean;
+  userId: string;
+}) => {
+  try {
+    if (!auth.currentUser) {
+      throw new Error('User must be authenticated');
+    }
+
+    const reviewsRef = collection(db, 'reviews');
+    const newReview = {
+      ...reviewData,
+      createdAt: new Date(),
+      userId: auth.currentUser.uid,
+    };
+
+    const docRef = await addDoc(reviewsRef, newReview);
+    return { id: docRef.id, error: null };
+  } catch (error: any) {
+    console.error('Error saving review:', error);
+    return { error: error.message };
+  }
+};
+
+export const getUserReviews = async (userId: string) => {
+  try {
+    const reviewsRef = collection(db, 'reviews');
+    const q = query(reviewsRef, where('userId', '==', userId));
+    const querySnapshot = await getDocs(q);
+    
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+  } catch (error) {
+    console.error('Error fetching user reviews:', error);
+    return [];
   }
 };

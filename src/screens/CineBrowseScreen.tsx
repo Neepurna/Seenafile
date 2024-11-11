@@ -12,6 +12,8 @@ import { Movie } from '../services/api';
 import { fetchRandomMovies, shuffleArray } from '../services/helper';
 import { auth, db } from '../firebase';
 import { collection, doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
+import FilterCard from '../components/FilterCard';
+import { DIMS, getCardHeight } from '../theme';
 
 const { width, height } = Dimensions.get('window');
 const TAB_BAR_HEIGHT = 67; // Match new tab bar height
@@ -46,6 +48,8 @@ const CineBrowseScreen: React.FC = () => {
   const [swipingEnabled, setSwipingEnabled] = useState(true);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [isFetching, setIsFetching] = useState<boolean>(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [customCategories, setCustomCategories] = useState<string[]>([]);
 
   const displayedMovieIds = useRef<Set<number>>(new Set());
 
@@ -189,135 +193,235 @@ const CineBrowseScreen: React.FC = () => {
     }
   };
 
+  const defaultCategories = [
+    'All',
+    'Popular Movies',
+    'Highest Rated',
+    'Action',
+    'Comedy',
+    'Drama',
+    'Horror'
+  ];
+
+  const handleCategorySelect = (category: string) => {
+    setSelectedCategory(category);
+    filterMoviesByCategory(category);
+  };
+
+  const handleAddCustomCategory = () => {
+    Alert.prompt(
+      'Add Custom Category',
+      'Enter category name:',
+      (text) => {
+        if (text && text.trim()) {
+          setCustomCategories(prev => [...prev, text.trim()]);
+        }
+      }
+    );
+  };
+
+  const filterMoviesByCategory = async (category: string) => {
+    setLoading(true);
+    try {
+      if (category === 'All') {
+        await fetchMoreMovies();
+        return;
+      }
+
+      let filteredMovies: Movie[] = [];
+      
+      switch (category) {
+        case 'Popular Movies':
+          const popularMovies = await fetchRandomMovies('popular', 20);
+          filteredMovies = popularMovies?.map(m => ({ ...m, category: 'Popular' })) || [];
+          break;
+        case 'Highest Rated':
+          const topRatedMovies = await fetchRandomMovies('top_rated', 20);
+          filteredMovies = topRatedMovies?.map(m => ({ ...m, category: 'Highest Rated' })) || [];
+          break;
+        default:
+          // Fetch movies by genre
+          const genreId = genres.find(g => g.label === category)?.id;
+          if (genreId) {
+            const genreMovies = await fetchRandomMovies('discover', 20, {
+              with_genres: genreId.toString()
+            });
+            filteredMovies = genreMovies || [];
+          }
+      }
+
+      setMovies(filteredMovies.filter(movie => 
+        movie && 
+        movie.poster_path && 
+        !displayedMovieIds.current.has(movie.id)
+      ));
+      
+    } catch (error) {
+      console.error('Error filtering movies:', error);
+      Alert.alert('Error', 'Failed to filter movies. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <View style={styles.container}>
-        <Swiper
-          cards={movies}
-          renderCard={(movie) => {
-            if (!movie) return null;
-            return (
-              <FlipCard
-                movie={movie}
-                onSwipingStateChange={setSwipingEnabled}
-              />
-            );
-          }}
-          infinite={false}
-          backgroundColor="transparent"
-          cardVerticalMargin={0}
-          cardHorizontalMargin={0}
-          stackSize={3}
-          stackScale={10}
-          stackSeparation={14}
-          overlayOpacityHorizontalThreshold={width / 8}
-          overlayOpacityVerticalThreshold={SCREEN_HEIGHT / 8}
-          inputRotationRange={[-width / 2, 0, width / 2]}
-          outputRotationRange={["-10deg", "0deg", "10deg"]}
-          onSwipedAll={() => {
-            setCurrentIndex(0);
-            fetchMoreMovies();
-          }}
-          onSwipedTop={handleSwipedTop}
-          onSwipedBottom={handleSwipedBottom}
-          onSwipedRight={handleSwipedRight}
-          onSwipedLeft={handleSwipedLeft}
-          onSwiped={handleSwiped}
-          cardIndex={currentIndex}
-          verticalSwipe={swipingEnabled}
-          horizontalSwipe={swipingEnabled}
-          disableTopSwipe={!swipingEnabled}
-          disableBottomSwipe={!swipingEnabled}
-          disableLeftSwipe={!swipingEnabled}
-          disableRightSwipe={!swipingEnabled}
-          verticalThreshold={SCREEN_HEIGHT / 6}
-          horizontalThreshold={width / 6}
-          useViewOverflow={false}
-          preventSwiping={['up', 'down', 'left', 'right']}
-          swipeBackCard={false}
-          overlayLabels={swipingEnabled ? {
-            left: {
-              element: (
-                <View style={[styles.overlayWrapper, { borderColor: '#FF4B4B' }]}>
-                  <View>
-                    <Ionicons name="close-circle" size={40} color="#FF4B4B" />
-                  </View>
-                  <View>
-                    <Text style={[styles.overlayText, { color: '#FF4B4B' }]}>
-                      Not Watched
-                    </Text>
-                  </View>
-                </View>
-              )
-            },
-            right: {
-              element: (
-                <View style={[styles.overlayWrapper, { borderColor: '#4BFF4B' }]}>
-                  <View>
-                    <Ionicons name="checkmark-circle" size={40} color="#4BFF4B" />
-                  </View>
-                  <View>
-                    <Text style={[styles.overlayText, { color: '#4BFF4B' }]}>
-                      Watched
-                    </Text>
-                  </View>
-                </View>
-              )
-            },
-            top: {
-              element: (
-                <View style={[styles.overlayWrapper, { borderColor: '#FFD700' }]}>
-                  <View>
-                    <Ionicons name="repeat" size={40} color="#FFD700" />
-                  </View>
-                  <View>
-                    <Text style={[styles.overlayText, { color: '#FFD700' }]}>
-                      Most Watch
-                    </Text>
-                  </View>
-                </View>
-              )
-            },
-            bottom: {
-              element: (
-                <View style={[styles.overlayWrapper, { borderColor: '#00BFFF' }]}>
-                  <View>
-                    <Ionicons name="time" size={40} color="#00BFFF" />
-                  </View>
-                  <View>
-                    <Text style={[styles.overlayText, { color: '#00BFFF' }]}>
-                      Watch Later
-                    </Text>
-                  </View>
-                </View>
-              )
-            },
-          } : undefined}
-          swipeAnimationDuration={swipingEnabled ? 350 : 0}
-          animateCardOpacity={true}
-          containerStyle={styles.swiperContainer}
-          cardStyle={styles.cardStyle}
+    <View style={styles.mainContainer}>
+      <View style={styles.filterContainer}>
+        <FilterCard
+          selectedCategory={selectedCategory}
+          onSelectCategory={handleCategorySelect}
+          onAddCustomCategory={handleAddCustomCategory}
+          categories={defaultCategories}
+          customCategories={customCategories}
         />
-        {(loading || isFetching) && (
-          <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="large" color="#ffffff" />
-          </View>
-        )}
       </View>
-    </GestureHandlerRootView>
+      <GestureHandlerRootView style={styles.gestureContainer}>
+        <View style={styles.container}>
+          <Swiper
+            cards={movies}
+            renderCard={(movie) => {
+              if (!movie) return null;
+              return (
+                <FlipCard
+                  movie={movie}
+                  onSwipingStateChange={setSwipingEnabled}
+                />
+              );
+            }}
+            infinite={false}
+            backgroundColor="transparent"
+            cardVerticalMargin={0}
+            cardHorizontalMargin={0}
+            stackSize={3}
+            stackScale={10}
+            stackSeparation={14}
+            overlayOpacityHorizontalThreshold={width / 8}
+            overlayOpacityVerticalThreshold={SCREEN_HEIGHT / 8}
+            inputRotationRange={[-width / 2, 0, width / 2]}
+            outputRotationRange={["-10deg", "0deg", "10deg"]}
+            onSwipedAll={() => {
+              setCurrentIndex(0);
+              fetchMoreMovies();
+            }}
+            onSwipedTop={handleSwipedTop}
+            onSwipedBottom={handleSwipedBottom}
+            onSwipedRight={handleSwipedRight}
+            onSwipedLeft={handleSwipedLeft}
+            onSwiped={handleSwiped}
+            cardIndex={currentIndex}
+            verticalSwipe={swipingEnabled}
+            horizontalSwipe={swipingEnabled}
+            disableTopSwipe={!swipingEnabled}
+            disableBottomSwipe={!swipingEnabled}
+            disableLeftSwipe={!swipingEnabled}
+            disableRightSwipe={!swipingEnabled}
+            verticalThreshold={SCREEN_HEIGHT / 6}
+            horizontalThreshold={width / 6}
+            useViewOverflow={false}
+            preventSwiping={['up', 'down', 'left', 'right']}
+            swipeBackCard={false}
+            overlayLabels={swipingEnabled ? {
+              left: {
+                element: (
+                  <View style={[styles.overlayWrapper, { borderColor: '#FF4B4B' }]}>
+                    <View>
+                      <Ionicons name="close-circle" size={40} color="#FF4B4B" />
+                    </View>
+                    <View>
+                      <Text style={[styles.overlayText, { color: '#FF4B4B' }]}>
+                        Not Watched
+                      </Text>
+                    </View>
+                  </View>
+                )
+              },
+              right: {
+                element: (
+                  <View style={[styles.overlayWrapper, { borderColor: '#4BFF4B' }]}>
+                    <View>
+                      <Ionicons name="checkmark-circle" size={40} color="#4BFF4B" />
+                    </View>
+                    <View>
+                      <Text style={[styles.overlayText, { color: '#4BFF4B' }]}>
+                        Watched
+                      </Text>
+                    </View>
+                  </View>
+                )
+              },
+              top: {
+                element: (
+                  <View style={[styles.overlayWrapper, { borderColor: '#FFD700' }]}>
+                    <View>
+                      <Ionicons name="repeat" size={40} color="#FFD700" />
+                    </View>
+                    <View>
+                      <Text style={[styles.overlayText, { color: '#FFD700' }]}>
+                        Most Watch
+                      </Text>
+                    </View>
+                  </View>
+                )
+              },
+              bottom: {
+                element: (
+                  <View style={[styles.overlayWrapper, { borderColor: '#00BFFF' }]}>
+                    <View>
+                      <Ionicons name="time" size={40} color="#00BFFF" />
+                    </View>
+                    <View>
+                      <Text style={[styles.overlayText, { color: '#00BFFF' }]}>
+                        Watch Later
+                      </Text>
+                    </View>
+                  </View>
+                )
+              },
+            } : undefined}
+            swipeAnimationDuration={swipingEnabled ? 350 : 0}
+            animateCardOpacity={true}
+            containerStyle={styles.swiperContainer}
+            cardStyle={styles.cardStyle}
+          />
+        </View>
+      </GestureHandlerRootView>
+      {(loading || isFetching) && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#ffffff" />
+        </View>
+      )}
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  mainContainer: {
     flex: 1,
     backgroundColor: '#000',
   },
+  gestureContainer: {
+    flex: 1,
+  },
+  container: {
+    flex: 1,
+  },
+  filterContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 999,
+  },
   swiperContainer: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingBottom: SCREEN_HEIGHT * 0.05, // Add some bottom padding for visual balance
+  },
+  cardStyle: {
+    width: DIMS.width,
+    height: getCardHeight(),
+  },
+  swiperWrapper: {
+    flex: 1,
+    marginTop: Platform.OS === 'ios' ? 90 : 50, // Add space for filter
   },
   cardWrapper: {
     flex: 1,
@@ -325,14 +429,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: width,
     height: SCREEN_HEIGHT,
-  },
-  cardStyle: {
-    height: SCREEN_HEIGHT * 0.9, // Match FlipCard height
-    width: width - 32,
-    alignSelf: 'center',
-    justifyContent: 'center',
-    margin: 0,
-    padding: 0,
   },
   loadingContainer: {
     flex: 1,

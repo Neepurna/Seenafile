@@ -3,7 +3,6 @@ import { View, StyleSheet, TextInput, Image, Dimensions, ActivityIndicator, Text
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Movie } from '../services/api';
 import { fetchRandomMovies } from '../services/helper';
-import nlp from 'compromise';
 
 const { width } = Dimensions.get('window');
 
@@ -53,15 +52,16 @@ const MovieChatScreen: React.FC = () => {
   };
 
   const processMessage = (input: string) => {
-    const doc = nlp(input.toLowerCase());
+    const text = input.toLowerCase();
     
-    if (doc.has('recommend') || doc.has('suggestion')) {
+    // Simple keyword matching instead of TensorFlow processing
+    if (text.includes('recommend') || text.includes('suggestion')) {
       return "Based on the latest releases, I'd recommend checking out the movies shown above!";
     }
-    if (doc.has('latest') || doc.has('new')) {
+    if (text.includes('latest') || text.includes('new')) {
       return "You can see the latest releases in the recommendations section at the top.";
     }
-    if (doc.has('hello') || doc.has('hi')) {
+    if (text.includes('hello') || text.includes('hi')) {
       return "Hi! I'm your movie chat assistant. Feel free to ask about movies!";
     }
     return "I understand you're interested in movies. Could you please rephrase your question?";

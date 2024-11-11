@@ -15,6 +15,7 @@ import {
   FlatList,
 } from 'react-native';
 import MovieReview from './MovieReview';
+import { COLORS, DIMS, SPACING, getCardHeight } from '../theme';
 
 const API_KEY = '559819d48b95a2e3440df0504dea30fd';
 
@@ -75,13 +76,13 @@ type CrewMember = {
 };
 
 const { width, height } = Dimensions.get('window');
-const HEADER_HEIGHT = Platform.OS === 'ios' ? 44 : 56;
-const TAB_BAR_HEIGHT = 67;
+const HEADER_HEIGHT = Platform.OS === 'ios' ? 100 : 100; // Match header height from Tabs.tsx
+const TAB_BAR_HEIGHT = 100; // Match tab bar height from Tabs.tsx
 const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 44 : 0;
-const AVAILABLE_HEIGHT = height - TAB_BAR_HEIGHT - HEADER_HEIGHT - STATUS_BAR_HEIGHT;
-const CARD_WIDTH = width * 0.9;
-const CARD_HEIGHT = AVAILABLE_HEIGHT * 0.85; // Use 85% of available height
-const DETAILS_HEIGHT = CARD_HEIGHT * 0.2; // 20% of card height for details
+const SCREEN_HEIGHT = height - TAB_BAR_HEIGHT - HEADER_HEIGHT - STATUS_BAR_HEIGHT;
+const FILTER_HEIGHT = 70; // Height of FilterCard component
+const DETAILS_HEIGHT = 100; // Fixed height for details section
+const CARD_HEIGHT = SCREEN_HEIGHT - FILTER_HEIGHT; // Removed the -20 padding
 
 const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
   const {
@@ -118,7 +119,7 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
     const currentTime = Date.now();
     const tapInterval = currentTime - lastTap.current;
     
-    if (tapInterval < 200) {
+    if (tapInterval < 300) { // Increased from 200 to 300ms for better detection
       if (!isAnimating.current) {
         performFlip();
       }
@@ -427,22 +428,6 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
           <Text style={styles.categoryText}>{movie.category}</Text>
         </View>
       )}
-      <View style={styles.overlay} />
-      <View style={styles.detailsContainer}>
-        <Text style={styles.title} numberOfLines={2}>
-          {title || 'Untitled'}
-        </Text>
-        <View style={styles.genreContainer}>
-          {(genres || []).slice(0, 3).map((genre, index) => (
-            <Text key={genre.id} style={styles.genre}>
-              {genre.name}{index < Math.min((genres || []).length - 1, 2) ? ' • ' : ''}
-            </Text>
-          ))}
-        </View>
-        <Text style={styles.releaseDate}>
-          {release_date ? new Date(release_date).getFullYear() : 'N/A'}
-        </Text>
-      </View>
       <TouchableOpacity
         style={styles.infoButton}
         onPress={handleInfoPress}
@@ -460,6 +445,7 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
       delayPressOut={0}
     >
       <View style={styles.container}>
+        {/* Front face */}
         <Animated.View 
           style={[
             styles.cardFace,
@@ -473,9 +459,14 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
             }
           ]}
         >
-          {renderFrontFace()}
+          <TouchableWithoutFeedback onPress={handleDoubleTap}>
+            <View style={styles.frontFaceContainer}>
+              {renderFrontFace()}
+            </View>
+          </TouchableWithoutFeedback>
         </Animated.View>
 
+        {/* Back face */}
         <Animated.View 
           style={[
             styles.cardFace,
@@ -490,7 +481,10 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
             }
           ]}
         >
-          <MovieReview movie={movie} />
+          <MovieReview 
+            movie={movie} 
+            onDoubleTap={handleDoubleTap}
+          />
         </Animated.View>
       </View>
     </TouchableWithoutFeedback>
@@ -499,30 +493,21 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
 
 const styles = StyleSheet.create({
   container: {
-    width: CARD_WIDTH,
+    width: DIMS.width,
     height: CARD_HEIGHT,
-    position: 'relative',
-    alignSelf: 'center',
+    alignItems: 'center',
     justifyContent: 'center',
+    margin: 0,
+    padding: 0,
   },
   cardFace: {
-    width: CARD_WIDTH,
+    width: DIMS.width,
     height: CARD_HEIGHT,
     position: 'absolute',
-    borderRadius: 20,
     overflow: 'hidden',
-    backgroundColor: 'white',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 5,
-      },
-    }),
+    backgroundColor: COLORS.surface,
+    left: 0,
+    top: 0,
   },
   cardBack: {
     backgroundColor: '#FFFFFF',
@@ -533,50 +518,8 @@ const styles = StyleSheet.create({
   },
   poster: {
     width: '100%',
-    height: CARD_HEIGHT - DETAILS_HEIGHT,
+    height: '100%', // Use full height
     resizeMode: 'cover',
-  },
-  overlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: DETAILS_HEIGHT,
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-  },
-  detailsContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: DETAILS_HEIGHT,
-    padding: 12,
-    justifyContent: 'center',
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 6,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  },
-  genreContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 3,
-  },
-  genre: {
-    fontSize: 16,
-    color: '#ffffff',
-    opacity: 0.9,
-  },
-  releaseDate: {
-    fontSize: 15,
-    color: '#cccccc',
   },
   infoButton: {
     position: 'absolute',

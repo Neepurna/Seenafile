@@ -28,6 +28,23 @@ service cloud.firestore {
       }
     }
 
+    // Reviews collection rules
+    match /reviews/{reviewId} {
+      allow read: if isSignedIn() && (
+        // Public reviews are readable by all signed-in users
+        resource.data.isPublic == true ||
+        // Private reviews are only readable by their authors
+        resource.data.userId == request.auth.uid
+      );
+      
+      allow create: if isSignedIn() && 
+        isValidReview() && 
+        request.resource.data.userId == request.auth.uid;
+      
+      allow update, delete: if isSignedIn() && 
+        resource.data.userId == request.auth.uid;
+    }
+
     // User-movie interactions (likes, matches, etc.)
     match /users/{userId}/movieInteractions/{movieId} {
       allow read: if isSignedIn() && isOwner(userId);
@@ -79,6 +96,29 @@ service cloud.firestore {
         && data.poster_path is string
         && data.category in ['watched', 'most_watch', 'watch_later', 'custom']
         && data.timestamp is timestamp;
+    }
+
+    // Add this new helper function for review validation
+    function isValidReview() {
+      let review = request.resource.data;
+      return review.keys().hasAll([
+        'movieId',
+        'movieTitle',
+        'rating',
+        'review',
+        'isPublic',
+        'createdAt',
+        'userId'
+      ]) 
+      && review.movieId is number
+      && review.movieTitle is string
+      && review.rating is number
+      && review.rating >= 0
+      && review.rating <= 5
+      && review.review is string
+      && review.isPublic is bool
+      && review.createdAt is timestamp
+      && review.userId is string;
     }
   }
 }

@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^14.0.4",
-    "@react-native-async-storage/async-storage": "^1.24.0",
+    "@react-native-async-storage/async-storage": "1.23.1",
     "@react-native-community/datetimepicker": "^8.2.0",
     "@react-native-picker/picker": "^2.9.0",
     "@react-navigation/bottom-tabs": "^6.6.1",
@@ -25,6 +25,7 @@
     "expo-status-bar": "~1.12.1",
     "firebase": "^11.0.1",
     "nativewind": "^4.1.23",
+    "natural": "^8.0.1",
     "react": "18.2.0",
     "react-native": "0.74.5",
     "react-native-deck-swiper": "^2.0.17",
@@ -35,7 +36,11 @@
     "react-native-screens": "^3.35.0",
     "react-native-svg": "^15.8.0",
     "react-native-tab-view": "^3.5.2",
-    "react-native-vector-icons": "^10.2.0"
+    "react-native-vector-icons": "^10.2.0",
+    "expo-gl": "~14.0.2",
+    "expo-file-system": "~17.0.1",
+    "@react-native-firebase/app": "^18.8.0",
+    "@react-native-firebase/firestore": "^18.8.0"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
@@ -49,5 +54,9 @@
     "prettier": "^3.3.3",
     "typescript": "^5.1.3"
   },
-  "private": true
+  "private": true,
+  "plugins": [
+    "@react-native-firebase/app",
+    "@react-native-firebase/firestore"
+  ]
 }
