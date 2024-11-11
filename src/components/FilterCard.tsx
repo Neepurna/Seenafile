@@ -50,7 +50,16 @@ const FilterCard: React.FC<FilterCardProps> = ({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {['All', 'Popular Movies', 'Highest Rated'].map((category) => (
+        {[
+          'All',
+          'Top Rated',
+          'Classics',
+          'Award Winners',
+          "Critics' Choice",
+          'International',
+          'TV Shows',
+          'Documentaries'
+        ].map((category) => (
           <TouchableOpacity
             key={category}
             style={[
@@ -94,7 +103,18 @@ const FilterCard: React.FC<FilterCardProps> = ({
       >
         <ScrollView style={styles.categoryList}>
           {categories
-            .filter(cat => !['All', 'Popular Movies', 'Highest Rated'].includes(cat))
+            .filter(cat => ![
+              'All',
+              'Trending',
+              'New Releases',
+              'Top Rated',
+              'Classics',
+              'Award Winners',
+              "Critics' Choice",
+              'International',
+              'TV Shows',
+              'Documentaries'
+            ].includes(cat))
             .map((category) => (
               <TouchableOpacity
                 key={category}
@@ -143,14 +163,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
     borderTopWidth: 1,
     borderTopColor: 'rgba(255, 255, 255, 0.1)',
-    paddingBottom: 0, // Remove bottom padding
+    padding: 0,
+    margin: 0,
   },
   filterContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingRight: 10,
-    height: '100%', // Make it take full height
+    height: DIMS.filterHeight,
   },
   scrollContent: {
     paddingLeft: 16,

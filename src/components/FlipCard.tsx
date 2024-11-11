@@ -27,8 +27,8 @@ interface Movie {
   overview: string;
   release_date: string;
   runtime?: number;
-  genres: { id: number; name: string }[];
-  category?: 'Popular' | 'Highest Rated' | 'Most Voted';
+  genres?: Array<{ id: number; name: string }>;
+  category?: string; // Make this more flexible
   vote_count?: number;
   cast?: {
     id: number;
@@ -209,8 +209,7 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
     try {
       setIsLoadingDetails(true);
       
-      // Fetch both movie details and reviews in parallel
-      const [detailsResponse, reviewsResponse] = await Promise.all([
+      const [detailsResponse, reviewsResponse, imagesResponse] = await Promise.all([
         fetch(
           `https://api.themoviedb.org/3/movie/${movieId}?api_key=${API_KEY}`,
           {
@@ -228,23 +227,34 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
               'Content-Type': 'application/json'
             },
           }
+        ),
+        fetch(
+          `https://api.themoviedb.org/3/movie/${movieId}/images?api_key=${API_KEY}`,
+          {
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json'
+            },
+          }
         )
       ]);
 
-      if (!detailsResponse.ok || !reviewsResponse.ok) {
+      if (!detailsResponse.ok || !reviewsResponse.ok || !imagesResponse.ok) {
         throw new Error('Failed to fetch movie data');
       }
 
-      const [details, reviewsData] = await Promise.all([
+      const [details, reviewsData, imagesData] = await Promise.all([
         detailsResponse.json(),
-        reviewsResponse.json()
+        reviewsResponse.json(),
+        imagesResponse.json()
       ]);
 
       setMovieDetails(details);
-      setReviews(reviewsData.results.slice(0, 5));
+      setReviews(reviewsData.results?.slice(0, 5) || []);
 
     } catch (error) {
       console.error('Error fetching movie details and reviews:', error);
+      setReviews([]);
     } finally {
       setIsLoadingDetails(false);
     }
@@ -423,11 +433,6 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
         }}
         style={styles.poster}
       />
-      {movie.category && (
-        <View style={styles.categoryBadge}>
-          <Text style={styles.categoryText}>{movie.category}</Text>
-        </View>
-      )}
       <TouchableOpacity
         style={styles.infoButton}
         onPress={handleInfoPress}
@@ -609,21 +614,6 @@ const styles = StyleSheet.create({
   closeButtonText: {
     color: '#ffffff', // White text
     fontSize: 16,
-    fontWeight: 'bold',
-  },
-  categoryBadge: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    zIndex: 2,
-  },
-  categoryText: {
-    color: '#FFFFFF',
-    fontSize: 14,
     fontWeight: 'bold',
   },
   genreWrapper: {

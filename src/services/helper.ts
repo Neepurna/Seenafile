@@ -195,6 +195,40 @@ const fetchMoviesByQuery = async (query: string): Promise<Movie[]> => {
   }
 };
 
+// Remove or comment out this function since it's defined in tmdb.ts
+// export const fetchMoviesByCategory = async (category: string, page: number = 1) => {
+//   try {
+//     switch (category.toLowerCase()) {
+//       case 'trending':
+//         return await fetchTrendingMovies(page);
+//       case 'new releases':
+//         return await fetchNewReleases(page);
+//       case 'top rated':
+//         return await fetchTopRatedMovies(page);
+//       case 'classics':
+//         return await fetchClassics(page);
+//       case 'award winners':
+//         return await fetchAwardWinners(page);
+//       case "critics' choice":
+//         return await fetchCriticsChoice(page);
+//       case 'international':
+//         return await fetchInternationalMovies(page);
+//       case 'tv shows':
+//         // Add your TV shows fetching logic here
+//         return await fetchMovies(page); // Temporary fallback
+//       case 'documentaries':
+//         // Use genre ID 99 for documentaries
+//         return await fetchMoviesByGenre(99, page);
+//       case 'all':
+//       default:
+//         return await fetchMovies(page);
+//     }
+//   } catch (error) {
+//     console.error(`Error fetching ${category} movies:`, error);
+//     return { results: [] };
+//   }
+// };
+
 export {
   fetchCategories,
   fetchMovie,

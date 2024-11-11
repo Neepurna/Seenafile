@@ -14,6 +14,17 @@ import { auth, db } from '../firebase';
 import { collection, doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 import FilterCard from '../components/FilterCard';
 import { DIMS, getCardHeight } from '../theme';
+import { 
+  fetchMoviesByCategory,
+  fetchInternationalMovies,
+  fetchAwardWinners,
+  fetchMovieImages,
+  fetchTopRatedMovies,
+  fetchClassics,
+  fetchCriticsChoice,
+  fetchTVShows,
+  fetchDocumentaries
+} from '../services/tmdb'; // Update imports
 
 const { width, height } = Dimensions.get('window');
 const TAB_BAR_HEIGHT = 67; // Match new tab bar height
@@ -132,7 +143,10 @@ const CineBrowseScreen: React.FC = () => {
   };
 
   const saveMovieToFirestore = async (movie: Movie, category: string) => {
-    if (!auth.currentUser) return;
+    if (!auth.currentUser || !movie) {
+      console.warn('No user logged in or invalid movie data');
+      return;
+    }
   
     try {
       const userRef = doc(db, 'users', auth.currentUser.uid);
@@ -141,31 +155,32 @@ const CineBrowseScreen: React.FC = () => {
       // First, check if the movie already exists
       const movieDoc = await getDoc(movieRef);
       if (movieDoc.exists()) {
-        // Movie already exists, skip saving
+        console.log('Movie already saved');
         return;
       }
   
-      // Save movie with all required fields
-      await setDoc(movieRef, {
-        movieId: movie.id.toString(),
-        title: movie.title,
-        poster_path: movie.poster_path,
-        category,
-        timestamp: new Date()
-      });
-  
-      // Skip separate stats update since CineFileScreen's onSnapshot will handle it
+      // Only save if we have the required fields
+      if (movie.id && movie.title) {
+        await setDoc(movieRef, {
+          movieId: movie.id.toString(),
+          title: movie.title,
+          poster_path: movie.poster_path || null,
+          category,
+          timestamp: new Date()
+        });
+      } else {
+        console.warn('Invalid movie data:', movie);
+      }
     } catch (error) {
-      if (error.code === 'permission-denied') {
-        // Ignore permission errors since the operation actually succeeded
-        return;
-      }
       console.error('Error saving movie:', error);
     }
   };
 
   const handleSwipedRight = async (index: number) => {
-    await saveMovieToFirestore(movies[index], 'watched');
+    const movie = movies[index];
+    if (movie) {
+      await saveMovieToFirestore(movie, 'watched');
+    }
   };
 
   const handleSwipedLeft = (index: number) => {
@@ -173,11 +188,17 @@ const CineBrowseScreen: React.FC = () => {
   };
 
   const handleSwipedTop = async (index: number) => {
-    await saveMovieToFirestore(movies[index], 'most_watch');
+    const movie = movies[index];
+    if (movie) {
+      await saveMovieToFirestore(movie, 'most_watch');
+    }
   };
 
   const handleSwipedBottom = async (index: number) => {
-    await saveMovieToFirestore(movies[index], 'watch_later');
+    const movie = movies[index];
+    if (movie) {
+      await saveMovieToFirestore(movie, 'watch_later');
+    }
   };
 
   const handleMovieReview = (movie: Movie) => {
@@ -195,12 +216,13 @@ const CineBrowseScreen: React.FC = () => {
 
   const defaultCategories = [
     'All',
-    'Popular Movies',
-    'Highest Rated',
-    'Action',
-    'Comedy',
-    'Drama',
-    'Horror'
+    'Top Rated',
+    'Classics',
+    'Award Winners',
+    "Critics' Choice",
+    'International',
+    'TV Shows',
+    'Documentaries'
   ];
 
   const handleCategorySelect = (category: string) => {
@@ -223,42 +245,57 @@ const CineBrowseScreen: React.FC = () => {
   const filterMoviesByCategory = async (category: string) => {
     setLoading(true);
     try {
-      if (category === 'All') {
-        await fetchMoreMovies();
-        return;
-      }
+      setMovies([]);
+      displayedMovieIds.current.clear();
 
-      let filteredMovies: Movie[] = [];
-      
-      switch (category) {
-        case 'Popular Movies':
-          const popularMovies = await fetchRandomMovies('popular', 20);
-          filteredMovies = popularMovies?.map(m => ({ ...m, category: 'Popular' })) || [];
+      let response;
+      switch (category.toLowerCase()) {
+        case 'all':
+          await fetchMoreMovies();
+          return;
+        case 'top rated':
+          response = await fetchTopRatedMovies();
           break;
-        case 'Highest Rated':
-          const topRatedMovies = await fetchRandomMovies('top_rated', 20);
-          filteredMovies = topRatedMovies?.map(m => ({ ...m, category: 'Highest Rated' })) || [];
+        case 'classics':
+          response = await fetchClassics();
+          break;
+        case 'award winners':
+          response = await fetchAwardWinners();
+          break;
+        case "critics' choice":
+          response = await fetchCriticsChoice();
+          break;
+        case 'international':
+          response = await fetchInternationalMovies();
+          break;
+        case 'tv shows':
+          response = await fetchTVShows();
+          break;
+        case 'documentaries':
+          response = await fetchDocumentaries();
           break;
         default:
-          // Fetch movies by genre
-          const genreId = genres.find(g => g.label === category)?.id;
-          if (genreId) {
-            const genreMovies = await fetchRandomMovies('discover', 20, {
-              with_genres: genreId.toString()
-            });
-            filteredMovies = genreMovies || [];
-          }
+          await fetchMoreMovies();
+          return;
       }
 
-      setMovies(filteredMovies.filter(movie => 
-        movie && 
-        movie.poster_path && 
-        !displayedMovieIds.current.has(movie.id)
-      ));
-      
+      if (response?.results) {
+        const filteredMovies = response.results.filter(movie => 
+          movie && 
+          movie.poster_path && 
+          !displayedMovieIds.current.has(movie.id)
+        ).map(movie => ({
+          ...movie,
+          category: category
+        }));
+
+        setMovies(filteredMovies);
+        filteredMovies.forEach(movie => displayedMovieIds.current.add(movie.id));
+      }
     } catch (error) {
       console.error('Error filtering movies:', error);
       Alert.alert('Error', 'Failed to filter movies. Please try again.');
+      await fetchMoreMovies(); // Fallback
     } finally {
       setLoading(false);
     }
