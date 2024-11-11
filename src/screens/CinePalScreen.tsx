@@ -48,59 +48,114 @@ const NewsCard: React.FC<{data: RSSItem}> = ({ data }) => {
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
 
-  const handleImageLoad = () => {
-    console.log('Image loaded successfully:', data.imageUrl);
-    setImageLoading(false);
+  useEffect(() => {
+    if (data.imageUrl) {
+      console.log('Attempting to load image:', data.imageUrl);
+      Image.prefetch(data.imageUrl)
+        .then(() => {
+          console.log('Image prefetch successful:', data.imageUrl);
+          setImageLoading(false);
+        })
+        .catch((error) => {
+          console.error('Image prefetch failed:', data.imageUrl, error);
+          setImageError(true);
+          setImageLoading(false);
+        });
+    } else {
+      setImageError(true);
+      setImageLoading(false);
+    }
+  }, [data.imageUrl]);
+
+  const handlePress = async () => {
+    if (data.link) {
+      try {
+        const url = data.link.trim();
+        const supported = await Linking.canOpenURL(url);
+        
+        if (supported) {
+          await Linking.openURL(url);
+        } else {
+          console.log("Don't know how to open URL:", url);
+        }
+      } catch (error) {
+        console.error('Error opening URL:', error);
+      }
+    }
   };
 
-  const handleImageError = () => {
-    console.log('Image failed to load:', data.imageUrl);
-    setImageError(true);
-    setImageLoading(false);
+  const getSourceDisplay = (source: string) => {
+    switch(source) {
+      case 'movies':
+        return 'Movie News';
+      default:
+        return source;
+    }
   };
 
   return (
     <View style={styles.fullCardContainer}>
       <TouchableOpacity 
         style={[styles.cardContainer, styles.newsCardContainer]}
-        onPress={() => data.link && Linking.openURL(data.link)}
+        onPress={handlePress}
         activeOpacity={0.7}
       >
-        {data.imageUrl && !imageError ? (
-          <>
-            <Image 
-              source={{ uri: data.imageUrl }}
-              style={styles.newsImage}
-              resizeMode="cover"
-              onLoad={handleImageLoad}
-              onError={handleImageError}
-            />
-            {imageLoading && (
-              <View style={styles.imageLoadingContainer}>
-                <ActivityIndicator color="#BB86FC" size="large" />
-              </View>
-            )}
-          </>
-        ) : (
-          <View style={[styles.newsImage, styles.placeholderImage]}>
-            <MaterialIcons name="movie" size={40} color="#666" />
+        <View style={styles.cardInnerContainer}>
+          {data.imageUrl && !imageError ? (
+            <View style={styles.newsImageWrapper}>
+              <Image 
+                source={{ uri: data.imageUrl }}
+                style={styles.newsImage}
+                resizeMode="cover"
+                onLoad={() => {
+                  console.log('Image loaded successfully:', data.imageUrl);
+                  setImageLoading(false);
+                }}
+                onError={(error) => {
+                  console.error('Image loading error:', error.nativeEvent.error);
+                  setImageError(true);
+                  setImageLoading(false);
+                }}
+              />
+              {imageLoading && (
+                <View style={styles.imageLoadingOverlay}>
+                  <ActivityIndicator size="large" color="#BB86FC" />
+                </View>
+              )}
+            </View>
+          ) : (
+            <View style={[styles.newsImageWrapper, styles.placeholderImage]}>
+              <MaterialIcons name="movie" size={60} color="#555" />
+              <Text style={styles.placeholderText}>No Image Available</Text>
+            </View>
+          )}
+          
+          <View style={styles.newsContent}>
+            <View style={styles.newsHeader}>
+              <Text style={styles.newsSource}>
+                {getSourceDisplay(data.source)}
+              </Text>
+              <Text style={styles.newsDate}>
+                {new Date(data.pubDate).toLocaleDateString()}
+              </Text>
+            </View>
+            
+            <View style={styles.newsBody}>
+              <Text style={styles.newsTitle} numberOfLines={2}>
+                {data.title}
+              </Text>
+              <Text style={styles.newsDescription} numberOfLines={3}>
+                {data.description.replace(/<[^>]*>/g, '')}
+              </Text>
+            </View>
+
+            <View style={styles.newsFooter}>
+              <TouchableOpacity style={styles.readMoreButton}>
+                <Text style={styles.readMoreText}>Read More</Text>
+                <MaterialIcons name="arrow-forward" size={16} color="#BB86FC" />
+              </TouchableOpacity>
+            </View>
           </View>
-        )}
-        <View style={styles.newsContent}>
-          <View style={styles.newsHeader}>
-            <Text style={styles.newsSource}>
-              {data.source.replace('lwliesReviews', 'LWLies Reviews')}
-            </Text>
-            <Text style={styles.newsDate}>
-              {new Date(data.pubDate).toLocaleDateString()}
-            </Text>
-          </View>
-          <Text style={styles.newsTitle} numberOfLines={2}>
-            {data.title}
-          </Text>
-          <Text style={styles.newsDescription} numberOfLines={3}>
-            {data.description.replace(/<[^>]*>/g, '')}
-          </Text>
         </View>
       </TouchableOpacity>
     </View>
@@ -108,7 +163,6 @@ const NewsCard: React.FC<{data: RSSItem}> = ({ data }) => {
 };
 
 const PersonalFeed: React.FC = () => {
-  const [sharedReviews, setSharedReviews] = useState<any[]>([]);
   const [newsItems, setNewsItems] = useState<RSSItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -119,24 +173,9 @@ const PersonalFeed: React.FC = () => {
       setIsLoading(true);
       setError(null);
       
-      // Load RSS feeds
-      console.log('Fetching RSS feeds...');
       const feeds = await fetchRSSFeeds();
       console.log('Feeds received:', feeds.length);
       setNewsItems(feeds);
-
-      // Load reviews
-      const reviewsRef = collection(db, 'sharedReviews');
-      const q = query(reviewsRef, orderBy('createdAt', 'desc'));
-      
-      const snapshot = await getDocs(q);
-      const reviews = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      console.log('Reviews received:', reviews.length);
-      setSharedReviews(reviews);
-
     } catch (err) {
       console.error('Error loading data:', err);
       setError('Failed to load content. Please try again.');
@@ -178,23 +217,18 @@ const PersonalFeed: React.FC = () => {
     <ScrollView 
       style={styles.feedContainer}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      snapToInterval={SCREEN_HEIGHT - 120} // Account for header and padding
+      snapToInterval={SCREEN_HEIGHT - 120}
       decelerationRate="fast"
       showsVerticalScrollIndicator={false}
     >
-      {newsItems.length === 0 && sharedReviews.length === 0 ? (
+      {newsItems.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>No content available</Text>
         </View>
       ) : (
-        <>
-          {newsItems.map((item, index) => (
-            <NewsCard key={`${item.source.title}-${index}`} data={item} />
-          ))}
-          {sharedReviews.map(review => (
-            <ReviewCard key={review.id} data={review} />
-          ))}
-        </>
+        newsItems.map((item, index) => (
+          <NewsCard key={`${item.source}-${index}`} data={item} />
+        ))
       )}
     </ScrollView>
   );
@@ -231,16 +265,11 @@ const CinePalScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
       {activeTab === 'personal' ? <PersonalFeed /> : <PublicFeed />}
-      <FloatingActionButton />
     </View>
   );
 };
 
-const FloatingActionButton: React.FC = () => (
-  <TouchableOpacity style={styles.fab}>
-    <MaterialIcons name="add" size={24} color="#FFF" />
-  </TouchableOpacity>
-);
+// Remove FloatingActionButton component
 
 const additionalStyles = StyleSheet.create({
   centerContainer: {
@@ -275,6 +304,22 @@ const additionalStyles = StyleSheet.create({
     color: '#888',
     fontSize: 16,
   },
+  placeholderText: {
+    color: '#555',
+    marginTop: 8,
+    fontSize: 14,
+  },
+  newsImageContainer: {
+    height: '45%',
+    width: '100%',
+    position: 'relative',
+  },
+  imageLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 });
 
 const newStyles = {
@@ -295,13 +340,122 @@ const newStyles = {
   },
   newsCardContainer: {
     height: SCREEN_HEIGHT - 160, // Account for padding
+    overflow: 'hidden',
   },
   newsImage: {
-    height: '50%', // Take up half of card height
+    height: '45%', // Take up half of card height
     width: '100%',
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
     backgroundColor: '#2A2A2A',
+  },
+  newsContent: {
+    padding: 16,
+    flex: 1,
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  newsTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#E1E1E1',
+    lineHeight: 32,
+  },
+  newsDescription: {
+    fontSize: 16,
+    color: '#B0B0B0',
+    lineHeight: 24,
+    flex: 1,
+  },
+  newsFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  newsSource: {
+    color: '#BB86FC',
+    fontSize: 14,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
+  newsDate: {
+    color: '#888',
+    fontSize: 12,
+  },
+  cardInnerContainer: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#1E1E1E',
+  },
+  newsImageWrapper: {
+    height: '50%',
+    width: '100%',
+    backgroundColor: '#2A2A2A',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    overflow: 'hidden',
+  },
+  newsImage: {
+    width: '100%',
+    height: '100%',
+  },
+  newsContent: {
+    flex: 1,
+    padding: 16,
+    justifyContent: 'space-between',
+  },
+  newsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  newsBody: {
+    flex: 1,
+    gap: 8,
+  },
+  newsTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#E1E1E1',
+    lineHeight: 28,
+    marginBottom: 8,
+  },
+  newsDescription: {
+    fontSize: 16,
+    color: '#B0B0B0',
+    lineHeight: 22,
+  },
+  newsFooter: {
+    marginTop: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#333',
+  },
+  readMoreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 8,
+  },
+  readMoreText: {
+    color: '#BB86FC',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  newsCardContainer: {
+    height: SCREEN_HEIGHT - 160,
+    marginVertical: 8,
+    borderRadius: 12,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
   },
 };
 
@@ -402,22 +556,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#B0B0B0',
   },
-  fab: {
-    position: 'absolute',
-    bottom: 24,
-    right: 24,
-    backgroundColor: '#BB86FC',
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-  },
   newsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -463,6 +601,7 @@ const styles = StyleSheet.create({
   },
   newsCardContainer: {
     height: SCREEN_HEIGHT - 160, // Account for padding
+    overflow: 'hidden',
   },
   ...additionalStyles,
   ...newStyles,
