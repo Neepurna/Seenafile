@@ -32,7 +32,17 @@ const LoginScreen = ({ navigation }) => {
     const { user, error, needsVerification } = await signIn(email, password);
     setIsLoading(false);
 
-    if (needsVerification) {
+    if (error) {
+      Alert.alert('Error', error);
+      return;
+    }
+
+    if (!user) {
+      Alert.alert('Error', 'Login failed');
+      return;
+    }
+
+    if (!user.emailVerified) {
       Alert.alert(
         'Email Not Verified',
         'Please verify your email before logging in. Check your inbox or request a new verification email.',
@@ -47,14 +57,7 @@ const LoginScreen = ({ navigation }) => {
       return;
     }
 
-    if (error) {
-      Alert.alert('Error', error);
-      return;
-    }
-
-    if (user && user.emailVerified) {
-      navigation.replace('Tabs');
-    }
+    navigation.replace('Tabs');
   };
 
   const handleSignUp = async () => {

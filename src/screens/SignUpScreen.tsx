@@ -37,9 +37,11 @@ const SignUpScreen = ({ navigation }) => {
       return;
     }
 
-    Alert.alert('Success', message, [
-      { text: 'OK', onPress: () => navigation.navigate('Login') }
-    ]);
+    Alert.alert(
+      'Email Verification Required',
+      'A verification email has been sent to your email address. Please verify your email before logging in.',
+      [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
+    );
   };
 
   return (

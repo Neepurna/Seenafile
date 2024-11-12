@@ -6,6 +6,9 @@ import { db } from '../firebase';
 import { collection, query, orderBy, onSnapshot, getDocs } from 'firebase/firestore';
 import { fetchRSSFeeds } from '../services/rssFeedService';
 import type { RSSItem } from '../types/rss';
+import { calculateMatchScore } from '../utils/matchingUtils';
+import { auth } from '../firebase';
+import ChatList from '../components/ChatList';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 
@@ -234,12 +237,45 @@ const PersonalFeed: React.FC = () => {
   );
 };
 
-const PublicFeed: React.FC = () => (
-  <ScrollView style={styles.feedContainer}>
-    <Text style={styles.feedText}>Public Feed</Text>
-    {/* Add your public feed content here */}
-  </ScrollView>
-);
+const PublicFeed: React.FC = () => {
+  const [matches, setMatches] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetchMatches();
+  }, []);
+
+  const fetchMatches = async () => {
+    if (!auth.currentUser) return;
+    
+    setLoading(true);
+    try {
+      const matchResults = await calculateMatchScore(auth.currentUser.uid);
+      setMatches(matchResults);
+    } catch (error) {
+      console.error('Error fetching matches:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color="#BB86FC" />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.feedContainer}>
+      <ChatList 
+        matches={matches} 
+        currentUserId={auth.currentUser?.uid || ''} 
+      />
+    </View>
+  );
+};
 
 const CinePalScreen: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'personal' | 'public'>('personal');
