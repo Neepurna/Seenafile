@@ -277,8 +277,202 @@ const PublicFeed: React.FC = () => {
   );
 };
 
+const MatchesTab: React.FC = () => {
+  const [matches, setMatches] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    loadMatches();
+  }, []);
+
+  const loadMatches = async () => {
+    if (!auth.currentUser) return;
+    
+    setLoading(true);
+    try {
+      const matchResults = await calculateMatchScore(auth.currentUser.uid);
+      setMatches(matchResults);
+    } catch (error) {
+      console.error('Error loading matches:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color="#BB86FC" />
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView style={styles.feedContainer}>
+      {matches.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>No matches found. Add more movies to your profile!</Text>
+        </View>
+      ) : (
+        matches.map((match) => (
+          <View key={match.userId} style={styles.matchItem}>
+            <Image 
+              source={{ uri: match.photoURL || 'https://via.placeholder.com/50' }}
+              style={styles.matchAvatar}
+            />
+            <View style={styles.matchInfo}>
+              <Text style={styles.matchName}>{match.displayName}</Text>
+              <Text style={styles.matchScore}>
+                {match.score.toFixed(0)}% Match • {match.commonMovies.length} movies in common
+              </Text>
+            </View>
+          </View>
+        ))
+      )}
+    </ScrollView>
+  );
+};
+
+const TestDataTab: React.FC = () => {
+  const [matches, setMatches] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    loadAllUsers();
+  }, []);
+
+  const loadAllUsers = async () => {
+    if (!auth.currentUser) return;
+    
+    setLoading(true);
+    try {
+      // Get all users from Firestore
+      const usersRef = collection(db, 'users');
+      const usersSnapshot = await getDocs(usersRef);
+      
+      // Filter out current user and calculate match scores
+      const currentUserId = auth.currentUser.uid;
+      const userPromises = usersSnapshot.docs
+        .filter(doc => doc.id !== currentUserId)
+        .map(async (doc) => {
+          const userData = doc.data();
+          // Calculate match score for this user
+          const matchResults = await calculateMatchScore(currentUserId, doc.id);
+          const matchScore = matchResults.find(m => m.userId === doc.id)?.score || 0;
+          const commonMovies = matchResults.find(m => m.userId === doc.id)?.commonMovies || [];
+
+          return {
+            userId: doc.id,
+            displayName: userData.displayName || 'Unknown User',
+            photoURL: userData.photoURL,
+            score: matchScore,
+            commonMovies
+          };
+        });
+
+      const allMatches = await Promise.all(userPromises);
+      // Sort by match score
+      setMatches(allMatches.sort((a, b) => b.score - a.score));
+    } catch (error) {
+      console.error('Error loading users:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color="#BB86FC" />
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView style={styles.feedContainer}>
+      {matches.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>No users found</Text>
+        </View>
+      ) : (
+        matches.map((match) => (
+          <View key={match.userId} style={styles.matchItem}>
+            <Image 
+              source={{ uri: match.photoURL || 'https://via.placeholder.com/50' }}
+              style={styles.matchAvatar}
+            />
+            <View style={styles.matchInfo}>
+              <Text style={styles.matchName}>{match.displayName}</Text>
+              <Text style={styles.matchScore}>
+                {match.score.toFixed(0)}% Match • {match.commonMovies.length} movies in common
+              </Text>
+            </View>
+          </View>
+        ))
+      )}
+    </ScrollView>
+  );
+};
+
+const CinePalTab: React.FC = () => {
+  const [matches, setMatches] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    loadMatches();
+  }, []);
+
+  const loadMatches = async () => {
+    if (!auth.currentUser) return;
+    
+    setLoading(true);
+    try {
+      const matchResults = await calculateMatchScore(auth.currentUser.uid);
+      // Filter matches with 30% threshold
+      setMatches(matchResults.filter(match => match.score >= 30));
+    } catch (error) {
+      console.error('Error loading matches:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color="#BB86FC" />
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView style={styles.feedContainer}>
+      {matches.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>No matches found. Add more movies to your profile!</Text>
+        </View>
+      ) : (
+        matches.map((match) => (
+          <View key={match.userId} style={styles.matchItem}>
+            <Image 
+              source={{ uri: match.photoURL || 'https://via.placeholder.com/50' }}
+              style={styles.matchAvatar}
+            />
+            <View style={styles.matchInfo}>
+              <Text style={styles.matchName}>{match.displayName}</Text>
+              <Text style={styles.matchScore}>
+                {match.score.toFixed(0)}% Match • {match.commonMovies.length} movies in common
+              </Text>
+            </View>
+          </View>
+        ))
+      )}
+    </ScrollView>
+  );
+};
+
 const CinePalScreen: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'personal' | 'public'>('personal');
+  const [activeTab, setActiveTab] = useState<'personal' | 'test' | 'cinepal'>('personal');
 
   return (
     <View style={styles.container}>
@@ -292,15 +486,24 @@ const CinePalScreen: React.FC = () => {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity 
-          style={[styles.tab, activeTab === 'public' && styles.activeTab]}
-          onPress={() => setActiveTab('public')}
+          style={[styles.tab, activeTab === 'test' && styles.activeTab]}
+          onPress={() => setActiveTab('test')}
         >
-          <Text style={[styles.tabText, activeTab === 'public' && styles.activeTabText]}>
+          <Text style={[styles.tabText, activeTab === 'test' && styles.activeTabText]}>
+            TestData
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'cinepal' && styles.activeTab]}
+          onPress={() => setActiveTab('cinepal')}
+        >
+          <Text style={[styles.tabText, activeTab === 'cinepal' && styles.activeTabText]}>
             CinePal
           </Text>
         </TouchableOpacity>
       </View>
-      {activeTab === 'personal' ? <PersonalFeed /> : <PublicFeed />}
+      {activeTab === 'personal' ? <PersonalFeed /> : 
+       activeTab === 'test' ? <TestDataTab /> : <CinePalTab />}
     </View>
   );
 };
@@ -355,6 +558,33 @@ const additionalStyles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.3)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  matchItem: {
+    flexDirection: 'row',
+    padding: 16,
+    backgroundColor: '#1E1E1E',
+    borderRadius: 12,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  matchAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: 12,
+  },
+  matchInfo: {
+    flex: 1,
+  },
+  matchName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFF',
+    marginBottom: 4,
+  },
+  matchScore: {
+    fontSize: 14,
+    color: '#BB86FC',
   },
 });
 

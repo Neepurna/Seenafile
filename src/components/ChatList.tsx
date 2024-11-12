@@ -11,6 +11,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
+  ToastAndroid,
+  Alert,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { db } from '../firebase';
@@ -86,13 +88,18 @@ const ChatList: React.FC<ChatListProps> = ({ matches, currentUserId }) => {
   // Add this useEffect to check for new matches
   useEffect(() => {
     const checkNewMatches = async () => {
-      const highMatches = matches.filter(match => match.score >= 70);
+      const highMatches = matches.filter(match => match.score >= 30); // Changed from 70 to 30
       if (highMatches.length > 0) {
         const lastMatch = highMatches[0];
         const matchUserDetails = userDetails[lastMatch.userId];
         if (matchUserDetails) {
           setNewMatchUser(matchUserDetails);
           setShowMatchNotification(true);
+          
+          // Add notification message
+          Platform.OS === 'android' ? 
+            ToastAndroid.show(`New match with ${matchUserDetails.name}!`, ToastAndroid.LONG) :
+            Alert.alert('New Match!', `You matched with ${matchUserDetails.name}!`);
         }
       }
     };
@@ -162,7 +169,7 @@ const ChatList: React.FC<ChatListProps> = ({ matches, currentUserId }) => {
   };
 
   // Filter matches before rendering
-  const filteredMatches = matches.filter(match => match.score >= 70);
+  const filteredMatches = matches.filter(match => match.score >= 30); // Changed from 70 to 30
 
   const renderMatchItem = ({ item }: { item: Match }) => {
     const userData = userDetails[item.userId];
@@ -199,7 +206,7 @@ const ChatList: React.FC<ChatListProps> = ({ matches, currentUserId }) => {
         ListEmptyComponent={() => (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>
-              No matches yet! You need at least 70% compatibility to match.
+              No matches yet! You need at least 30% compatibility to match.  {/* Updated text */}
             </Text>
           </View>
         )}
