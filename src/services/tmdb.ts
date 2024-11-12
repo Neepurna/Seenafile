@@ -1,7 +1,42 @@
 // src/services/tmdb.ts
 
+import axiosInstance from './instance';
+
 const TMDB_API_KEY = '559819d48b95a2e3440df0504dea30fd'; // Replace with your TMDB API key
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
+
+// Add rate limiting
+const REQUESTS_PER_SECOND = 4;
+const REQUEST_QUEUE: (() => Promise<any>)[] = [];
+let processing = false;
+
+const processQueue = async () => {
+  if (processing || REQUEST_QUEUE.length === 0) return;
+  
+  processing = true;
+  while (REQUEST_QUEUE.length > 0) {
+    const request = REQUEST_QUEUE.shift();
+    if (request) {
+      await request();
+      await new Promise(resolve => setTimeout(resolve, 1000 / REQUESTS_PER_SECOND));
+    }
+  }
+  processing = false;
+};
+
+const queueRequest = (request: () => Promise<any>) => {
+  return new Promise((resolve, reject) => {
+    REQUEST_QUEUE.push(async () => {
+      try {
+        const result = await request();
+        resolve(result);
+      } catch (error) {
+        reject(error);
+      }
+    });
+    processQueue();
+  });
+};
 
 // Fetch the list of genres once and cache it
 let genresList: { id: number; name: string }[] = [];
@@ -21,10 +56,10 @@ export const fetchGenres = async () => {
 
 // Function to fetch movies (e.g., popular movies) and include genres
 export const fetchMovies = async (page: number = 1) => {
-  const response = await fetch(
-    `${TMDB_BASE_URL}/movie/popular?api_key=${TMDB_API_KEY}&page=${page}`
-  );
-  return await response.json();
+  return queueRequest(async () => {
+    const response = await axiosInstance.get(`/movie/popular`, { params: { page } });
+    return response.data;
+  });
 };
 
 // Function to fetch top-rated movies and include genres
@@ -288,10 +323,6 @@ const processMovieResponse = async (data: any) => {
 export const fetchMoviesByCategory = async (category: string, page: number = 1) => {
   try {
     switch (category.toLowerCase()) {
-      case 'trending':
-        return await fetchTrendingMovies(page);
-      case 'new releases':
-        return await fetchNewReleases(page);
       case 'top rated':
         return await fetchTopRatedMovies(page);
       case 'classics':

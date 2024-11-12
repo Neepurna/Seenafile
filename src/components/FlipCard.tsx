@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import MovieReview from './MovieReview';
 import { COLORS, DIMS, SPACING, getCardHeight } from '../theme';
+import { getImageUrl } from '../services/instance';
 
 const API_KEY = '559819d48b95a2e3440df0504dea30fd';
 
@@ -105,6 +106,8 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
   const animatedValue = useRef(new Animated.Value(0)).current;
   const lastTap = useRef(0);
   const isAnimating = useRef(false);
+  const [posterUrl, setPosterUrl] = useState<string>('https://via.placeholder.com/500x750?text=Loading...');
+  const [imageError, setImageError] = useState<boolean>(false);
 
   useEffect(() => {
     onSwipingStateChange(!isFlipped);
@@ -114,6 +117,32 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
   useEffect(() => {
     onSwipingStateChange(!showInfo && !isFlipped);
   }, [showInfo, isFlipped, onSwipingStateChange]);
+
+  // Load image URL with fallback
+  useEffect(() => {
+    let mounted = true;
+    
+    const loadImage = async () => {
+      if (!movie?.poster_path) {
+        setPosterUrl('https://via.placeholder.com/500x750?text=No+Image');
+        return;
+      }
+
+      try {
+        const url = await getImageUrl(movie.poster_path);
+        if (mounted) setPosterUrl(url);
+      } catch (error) {
+        console.warn('Image loading error:', error);
+        if (mounted) {
+          setPosterUrl('https://via.placeholder.com/500x750?text=Error+Loading+Image');
+          setImageError(true);
+        }
+      }
+    };
+
+    loadImage();
+    return () => { mounted = false; };
+  }, [movie?.poster_path]);
 
   const handleDoubleTap = () => {
     const currentTime = Date.now();
@@ -426,12 +455,14 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
   const renderFrontFace = () => (
     <View style={styles.frontFaceContainer}>
       <Image 
-        source={{ 
-          uri: poster_path 
-            ? `https://image.tmdb.org/t/p/w500${poster_path}`
-            : 'https://via.placeholder.com/500x750?text=No+Image'
-        }}
+        source={{ uri: posterUrl }}
         style={styles.poster}
+        onError={() => {
+          if (!imageError) {
+            setImageError(true);
+            setPosterUrl('https://via.placeholder.com/500x750?text=Error+Loading+Image');
+          }
+        }}
       />
       <TouchableOpacity
         style={styles.infoButton}

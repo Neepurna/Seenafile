@@ -48,6 +48,8 @@ const ChatList: React.FC<ChatListProps> = ({ matches, currentUserId }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [userDetails, setUserDetails] = useState<{ [key: string]: UserDetails }>({});
+  const [showMatchNotification, setShowMatchNotification] = useState(false);
+  const [newMatchUser, setNewMatchUser] = useState<UserDetails | null>(null);
 
   const fetchUserDetails = async (userId: string) => {
     try {
@@ -80,6 +82,23 @@ const ChatList: React.FC<ChatListProps> = ({ matches, currentUserId }) => {
     
     fetchAllUsers();
   }, [matches]);
+
+  // Add this useEffect to check for new matches
+  useEffect(() => {
+    const checkNewMatches = async () => {
+      const highMatches = matches.filter(match => match.score >= 70);
+      if (highMatches.length > 0) {
+        const lastMatch = highMatches[0];
+        const matchUserDetails = userDetails[lastMatch.userId];
+        if (matchUserDetails) {
+          setNewMatchUser(matchUserDetails);
+          setShowMatchNotification(true);
+        }
+      }
+    };
+
+    checkNewMatches();
+  }, [matches, userDetails]);
 
   const openChat = useCallback(async (match: Match) => {
     setSelectedMatch(match);
@@ -142,6 +161,9 @@ const ChatList: React.FC<ChatListProps> = ({ matches, currentUserId }) => {
     }
   };
 
+  // Filter matches before rendering
+  const filteredMatches = matches.filter(match => match.score >= 70);
+
   const renderMatchItem = ({ item }: { item: Match }) => {
     const userData = userDetails[item.userId];
     console.log('Rendering user:', item.userId, userData); // Debug log
@@ -170,18 +192,45 @@ const ChatList: React.FC<ChatListProps> = ({ matches, currentUserId }) => {
   return (
     <View style={styles.container}>
       <FlatList
-        data={matches}
+        data={filteredMatches}
         renderItem={renderMatchItem}
         keyExtractor={(item) => item.userId}
         contentContainerStyle={styles.listContainer}
         ListEmptyComponent={() => (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>
-              No matches yet! Keep swiping movies to find your movie soulmate.
+              No matches yet! You need at least 70% compatibility to match.
             </Text>
           </View>
         )}
       />
+
+      {/* Match Notification Modal */}
+      <Modal
+        visible={showMatchNotification}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowMatchNotification(false)}
+      >
+        <View style={styles.notificationOverlay}>
+          <View style={styles.notificationBox}>
+            <Text style={styles.notificationTitle}>Congratulations! 🎉</Text>
+            <Text style={styles.notificationText}>
+              You matched with {newMatchUser?.name}!
+            </Text>
+            <Image
+              source={{ uri: newMatchUser?.photoURL }}
+              style={styles.notificationAvatar}
+            />
+            <TouchableOpacity
+              style={styles.notificationButton}
+              onPress={() => setShowMatchNotification(false)}
+            >
+              <Text style={styles.notificationButtonText}>Got it!</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={!!selectedMatch}
@@ -377,6 +426,48 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: 40,
     height: 40,
+  },
+  notificationOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  notificationBox: {
+    backgroundColor: '#1E1E1E',
+    padding: 24,
+    borderRadius: 16,
+    alignItems: 'center',
+    width: '80%',
+  },
+  notificationTitle: {
+    color: '#BB86FC',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
+  notificationText: {
+    color: '#FFF',
+    fontSize: 18,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  notificationAvatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    marginBottom: 16,
+  },
+  notificationButton: {
+    backgroundColor: '#BB86FC',
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+    borderRadius: 24,
+  },
+  notificationButtonText: {
+    color: '#000',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 
