@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,8 @@ import {
   ToastAndroid,
   Alert,
   ActivityIndicator,
+  useWindowDimensions,
+  Keyboard,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { db } from '../firebase';
@@ -77,6 +79,9 @@ const ChatList: React.FC<ChatListProps> = ({
   const [newMatchUser, setNewMatchUser] = useState<UserDetails | null>(null);
   const [isLoadingPersisted, setIsLoadingPersisted] = useState(true);
   const [seenMatches, setSeenMatches] = useState<string[]>([]);
+  const messagesListRef = useRef<FlatList>(null);
+  const { height: windowHeight } = useWindowDimensions();
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const fetchUserDetails = async (userId: string) => {
     try {
@@ -184,6 +189,30 @@ const ChatList: React.FC<ChatListProps> = ({
     return () => unsubscribe();
   }, [currentUserId]);
 
+  useEffect(() => {
+    const keyboardWillShow = (e: any) => {
+      setKeyboardHeight(e.endCoordinates.height);
+    };
+
+    const keyboardWillHide = () => {
+      setKeyboardHeight(0);
+    };
+
+    const showSubscription = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      keyboardWillShow
+    );
+    const hideSubscription = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      keyboardWillHide
+    );
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
+
   const openChat = useCallback(async (match: Match) => {
     setSelectedMatch(match);
     await fetchUserDetails(match.userId);
@@ -202,14 +231,14 @@ const ChatList: React.FC<ChatListProps> = ({
 
       // Subscribe to messages
       const messagesRef = collection(chatRef, 'messages');
-      const q = query(messagesRef, orderBy('timestamp', 'desc'));
+      const q = query(messagesRef, orderBy('timestamp', 'asc')); // Changed to ascending order
 
       const unsubscribe = onSnapshot(q, (snapshot) => {
         const newMessages = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         } as Message));
-        setMessages(newMessages);
+        setMessages(newMessages); // No need to reverse
       });
 
       return unsubscribe;
@@ -371,6 +400,13 @@ const ChatList: React.FC<ChatListProps> = ({
     }
   }, [messages, selectedMatch, isLoadingPersisted]);
 
+  // Add this function to scroll to bottom
+  const scrollToBottom = () => {
+    if (messages.length > 0 && messagesListRef.current) {
+      messagesListRef.current.scrollToOffset({ offset: 0, animated: true });
+    }
+  };
+
   if (isLoadingPersisted) {
     return (
       <View style={styles.centerContainer}>
@@ -381,127 +417,156 @@ const ChatList: React.FC<ChatListProps> = ({
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.chatContainer}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 25}
-      >
-        {selectedMatch ? (
-          <>
-            <View style={styles.chatHeader}>
-              <TouchableOpacity 
-                style={styles.backButton}
-                onPress={() => setSelectedMatch(null)}
-              >
-                <MaterialIcons name="arrow-back" size={24} color="#FFF" />
-              </TouchableOpacity>
-              <Text style={styles.chatTitle}>
-                {userDetails[selectedMatch.userId]?.name || 'Chat'}
-              </Text>
-            </View>
-
-            <FlatList
-              data={messages}
-              inverted
-              renderItem={({ item }) => (
-                <View style={[
-                  styles.messageContainer,
-                  item.senderId === currentUserId ? styles.sentMessage : styles.receivedMessage
-                ]}>
-                  <Text style={[
-                    styles.messageText,
-                    item.senderId === currentUserId ? styles.sentMessageText : styles.receivedMessageText
-                  ]}>{item.text}</Text>
-                </View>
-              )}
-              keyExtractor={item => item.id}
-              contentContainerStyle={styles.messagesContainer}
-            />
-
-            <View style={styles.inputContainer}>
-              <TextInput
-                style={styles.input}
-                value={newMessage}
-                onChangeText={setNewMessage}
-                placeholder="Type a message..."
-                placeholderTextColor="#666"
-                multiline={true}
-                maxLength={1000}
-              />
-              <TouchableOpacity 
-                style={styles.sendButton}
-                onPress={sendMessage}
-                disabled={!newMessage.trim()}
-              >
-                <MaterialIcons 
-                  name="send" 
-                  size={24} 
-                  color={newMessage.trim() ? "#BB86FC" : "#666"} 
-                />
-              </TouchableOpacity>
-            </View>
-          </>
-        ) : (
-          <FlatList
-            data={sortedMatches}
-            renderItem={({ item }) => (
-              <TouchableOpacity 
-                style={[
-                  styles.matchItem,
-                  connectedUsers.includes(item.userId) && styles.connectedMatchItem
-                ]}
-                onPress={() => handleSelectMatch(item)}
-              >
-                <Image
-                  source={{ uri: userDetails[item.userId]?.photoURL || 'https://via.placeholder.com/50' }}
-                  style={styles.avatar}
-                />
-                <View style={styles.matchInfo}>
-                  <Text style={styles.username}>
-                    {userDetails[item.userId]?.name || 'Loading...'}
-                    {connectedUsers.includes(item.userId) && 
-                      <Text style={styles.connectedBadge}> • Connected</Text>
-                    }
-                  </Text>
-                  <Text style={styles.matchScore}>
-                    {item.score.toFixed(0)}% Match • {item.commonMovies.length} movies in common
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            )}
-            keyExtractor={(item) => item.userId}
-            contentContainerStyle={styles.listContainer}
-            ListEmptyComponent={EmptyState}
-          />
-        )}
-
-        {/* Match Notification Modal */}
-        <Modal
-          visible={showMatchNotification}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setShowMatchNotification(false)}
-        >
-          <View style={styles.notificationOverlay}>
-            <View style={styles.notificationBox}>
-              <Text style={styles.notificationTitle}>Congratulations! 🎉</Text>
-              <Text style={styles.notificationText}>
-                You matched with {newMatchUser?.name}!
-              </Text>
-              <Image
-                source={{ uri: newMatchUser?.photoURL }}
-                style={styles.notificationAvatar}
-              />
-              <TouchableOpacity
-                style={styles.notificationButton}
-                onPress={() => setShowMatchNotification(false)}
-              >
-                <Text style={styles.notificationButtonText}>Got it!</Text>
-              </TouchableOpacity>
-            </View>
+      {selectedMatch ? (
+        <View style={styles.chatContainer}>
+          <View style={styles.chatHeader}>
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={() => setSelectedMatch(null)}
+            >
+              <MaterialIcons name="arrow-back" size={24} color="#FFF" />
+            </TouchableOpacity>
+            <Text style={styles.chatTitle}>
+              {userDetails[selectedMatch.userId]?.name || 'Chat'}
+            </Text>
           </View>
-        </Modal>
-      </KeyboardAvoidingView>
+
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={styles.keyboardAvoidingView}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 150 : 120} // Increased offset significantly
+          >
+            <View style={styles.chatContentContainer}>
+              <FlatList
+                ref={messagesListRef}
+                data={messages} // Remove reverse
+                inverted={false} // Set to false
+                renderItem={({ item }) => (
+                  <View style={[
+                    styles.messageContainer,
+                    item.senderId === currentUserId ? styles.sentMessage : styles.receivedMessage
+                  ]}>
+                    <Text style={[
+                      styles.messageText,
+                      item.senderId === currentUserId ? styles.sentMessageText : styles.receivedMessageText
+                    ]}>{item.text}</Text>
+                  </View>
+                )}
+                keyExtractor={item => item.id}
+                contentContainerStyle={[
+                  styles.messagesContentContainer,
+                  { 
+                    flexGrow: 1,
+                    justifyContent: 'flex-end',
+                    paddingBottom: Platform.OS === 'ios' 
+                      ? keyboardHeight + 90  // Increased padding for iOS
+                      : keyboardHeight + 60  // Increased padding for Android
+                  }
+                ]}
+                onLayout={() => {
+                  messagesListRef.current?.scrollToEnd({ animated: false });
+                }}
+                onContentSizeChange={() => {
+                  messagesListRef.current?.scrollToEnd({ animated: true });
+                }}
+              />
+            </View>
+
+            <View style={[
+              styles.inputWrapper,
+              Platform.OS === 'android' && {
+                position: 'absolute',
+                bottom: keyboardHeight > 0 ? keyboardHeight + 30 : 0, // Added extra space
+                left: 0,
+                right: 0,
+                backgroundColor: '#1E1E1E',
+              }
+            ]}>
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.input}
+                  value={newMessage}
+                  onChangeText={setNewMessage}
+                  placeholder="Type a message..."
+                  placeholderTextColor="#666"
+                  multiline
+                  maxLength={1000}
+                />
+                <TouchableOpacity 
+                  style={styles.sendButton}
+                  onPress={sendMessage}
+                  disabled={!newMessage.trim()}
+                >
+                  <MaterialIcons 
+                    name="send" 
+                    size={24} 
+                    color={newMessage.trim() ? "#BB86FC" : "#666"} 
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      ) : (
+        <FlatList
+          data={sortedMatches}
+          renderItem={({ item }) => (
+            <TouchableOpacity 
+              style={[
+                styles.matchItem,
+                connectedUsers.includes(item.userId) && styles.connectedMatchItem
+              ]}
+              onPress={() => handleSelectMatch(item)}
+            >
+              <Image
+                source={{ uri: userDetails[item.userId]?.photoURL || 'https://via.placeholder.com/50' }}
+                style={styles.avatar}
+              />
+              <View style={styles.matchInfo}>
+                <Text style={styles.username}>
+                  {userDetails[item.userId]?.name || 'Loading...'}
+                  {connectedUsers.includes(item.userId) && 
+                    <Text style={styles.connectedBadge}> • Connected</Text>
+                  }
+                </Text>
+                <Text style={styles.matchScore}>
+                  {item.score.toFixed(0)}% Match • {item.commonMovies.length} movies in common
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
+          keyExtractor={(item) => item.userId}
+          contentContainerStyle={styles.listContainer}
+          ListEmptyComponent={EmptyState}
+        />
+      )}
+
+      {/* Match Notification Modal */}
+      <Modal
+        visible={showMatchNotification}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowMatchNotification(false)}
+      >
+        <View style={styles.notificationOverlay}>
+          <View style={styles.notificationBox}>
+            <Text style={styles.notificationTitle}>Congratulations! 🎉</Text>
+            <Text style={styles.notificationText}>
+              You matched with {newMatchUser?.name}!
+            </Text>
+            <Image
+              source={{ uri: newMatchUser?.photoURL }}
+              style={styles.notificationAvatar}
+            />
+            <TouchableOpacity
+              style={styles.notificationButton}
+              onPress={() => setShowMatchNotification(false)}
+            >
+              <Text style={styles.notificationButtonText}>Got it!</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -560,6 +625,71 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#121212',
   },
+  chatContentContainer: {
+    flex: 1,
+    position: 'relative',
+  },
+  messagesContentContainer: {
+    flexGrow: 1,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  messageContainer: {
+    margin: 4,
+    padding: 12,
+    borderRadius: 20,
+    maxWidth: '80%',
+  },
+  sentMessage: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#BB86FC',
+    marginLeft: '20%',
+  },
+  receivedMessage: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#1E1E1E',
+    marginRight: '20%',
+  },
+  messageText: {
+    fontSize: 16,
+    lineHeight: 20,
+  },
+  sentMessageText: {
+    color: '#000',
+  },
+  receivedMessageText: {
+    color: '#FFF',
+  },
+  inputWrapper: {
+    borderTopWidth: 1,
+    borderTopColor: '#333',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginTop: 'auto',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    minHeight: 50,
+  },
+  input: {
+    flex: 1,
+    fontSize: 16,
+    maxHeight: 100,
+    minHeight: 24,
+    color: '#FFF',
+    marginRight: 8,
+    padding: 0,
+    paddingTop: Platform.OS === 'ios' ? 8 : 0,
+  },
+  sendButton: {
+    padding: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   chatHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -580,55 +710,9 @@ const styles = StyleSheet.create({
   messagesContainer: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-  },
-  messageContainer: {
-    margin: 4,
-    padding: 12,
-    borderRadius: 16,
-    maxWidth: '80%',
-  },
-  sentMessage: {
-    alignSelf: 'flex-end',
-    backgroundColor: '#BB86FC',
-    borderTopRightRadius: 4,
-  },
-  receivedMessage: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#1E1E1E',
-    borderTopLeftRadius: 4,
-  },
-  sentMessageText: {
-    color: '#000',
-  },
-  receivedMessageText: {
-    color: '#FFF',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    padding: 12,
-    backgroundColor: '#1E1E1E',
-    borderTopWidth: 1,
-    borderTopColor: '#333',
-    alignItems: 'flex-end',
-  },
-  input: {
-    flex: 1,
-    backgroundColor: '#333',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginRight: 8,
-    color: '#FFF',
-    fontSize: 16,
-    maxHeight: 100,
-    minHeight: 40,
-  },
-  sendButton: {
-    padding: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 40,
-    height: 40,
+    flexGrow: 1, // Add this
+    justifyContent: 'flex-end', // Add this
+    paddingBottom: 60, // Add this to account for input container height
   },
   notificationOverlay: {
     flex: 1,
@@ -687,6 +771,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#121212',
   },
+  keyboardAvoidingView: {
+    flex: 1,
+    position: 'relative',
+    backgroundColor: '#121212',
+  },
 });
+
 
 export default ChatList;
