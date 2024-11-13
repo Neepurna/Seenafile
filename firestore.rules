@@ -97,10 +97,10 @@ service cloud.firestore {
     }
 
     function isChatParticipant(chatId) {
-      // Simplified chat participant check
       let chatData = get(/databases/$(database)/documents/chats/$(chatId)).data;
       return chatData != null && 
-        (chatData.participants.hasAny([request.auth.uid]));
+        chatData.participants is list &&
+        chatData.participants.hasAny([request.auth.uid]);
     }
 
     function getParent() {
@@ -144,18 +144,14 @@ service cloud.firestore {
       }
     }
 
-    // Updated Chat collection rules
     match /chats/{chatId} {
       allow create: if isSignedIn();
-      allow read: if isSignedIn() && isChatParticipant(chatId);
-      allow update: if isSignedIn() && isChatParticipant(chatId);
-      allow delete: if false;
+      allow read, write: if isSignedIn() && isChatParticipant(chatId);
 
       match /messages/{messageId} {
         allow read: if isSignedIn() && isChatParticipant(chatId);
         allow create: if isSignedIn() && 
           isChatParticipant(chatId) && 
-          isValidMessage() && 
           request.resource.data.senderId == request.auth.uid;
         allow update: if false;
         allow delete: if isSignedIn() && 
@@ -163,24 +159,25 @@ service cloud.firestore {
       }
     }
 
-    // Reviews collection
+    // Update reviews collection rules
     match /reviews/{reviewId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow write: if false;  // Disable direct writes to root reviews
+      
+      match /{document=**} {
+        allow read: if isSignedIn();
+      }
     }
 
-    // Shared reviews collection - Update these rules
+    // Update shared reviews collection rules
     match /sharedReviews/{reviewId} {
-      allow read: if isSignedIn();  // Allow any signed in user to read
-      allow create: if isSignedIn() 
-        && request.resource.data.userId == request.auth.uid
-        && isValidSharedReview();
-      allow update: if isSignedIn() 
-        && resource.data.userId == request.auth.uid
-        && request.resource.data.userId == request.auth.uid;
-      allow delete: if isSignedIn() 
-        && resource.data.userId == request.auth.uid;
+      allow read: if true;  // Public reads
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+      
+      match /{document=**} {
+        allow read: if true;  // Allow nested reads
+      }
     }
 
     // Matches collection

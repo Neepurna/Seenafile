@@ -30,6 +30,32 @@ import {
 } from 'firebase/firestore';
 
 // Add at the top after imports
+interface FirebaseListener {
+  id: string;
+  type: 'chat' | 'profile' | 'reviews' | 'other';
+  unsubscribe: () => void;
+}
+
+// Single declaration of activeListeners
+let activeListeners: FirebaseListener[] = [];
+
+// Consolidated listener management functions
+export const addListener = (listener: FirebaseListener) => {
+  activeListeners.push(listener);
+};
+
+export const removeListener = (id: string) => {
+  const index = activeListeners.findIndex(l => l.id === id);
+  if (index !== -1) {
+    try {
+      activeListeners[index].unsubscribe();
+      activeListeners.splice(index, 1);
+    } catch (e) {
+      console.warn('Error removing listener:', e);
+    }
+  }
+};
+
 let listeners: { [key: string]: () => void } = {};
 
 const firebaseConfig = {
@@ -351,14 +377,6 @@ export const saveReview = async (reviewData: {
   }
 };
 
-// Add a collection of active listeners
-let activeListeners: (() => void)[] = [];
-
-// Add function to register listeners
-export const registerListener = (unsubscribe: () => void) => {
-  activeListeners.push(unsubscribe);
-};
-
 // Global listener management
 const listenerMap = new Map<string, Unsubscribe>();
 
@@ -511,6 +529,18 @@ export const signOut = async () => {
     
     // Clear the listeners object
     listeners = {};
+    
+    // Clean up all listeners first
+    while (activeListeners.length > 0) {
+      const listener = activeListeners.pop();
+      try {
+        if (listener) {
+          listener.unsubscribe();
+        }
+      } catch (e) {
+        console.warn('Error cleaning up listener:', e);
+      }
+    }
     
     // Sign out
     await auth.signOut();

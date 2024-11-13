@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, Image, TouchableOpacity, Alert } from 'react-na
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';  // Changed from react-native-vector-icons
 import { auth, db, signOut } from '../firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 // Add type definition for routes
@@ -28,6 +28,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
 
   useEffect(() => {
     let isSubscribed = true;
+    let unsubscribeUser: (() => void) | undefined;
 
     const loadUserProfile = async () => {
       if (!auth.currentUser) {
@@ -41,28 +42,34 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
         setError(null);
         
         const userRef = doc(db, 'users', auth.currentUser.uid);
-        const userDoc = await getDoc(userRef);
         
-        if (!userDoc.exists()) {
-          const defaultProfile = {
-            name: auth.currentUser.displayName || 'New User',
-            email: auth.currentUser.email,
-            createdAt: new Date()  // Changed from serverTimestamp()
-          };
-          
-          await setDoc(userRef, defaultProfile);
-          if (isSubscribed) setUserProfile(defaultProfile);
-        } else {
-          if (isSubscribed) setUserProfile(userDoc.data());
-        }
+        // Set up real-time listener
+        unsubscribeUser = onSnapshot(userRef, 
+          (doc) => {
+            if (isSubscribed) {
+              if (doc.exists()) {
+                setUserProfile(doc.data());
+              } else {
+                setError('Profile not found');
+              }
+              setIsLoading(false);
+            }
+          },
+          (error) => {
+            if (isSubscribed) {
+              console.error('Profile loading error:', error);
+              setError('Failed to load profile');
+              setIsLoading(false);
+            }
+          }
+        );
+        
       } catch (err) {
-        console.error('Profile loading error:', err);
         if (isSubscribed) {
+          console.error('Profile loading error:', err);
           setError('Failed to load profile');
-          Alert.alert('Error', 'Failed to load profile data');
+          setIsLoading(false);
         }
-      } finally {
-        if (isSubscribed) setIsLoading(false);
       }
     };
 
@@ -71,8 +78,9 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
     // Cleanup function
     return () => {
       isSubscribed = false;
-      setUserProfile(null);
-      setError(null);
+      if (unsubscribeUser) {
+        unsubscribeUser();
+      }
     };
   }, [navigation]);
 
@@ -86,11 +94,11 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
           text: "Sign Out", 
           onPress: async () => {
             try {
+              await signOut(); // Make sure signOut happens first
               navigation.reset({
                 index: 0,
                 routes: [{ name: 'Login' }],
               });
-              await signOut();
             } catch (error) {
               Alert.alert('Error', 'Failed to sign out');
             }

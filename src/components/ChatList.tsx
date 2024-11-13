@@ -18,7 +18,7 @@ import {
   Keyboard,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { db } from '../firebase';
+import { db, addListener, removeListener } from '../firebase';
 import { collection, doc, getDoc, addDoc, query, orderBy, onSnapshot, setDoc, where, updateDoc } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -406,6 +406,61 @@ const ChatList: React.FC<ChatListProps> = ({
       messagesListRef.current.scrollToOffset({ offset: 0, animated: true });
     }
   };
+
+  useEffect(() => {
+    let chatListener: string | undefined;
+
+    const setupChatListener = async () => {
+      if (!selectedMatch || !currentUserId) return;
+
+      try {
+        const chatId = [currentUserId, selectedMatch.userId].sort().join('_');
+        const chatRef = doc(db, 'chats', chatId);
+        
+        // First create/update the chat document
+        await setDoc(chatRef, {
+          participants: [currentUserId, selectedMatch.userId].sort(),
+          createdAt: new Date(),
+          lastMessage: null,
+          lastMessageTime: null
+        }, { merge: true });
+
+        // Then set up the messages listener
+        const messagesRef = collection(chatRef, 'messages');
+        const q = query(messagesRef, orderBy('timestamp', 'asc'));
+        
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+          const newMessages = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          } as Message));
+          setMessages(newMessages);
+        }, (error) => {
+          console.error('Chat listener error:', error);
+        });
+
+        // Register listener with unique ID
+        chatListener = `chat_${chatId}_${Date.now()}`;
+        addListener({
+          id: chatListener,
+          type: 'chat',
+          unsubscribe
+        });
+
+      } catch (error) {
+        console.error('Error setting up chat:', error);
+      }
+    };
+
+    setupChatListener();
+
+    // Cleanup function
+    return () => {
+      if (chatListener) {
+        removeListener(chatListener);
+      }
+    };
+  }, [selectedMatch, currentUserId]);
 
   if (isLoadingPersisted) {
     return (
