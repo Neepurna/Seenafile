@@ -1,9 +1,9 @@
 // src/screens/CinePalScreen.tsx
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Linking, ActivityIndicator, RefreshControl, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Linking, ActivityIndicator, RefreshControl, Dimensions, Platform, ToastAndroid, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons'; // Replace the icon import
 import { db } from '../firebase';
-import { collection, query, orderBy, onSnapshot, getDocs } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, getDocs, where, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { fetchRSSFeeds } from '../services/rssFeedService';
 import type { RSSItem } from '../types/rss';
 import { calculateMatchScore } from '../utils/matchingUtils';
@@ -240,6 +240,7 @@ const PersonalFeed: React.FC = () => {
 const PublicFeed: React.FC = () => {
   const [matches, setMatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchMatches();
@@ -249,11 +250,38 @@ const PublicFeed: React.FC = () => {
     if (!auth.currentUser) return;
     
     setLoading(true);
+    setError(null);
     try {
+      // Validate current user data first
+      const currentUserDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+      if (!currentUserDoc.exists()) {
+        throw new Error('Current user profile not found');
+      }
+
       const matchResults = await calculateMatchScore(auth.currentUser.uid);
-      setMatches(matchResults);
+      
+      // Filter out any invalid match data
+      const validMatches = matchResults.filter(match => 
+        match && 
+        match.userId && 
+        typeof match.score === 'number' && 
+        Array.isArray(match.commonMovies) &&
+        match.commonMovies.every(movie => 
+          movie && 
+          movie.movieId && 
+          movie.category
+        )
+      );
+
+      setMatches(validMatches);
     } catch (error) {
       console.error('Error fetching matches:', error);
+      setError('Failed to load matches. Please try again.');
+      
+      // Show user-friendly error
+      Platform.OS === 'android' 
+        ? ToastAndroid.show('Error loading matches', ToastAndroid.SHORT)
+        : Alert.alert('Error', 'Failed to load matches. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -263,6 +291,17 @@ const PublicFeed: React.FC = () => {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#BB86FC" />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={fetchMatches}>
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -277,452 +316,43 @@ const PublicFeed: React.FC = () => {
   );
 };
 
-const MatchesTab: React.FC = () => {
-  const [matches, setMatches] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    loadMatches();
-  }, []);
-
-  const loadMatches = async () => {
-    if (!auth.currentUser) return;
-    
-    setLoading(true);
-    try {
-      const matchResults = await calculateMatchScore(auth.currentUser.uid);
-      setMatches(matchResults);
-    } catch (error) {
-      console.error('Error loading matches:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#BB86FC" />
-      </View>
-    );
-  }
-
-  return (
-    <ScrollView style={styles.feedContainer}>
-      {matches.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No matches found. Add more movies to your profile!</Text>
-        </View>
-      ) : (
-        matches.map((match) => (
-          <View key={match.userId} style={styles.matchItem}>
-            <Image 
-              source={{ uri: match.photoURL || 'https://via.placeholder.com/50' }}
-              style={styles.matchAvatar}
-            />
-            <View style={styles.matchInfo}>
-              <Text style={styles.matchName}>{match.displayName}</Text>
-              <Text style={styles.matchScore}>
-                {match.score.toFixed(0)}% Match • {match.commonMovies.length} movies in common
-              </Text>
-            </View>
-          </View>
-        ))
-      )}
-    </ScrollView>
-  );
-};
-
-const TestDataTab: React.FC = () => {
-  const [matches, setMatches] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    loadAllUsers();
-  }, []);
-
-  const loadAllUsers = async () => {
-    if (!auth.currentUser) return;
-    
-    setLoading(true);
-    try {
-      // Get all users from Firestore
-      const usersRef = collection(db, 'users');
-      const usersSnapshot = await getDocs(usersRef);
-      
-      // Filter out current user and calculate match scores
-      const currentUserId = auth.currentUser.uid;
-      const userPromises = usersSnapshot.docs
-        .filter(doc => doc.id !== currentUserId)
-        .map(async (doc) => {
-          const userData = doc.data();
-          // Calculate match score for this user
-          const matchResults = await calculateMatchScore(currentUserId, doc.id);
-          const matchScore = matchResults.find(m => m.userId === doc.id)?.score || 0;
-          const commonMovies = matchResults.find(m => m.userId === doc.id)?.commonMovies || [];
-
-          return {
-            userId: doc.id,
-            displayName: userData.displayName || 'Unknown User',
-            photoURL: userData.photoURL,
-            score: matchScore,
-            commonMovies
-          };
-        });
-
-      const allMatches = await Promise.all(userPromises);
-      // Sort by match score
-      setMatches(allMatches.sort((a, b) => b.score - a.score));
-    } catch (error) {
-      console.error('Error loading users:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#BB86FC" />
-      </View>
-    );
-  }
-
-  return (
-    <ScrollView style={styles.feedContainer}>
-      {matches.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No users found</Text>
-        </View>
-      ) : (
-        matches.map((match) => (
-          <View key={match.userId} style={styles.matchItem}>
-            <Image 
-              source={{ uri: match.photoURL || 'https://via.placeholder.com/50' }}
-              style={styles.matchAvatar}
-            />
-            <View style={styles.matchInfo}>
-              <Text style={styles.matchName}>{match.displayName}</Text>
-              <Text style={styles.matchScore}>
-                {match.score.toFixed(0)}% Match • {match.commonMovies.length} movies in common
-              </Text>
-            </View>
-          </View>
-        ))
-      )}
-    </ScrollView>
-  );
-};
-
-const CinePalTab: React.FC = () => {
-  const [matches, setMatches] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    loadMatches();
-  }, []);
-
-  const loadMatches = async () => {
-    if (!auth.currentUser) return;
-    
-    setLoading(true);
-    try {
-      const matchResults = await calculateMatchScore(auth.currentUser.uid);
-      // Filter matches with 30% threshold
-      setMatches(matchResults.filter(match => match.score >= 30));
-    } catch (error) {
-      console.error('Error loading matches:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#BB86FC" />
-      </View>
-    );
-  }
-
-  return (
-    <ScrollView style={styles.feedContainer}>
-      {matches.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No matches found. Add more movies to your profile!</Text>
-        </View>
-      ) : (
-        matches.map((match) => (
-          <View key={match.userId} style={styles.matchItem}>
-            <Image 
-              source={{ uri: match.photoURL || 'https://via.placeholder.com/50' }}
-              style={styles.matchAvatar}
-            />
-            <View style={styles.matchInfo}>
-              <Text style={styles.matchName}>{match.displayName}</Text>
-              <Text style={styles.matchScore}>
-                {match.score.toFixed(0)}% Match • {match.commonMovies.length} movies in common
-              </Text>
-            </View>
-          </View>
-        ))
-      )}
-    </ScrollView>
-  );
-};
-
 const CinePalScreen: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'personal' | 'test' | 'cinepal'>('personal');
+  const [activeTab, setActiveTab] = useState('personal');
+
+  const renderTab = () => {
+    switch (activeTab) {
+      case 'personal':
+        return <PersonalFeed />;
+      case 'public':
+        return <PublicFeed />;
+      default:
+        return <PersonalFeed />;
+    }
+  };
 
   return (
     <View style={styles.container}>
       <View style={styles.tabContainer}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[styles.tab, activeTab === 'personal' && styles.activeTab]}
           onPress={() => setActiveTab('personal')}
         >
           <Text style={[styles.tabText, activeTab === 'personal' && styles.activeTabText]}>
-            CineWall
+            For You
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'test' && styles.activeTab]}
-          onPress={() => setActiveTab('test')}
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'public' && styles.activeTab]}
+          onPress={() => setActiveTab('public')}
         >
-          <Text style={[styles.tabText, activeTab === 'test' && styles.activeTabText]}>
-            TestData
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'cinepal' && styles.activeTab]}
-          onPress={() => setActiveTab('cinepal')}
-        >
-          <Text style={[styles.tabText, activeTab === 'cinepal' && styles.activeTabText]}>
-            CinePal
+          <Text style={[styles.tabText, activeTab === 'public' && styles.activeTabText]}>
+            Public
           </Text>
         </TouchableOpacity>
       </View>
-      {activeTab === 'personal' ? <PersonalFeed /> : 
-       activeTab === 'test' ? <TestDataTab /> : <CinePalTab />}
+      {renderTab()}
     </View>
   );
-};
-
-// Remove FloatingActionButton component
-
-const additionalStyles = StyleSheet.create({
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#121212',
-  },
-  errorText: {
-    color: '#FF5252',
-    fontSize: 16,
-    marginBottom: 16,
-  },
-  retryButton: {
-    backgroundColor: '#BB86FC',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: '#FFF',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 32,
-  },
-  emptyText: {
-    color: '#888',
-    fontSize: 16,
-  },
-  placeholderText: {
-    color: '#555',
-    marginTop: 8,
-    fontSize: 14,
-  },
-  newsImageContainer: {
-    height: '45%',
-    width: '100%',
-    position: 'relative',
-  },
-  imageLoadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  matchItem: {
-    flexDirection: 'row',
-    padding: 16,
-    backgroundColor: '#1E1E1E',
-    borderRadius: 12,
-    marginBottom: 12,
-    alignItems: 'center',
-  },
-  matchAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    marginRight: 12,
-  },
-  matchInfo: {
-    flex: 1,
-  },
-  matchName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#FFF',
-    marginBottom: 4,
-  },
-  matchScore: {
-    fontSize: 14,
-    color: '#BB86FC',
-  },
-});
-
-const newStyles = {
-  fullCardContainer: {
-    height: SCREEN_HEIGHT - 120, // Account for header and padding
-    paddingVertical: 8,
-    justifyContent: 'center',
-  },
-  imageLoadingContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.3)',
-  },
-  newsCardContainer: {
-    height: SCREEN_HEIGHT - 160, // Account for padding
-    overflow: 'hidden',
-  },
-  newsImage: {
-    height: '45%', // Take up half of card height
-    width: '100%',
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    backgroundColor: '#2A2A2A',
-  },
-  newsContent: {
-    padding: 16,
-    flex: 1,
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  newsTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#E1E1E1',
-    lineHeight: 32,
-  },
-  newsDescription: {
-    fontSize: 16,
-    color: '#B0B0B0',
-    lineHeight: 24,
-    flex: 1,
-  },
-  newsFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  newsSource: {
-    color: '#BB86FC',
-    fontSize: 14,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-  },
-  newsDate: {
-    color: '#888',
-    fontSize: 12,
-  },
-  cardInnerContainer: {
-    flex: 1,
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: '#1E1E1E',
-  },
-  newsImageWrapper: {
-    height: '50%',
-    width: '100%',
-    backgroundColor: '#2A2A2A',
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    overflow: 'hidden',
-  },
-  newsImage: {
-    width: '100%',
-    height: '100%',
-  },
-  newsContent: {
-    flex: 1,
-    padding: 16,
-    justifyContent: 'space-between',
-  },
-  newsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  newsBody: {
-    flex: 1,
-    gap: 8,
-  },
-  newsTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#E1E1E1',
-    lineHeight: 28,
-    marginBottom: 8,
-  },
-  newsDescription: {
-    fontSize: 16,
-    color: '#B0B0B0',
-    lineHeight: 22,
-  },
-  newsFooter: {
-    marginTop: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#333',
-  },
-  readMoreButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 8,
-  },
-  readMoreText: {
-    color: '#BB86FC',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  newsCardContainer: {
-    height: SCREEN_HEIGHT - 160,
-    marginVertical: 8,
-    borderRadius: 12,
-    overflow: 'hidden',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-  },
 };
 
 const styles = StyleSheet.create({
@@ -869,8 +499,214 @@ const styles = StyleSheet.create({
     height: SCREEN_HEIGHT - 160, // Account for padding
     overflow: 'hidden',
   },
-  ...additionalStyles,
-  ...newStyles,
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#121212',
+  },
+  errorText: {
+    color: '#FF5252',
+    fontSize: 16,
+    marginBottom: 16,
+  },
+  retryButton: {
+    backgroundColor: '#BB86FC',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  emptyText: {
+    color: '#888',
+    fontSize: 16,
+  },
+  placeholderText: {
+    color: '#555',
+    marginTop: 8,
+    fontSize: 14,
+  },
+  newsImageContainer: {
+    height: '45%',
+    width: '100%',
+    position: 'relative',
+  },
+  imageLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  matchItem: {
+    flexDirection: 'row',
+    padding: 16,
+    backgroundColor: '#1E1E1E',
+    borderRadius: 12,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  matchAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: 12,
+  },
+  matchInfo: {
+    flex: 1,
+  },
+  matchName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFF',
+    marginBottom: 4,
+  },
+  matchScore: {
+    fontSize: 14,
+    color: '#BB86FC',
+  },
+  fullCardContainer: {
+    height: SCREEN_HEIGHT - 120, // Account for header and padding
+    paddingVertical: 8,
+    justifyContent: 'center',
+  },
+  imageLoadingContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  newsImage: {
+    height: '45%', // Take up half of card height
+    width: '100%',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    backgroundColor: '#2A2A2A',
+  },
+  newsContent: {
+    flex: 1,
+    padding: 16,
+    justifyContent: 'space-between',
+  },
+  newsTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#E1E1E1',
+    lineHeight: 32,
+  },
+  newsDescription: {
+    fontSize: 16,
+    color: '#B0B0B0',
+    lineHeight: 24,
+    flex: 1,
+  },
+  newsFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  newsSource: {
+    color: '#BB86FC',
+    fontSize: 14,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
+  newsDate: {
+    color: '#888',
+    fontSize: 12,
+  },
+  cardInnerContainer: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#1E1E1E',
+  },
+  newsImageWrapper: {
+    height: '50%',
+    width: '100%',
+    backgroundColor: '#2A2A2A',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    overflow: 'hidden',
+  },
+  newsImage: {
+    width: '100%',
+    height: '100%',
+  },
+  newsContent: {
+    flex: 1,
+    padding: 16,
+    justifyContent: 'space-between',
+  },
+  newsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  newsBody: {
+    flex: 1,
+    gap: 8,
+  },
+  newsTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#E1E1E1',
+    lineHeight: 28,
+    marginBottom: 8,
+  },
+  newsDescription: {
+    fontSize: 16,
+    color: '#B0B0B0',
+    lineHeight: 22,
+  },
+  newsFooter: {
+    marginTop: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#333',
+  },
+  readMoreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 8,
+  },
+  readMoreText: {
+    color: '#BB86FC',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  newsCardContainer: {
+    height: SCREEN_HEIGHT - 160,
+    marginVertical: 8,
+    borderRadius: 12,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  matchedUserContainer: {
+    flex: 1,
+    width: '100%',
+  },
 });
 
 export default CinePalScreen;

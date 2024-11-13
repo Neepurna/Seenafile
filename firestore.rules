@@ -85,14 +85,15 @@ service cloud.firestore {
 
     function isValidMatch() {
       let matchData = request.resource.data;
-      return matchData.keys().hasAll(['user1Id', 'user2Id', 'score', 'commonMovies', 'timestamp']) &&
+      return matchData.keys().hasAll(['user1Id', 'user2Id', 'score', 'commonMovies', 'timestamp', 'isNew']) &&
         matchData.user1Id is string &&
         matchData.user2Id is string &&
         matchData.score is number &&
-        matchData.score >= 0 &&
+        matchData.score >= 20 &&  // Updated threshold
         matchData.score <= 100 &&
         matchData.commonMovies is list &&
-        matchData.timestamp is timestamp;
+        matchData.timestamp is timestamp &&
+        matchData.isNew is bool;
     }
 
     function isChatParticipant(chatId) {

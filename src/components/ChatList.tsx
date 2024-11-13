@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { db } from '../firebase';
-import { collection, doc, getDoc, addDoc, query, orderBy, onSnapshot, setDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, addDoc, query, orderBy, onSnapshot, setDoc, where, updateDoc } from 'firebase/firestore';
 
 interface Message {
   id: string;
@@ -25,13 +25,21 @@ interface Message {
   timestamp: Date;
 }
 
+interface MovieMatch {
+  movieId: string;
+  title: string;
+  category: string;
+  poster_path: string;
+  status: string;
+  timestamp: Date;
+}
+
 interface Match {
   userId: string;
   score: number;
-  commonMovies: Array<{
-    movieId: string;
-    category: string;
-  }>;
+  commonMovies: MovieMatch[];
+  displayName?: string;
+  photoURL?: string;
 }
 
 interface UserDetails {
@@ -43,10 +51,17 @@ interface UserDetails {
 interface ChatListProps {
   matches: Match[];
   currentUserId: string;
+  selectedMatch?: Match | null;
+  onSelectMatch?: (match: Match | null) => void;
 }
 
-const ChatList: React.FC<ChatListProps> = ({ matches, currentUserId }) => {
-  const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
+const ChatList: React.FC<ChatListProps> = ({ 
+  matches, 
+  currentUserId, 
+  selectedMatch: propSelectedMatch,
+  onSelectMatch 
+}) => {
+  const [selectedMatch, setSelectedMatch] = useState<Match | null>(propSelectedMatch || null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [userDetails, setUserDetails] = useState<{ [key: string]: UserDetails }>({});
@@ -106,6 +121,42 @@ const ChatList: React.FC<ChatListProps> = ({ matches, currentUserId }) => {
 
     checkNewMatches();
   }, [matches, userDetails]);
+
+  useEffect(() => {
+    // Listen for new matches
+    if (!currentUserId) return;
+
+    const matchesRef = collection(db, 'matches');
+    const q = query(
+      matchesRef,
+      where('user2Id', '==', currentUserId),
+      where('isNew', '==', true)
+    );
+
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      snapshot.docChanges().forEach(async (change) => {
+        if (change.type === 'added') {
+          const matchData = change.doc.data();
+          const userDoc = await getDoc(doc(db, 'users', matchData.user1Id));
+          const userData = userDoc.data();
+
+          if (userData) {
+            setNewMatchUser({
+              name: userData.name || userData.displayName || 'Anonymous User',
+              photoURL: userData.photoURL || 'https://via.placeholder.com/50',
+              email: userData.email || ''
+            });
+            setShowMatchNotification(true);
+          }
+
+          // Mark match as seen
+          await updateDoc(change.doc.ref, { isNew: false });
+        }
+      });
+    });
+
+    return () => unsubscribe();
+  }, [currentUserId]);
 
   const openChat = useCallback(async (match: Match) => {
     setSelectedMatch(match);
@@ -168,98 +219,52 @@ const ChatList: React.FC<ChatListProps> = ({ matches, currentUserId }) => {
     }
   };
 
-  // Filter matches before rendering
-  const filteredMatches = matches.filter(match => match.score >= 30); // Changed from 70 to 30
-
-  const renderMatchItem = ({ item }: { item: Match }) => {
-    const userData = userDetails[item.userId];
-    console.log('Rendering user:', item.userId, userData); // Debug log
-    
-    return (
-      <TouchableOpacity 
-        style={styles.matchItem}
-        onPress={() => openChat(item)}
-      >
-        <Image
-          source={{ uri: userData?.photoURL || 'https://via.placeholder.com/50' }}
-          style={styles.avatar}
-        />
-        <View style={styles.matchInfo}>
-          <Text style={styles.username}>
-            {userData?.name || 'Loading...'}  {/* Changed from displayName to name */}
-          </Text>
-          <Text style={styles.matchScore}>
-            {item.score.toFixed(0)}% Match • {item.commonMovies.length} movies in common
-          </Text>
-        </View>
-      </TouchableOpacity>
-    );
+  const handleSelectMatch = (match: Match) => {
+    setSelectedMatch(match);
+    if (onSelectMatch) {
+      onSelectMatch(match);
+    }
+    openChat(match);
   };
 
+  // Filter out invalid matches
+  const validMatches = matches.filter(match => 
+    match && 
+    match.userId && 
+    typeof match.score === 'number' && 
+    Array.isArray(match.commonMovies) &&
+    match.commonMovies.every(movie => 
+      movie && 
+      movie.movieId && 
+      movie.title && 
+      movie.category
+    )
+  );
+
+  // Update the filtered matches threshold to 20%
+  const filteredMatches = validMatches.filter(match => match.score >= 20);
+
+  // Update empty state message
+  const EmptyState = () => (
+    <View style={styles.emptyContainer}>
+      <Text style={styles.emptyText}>
+        No matches yet! You need at least 20% compatibility to match.
+      </Text>
+    </View>
+  );
+
   return (
-    <View style={styles.container}>
-      <FlatList
-        data={filteredMatches}
-        renderItem={renderMatchItem}
-        keyExtractor={(item) => item.userId}
-        contentContainerStyle={styles.listContainer}
-        ListEmptyComponent={() => (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>
-              No matches yet! You need at least 30% compatibility to match.  {/* Updated text */}
-            </Text>
-          </View>
-        )}
-      />
-
-      {/* Match Notification Modal */}
-      <Modal
-        visible={showMatchNotification}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowMatchNotification(false)}
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.chatContainer}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 25}
       >
-        <View style={styles.notificationOverlay}>
-          <View style={styles.notificationBox}>
-            <Text style={styles.notificationTitle}>Congratulations! 🎉</Text>
-            <Text style={styles.notificationText}>
-              You matched with {newMatchUser?.name}!
-            </Text>
-            <Image
-              source={{ uri: newMatchUser?.photoURL }}
-              style={styles.notificationAvatar}
-            />
-            <TouchableOpacity
-              style={styles.notificationButton}
-              onPress={() => setShowMatchNotification(false)}
-            >
-              <Text style={styles.notificationButtonText}>Got it!</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={!!selectedMatch}
-        animationType="slide"
-        onRequestClose={() => setSelectedMatch(null)}
-        statusBarTranslucent={true}
-      >
-        <SafeAreaView style={styles.modalContainer}>
-          <KeyboardAvoidingView 
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-            style={styles.chatContainer}
-            keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 25}
-          >
+        {selectedMatch ? (
+          <>
             <View style={styles.chatHeader}>
-              <TouchableOpacity
-                style={styles.backButton}
-                onPress={() => setSelectedMatch(null)}
-              >
-                <MaterialIcons name="arrow-back" size={24} color="#FFF" />
-              </TouchableOpacity>
               <Text style={styles.chatTitle}>
-                {selectedMatch ? userDetails[selectedMatch.userId]?.name || 'Chat' : 'Chat'}
+                {userDetails[selectedMatch.userId]?.name || 'Chat'}
               </Text>
             </View>
 
@@ -303,10 +308,63 @@ const ChatList: React.FC<ChatListProps> = ({ matches, currentUserId }) => {
                 />
               </TouchableOpacity>
             </View>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
-      </Modal>
-    </View>
+          </>
+        ) : (
+          <FlatList
+            data={filteredMatches}
+            renderItem={({ item }) => (
+              <TouchableOpacity 
+                style={styles.matchItem}
+                onPress={() => handleSelectMatch(item)}
+              >
+                <Image
+                  source={{ uri: userDetails[item.userId]?.photoURL || 'https://via.placeholder.com/50' }}
+                  style={styles.avatar}
+                />
+                <View style={styles.matchInfo}>
+                  <Text style={styles.username}>
+                    {userDetails[item.userId]?.name || 'Loading...'}
+                  </Text>
+                  <Text style={styles.matchScore}>
+                    {item.score.toFixed(0)}% Match • {item.commonMovies.length} movies in common
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            )}
+            keyExtractor={(item) => item.userId}
+            contentContainerStyle={styles.listContainer}
+            ListEmptyComponent={EmptyState}
+          />
+        )}
+
+        {/* Match Notification Modal */}
+        <Modal
+          visible={showMatchNotification}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowMatchNotification(false)}
+        >
+          <View style={styles.notificationOverlay}>
+            <View style={styles.notificationBox}>
+              <Text style={styles.notificationTitle}>Congratulations! 🎉</Text>
+              <Text style={styles.notificationText}>
+                You matched with {newMatchUser?.name}!
+              </Text>
+              <Image
+                source={{ uri: newMatchUser?.photoURL }}
+                style={styles.notificationAvatar}
+              />
+              <TouchableOpacity
+                style={styles.notificationButton}
+                onPress={() => setShowMatchNotification(false)}
+              >
+                <Text style={styles.notificationButtonText}>Got it!</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 

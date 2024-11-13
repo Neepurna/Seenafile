@@ -1,15 +1,24 @@
 import { db } from '../firebase';
-import { collection, getDocs, getDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, getDoc, doc, addDoc } from 'firebase/firestore';
 
-const MATCH_THRESHOLD = 30; // Add this constant at the top
+const MATCH_THRESHOLD = 20; // Updated threshold to 20%
 
 interface MovieMatch {
   movieId: string;
   title: string;
   category: string;
-  poster_path?: string;
-  status?: string;
-  timestamp?: Date;
+  poster_path: string;
+  status: string;
+  timestamp: Date;
+}
+
+interface MatchData {
+  user1Id: string;
+  user2Id: string;
+  score: number;
+  commonMovies: MovieMatch[];
+  timestamp: Date;
+  isNew: boolean;
 }
 
 export const calculateMatchScore = async (currentUserId: string, targetUserId?: string) => {
@@ -28,10 +37,15 @@ export const calculateMatchScore = async (currentUserId: string, targetUserId?: 
 
     // Create a map of current user's movies for faster lookup
     const currentUserMovieMap = new Map(
-      currentUserMovies.docs.map(doc => [
-        doc.data().movieId,
-        { ...doc.data(), id: doc.id }
-      ])
+      currentUserMovies.docs
+        .filter(doc => {
+          const data = doc.data();
+          return data && data.movieId && data.title && data.category;
+        })
+        .map(doc => [
+          doc.data().movieId,
+          { ...doc.data(), id: doc.id }
+        ])
     );
 
     // If targetUserId is provided, only calculate match for that user
@@ -45,14 +59,14 @@ export const calculateMatchScore = async (currentUserId: string, targetUserId?: 
       const commonMovies: MovieMatch[] = [];
       otherUserMovies.forEach(doc => {
         const movieData = doc.data();
-        if (currentUserMovieMap.has(movieData.movieId)) {
+        if (movieData?.movieId && currentUserMovieMap.has(movieData.movieId)) {
           commonMovies.push({
             movieId: movieData.movieId,
-            title: movieData.title,
-            category: movieData.category,
-            poster_path: movieData.poster_path,
-            status: movieData.status,
-            timestamp: movieData.timestamp
+            title: movieData.title || 'Unknown Movie',
+            category: movieData.category || 'watched',
+            poster_path: movieData.poster_path || '',
+            status: movieData.status || 'watched',
+            timestamp: movieData.timestamp || new Date()
           });
         }
       });
@@ -60,10 +74,37 @@ export const calculateMatchScore = async (currentUserId: string, targetUserId?: 
       const score = (commonMovies.length / 
         Math.max(currentUserMovies.size, otherUserMovies.size)) * 100;
 
+      // Validate and create match data
+      if (score >= 20 && commonMovies.length > 0) {
+        const matchData: MatchData = {
+          user1Id: currentUserId,
+          user2Id: targetUserId,
+          score,
+          commonMovies,
+          timestamp: new Date(),
+          isNew: true
+        };
+
+        // Double check all required fields are present and valid
+        const isValidMatchData = Object.values(matchData).every(value => 
+          value !== undefined && value !== null
+        ) && matchData.commonMovies.every(movie => 
+          movie.movieId && 
+          movie.title && 
+          movie.category && 
+          movie.status && 
+          movie.timestamp
+        );
+
+        if (isValidMatchData) {
+          await addDoc(collection(db, 'matches'), matchData);
+        }
+      }
+
       return [{
         userId: targetUserId,
-        displayName: userDoc.data().displayName || 'Unknown User',
-        photoURL: userDoc.data().photoURL,
+        displayName: userDoc.data()?.name || 'Unknown User',
+        photoURL: userDoc.data()?.photoURL || '',
         score,
         commonMovies
       }];
@@ -103,6 +144,34 @@ export const calculateMatchScore = async (currentUserId: string, targetUserId?: 
             const score = (commonMovies.length / 
               Math.max(currentUserMovies.size, otherUserMovies.size)) * 100;
 
+            // If score is >= 20%, create a match document
+            if (score >= 20) {
+              const matchId = [currentUserId, userDoc.id].sort().join('_');
+              const matchData: MatchData = {
+                user1Id: currentUserId,
+                user2Id: userDoc.id,
+                score,
+                commonMovies,
+                timestamp: new Date(),
+                isNew: true
+              };
+
+              // Double check all required fields are present and valid
+              const isValidMatchData = Object.values(matchData).every(value => 
+                value !== undefined && value !== null
+              ) && matchData.commonMovies.every(movie => 
+                movie.movieId && 
+                movie.title && 
+                movie.category && 
+                movie.status && 
+                movie.timestamp
+              );
+
+              if (isValidMatchData) {
+                await addDoc(collection(db, 'matches'), matchData);
+              }
+            }
+
             return {
               userId: userDoc.id,
               displayName: userDoc.data().displayName || 'Unknown User',
@@ -123,6 +192,6 @@ export const calculateMatchScore = async (currentUserId: string, targetUserId?: 
 
   } catch (error) {
     console.error('Error in calculateMatchScore:', error);
-    throw new Error(`Error calculating matches: ${error.message}`);
+    throw error;
   }
 };
