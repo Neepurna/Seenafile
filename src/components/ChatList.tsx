@@ -218,48 +218,80 @@ const ChatList: React.FC<ChatListProps> = ({
     }
   }, [currentUserId]);
 
+  const handleSelectMatch = async (match: Match) => {
+    // Reset messages when selecting new match
+    setMessages([]);
+    setSelectedMatch(match);
+    
+    if (onSelectMatch) {
+      onSelectMatch(match);
+    }
+    
+    if (onUserConnect && !connectedUsers.includes(match.userId)) {
+      onUserConnect(match.userId);
+    }
+
+    // Setup chat listeners
+    const chatId = [currentUserId, match.userId].sort().join('_');
+    const chatRef = doc(db, 'chats', chatId);
+    const messagesRef = collection(chatRef, 'messages');
+    
+    try {
+      // Create chat document if it doesn't exist
+      await setDoc(chatRef, {
+        participants: [currentUserId, match.userId].sort(),
+        createdAt: new Date(),
+        lastMessage: null,
+        lastMessageTime: null
+      }, { merge: true });
+
+      // Listen to messages
+      const q = query(messagesRef, orderBy('timestamp', 'asc'));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const newMessages = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        } as Message));
+        setMessages(newMessages);
+      });
+
+      // Store unsubscribe function
+      return () => unsubscribe();
+    } catch (error) {
+      console.error('Error setting up chat:', error);
+    }
+  };
+
   const sendMessage = async () => {
-    if (!selectedMatch || !newMessage.trim()) return;
+    if (!selectedMatch || !newMessage.trim() || !currentUserId) return;
 
     const chatId = [currentUserId, selectedMatch.userId].sort().join('_');
     const chatRef = doc(db, 'chats', chatId);
     const messagesRef = collection(chatRef, 'messages');
 
     try {
-      // Create new message
-      await addDoc(messagesRef, {
+      // Create new message document
+      const messageData = {
         text: newMessage.trim(),
         senderId: currentUserId,
         timestamp: new Date(),
-      });
+        read: false
+      };
 
-      // Update chat's lastMessage
-      await setDoc(chatRef, {
+      await addDoc(messagesRef, messageData);
+
+      // Update chat document
+      await updateDoc(chatRef, {
         lastMessage: newMessage.trim(),
-        lastMessageTime: new Date()
-      }, { merge: true });
+        lastMessageTime: new Date(),
+        lastSenderId: currentUserId
+      });
 
       setNewMessage('');
     } catch (error) {
       console.error('Error sending message:', error);
-    }
-  };
-
-  const handleSelectMatch = async (match: Match) => {
-    setSelectedMatch(match);
-    if (onSelectMatch) {
-      onSelectMatch(match);
-    }
-    if (onUserConnect && !connectedUsers.includes(match.userId)) {
-      onUserConnect(match.userId);
-    }
-    openChat(match);
-
-    // Add match to seen matches if not already there
-    if (!seenMatches.includes(match.userId)) {
-      const updatedSeenMatches = [...seenMatches, match.userId];
-      setSeenMatches(updatedSeenMatches);
-      await AsyncStorage.setItem(SEEN_MATCHES_KEY, JSON.stringify(updatedSeenMatches));
+      // Show error to user
+      Alert.alert('Error', 'Failed to send message. Please try again.');
     }
   };
 
@@ -357,6 +389,12 @@ const ChatList: React.FC<ChatListProps> = ({
         {selectedMatch ? (
           <>
             <View style={styles.chatHeader}>
+              <TouchableOpacity 
+                style={styles.backButton}
+                onPress={() => setSelectedMatch(null)}
+              >
+                <MaterialIcons name="arrow-back" size={24} color="#FFF" />
+              </TouchableOpacity>
               <Text style={styles.chatTitle}>
                 {userDetails[selectedMatch.userId]?.name || 'Chat'}
               </Text>
