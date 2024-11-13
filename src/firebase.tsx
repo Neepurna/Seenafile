@@ -2,17 +2,19 @@
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { 
   initializeAuth, 
-  getReactNativePersistence,
   getAuth,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendEmailVerification,
   sendPasswordResetEmail,
-  fetchSignInMethodsForEmail
+  fetchSignInMethodsForEmail,
+  Auth,
+  getReactNativePersistence
 } from 'firebase/auth';
-import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { 
-  getFirestore, 
+  getFirestore,
+  Firestore,
   setDoc, 
   doc, 
   getDoc, 
@@ -23,8 +25,12 @@ import {
   updateDoc,
   addDoc,
   orderBy,
-  onSnapshot
+  onSnapshot,
+  Unsubscribe
 } from 'firebase/firestore';
+
+// Add at the top after imports
+let listeners: { [key: string]: () => void } = {};
 
 const firebaseConfig = {
   apiKey: "AIzaSyD-frQ7fze6ZMh9FWsTjUuGicXAKAHYQW8",
@@ -36,15 +42,15 @@ const firebaseConfig = {
   measurementId: "G-7QGRHQBSWX"
 };
 
-// Initialize Firebase only if it hasn't been initialized
+// Initialize Firebase with proper typing
 let app;
-let auth;
-let db;
+let auth: Auth;
+let db: Firestore;
 
 if (getApps().length === 0) {
   app = initializeApp(firebaseConfig);
   auth = initializeAuth(app, {
-    persistence: getReactNativePersistence(ReactNativeAsyncStorage)
+    persistence: getReactNativePersistence(AsyncStorage)
   });
   db = getFirestore(app);
 } else {
@@ -345,22 +351,59 @@ export const saveReview = async (reviewData: {
   }
 };
 
+// Add a collection of active listeners
+let activeListeners: (() => void)[] = [];
+
+// Add function to register listeners
+export const registerListener = (unsubscribe: () => void) => {
+  activeListeners.push(unsubscribe);
+};
+
+// Global listener management
+const listenerMap = new Map<string, Unsubscribe>();
+
+// Replace the getSharedReviews function
 export const getSharedReviews = (callback: (reviews: any[]) => void) => {
+  // Generate a unique ID for this listener
+  const listenerId = `sharedReviews_${Date.now()}`;
+
   try {
     const reviewsRef = collection(db, 'sharedReviews');
     const q = query(reviewsRef, orderBy('createdAt', 'desc'));
     
-    return onSnapshot(q, (snapshot) => {
-      const reviews = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      callback(reviews);
-    });
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const reviews = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        callback(reviews);
+      },
+      (error) => {
+        console.log('Listener error:', error);
+        callback([]);
+        // Clean up this listener if there's an error
+        if (listeners[listenerId]) {
+          listeners[listenerId]();
+          delete listeners[listenerId];
+        }
+      }
+    );
+
+    // Store the unsubscribe function
+    listeners[listenerId] = unsubscribe;
+
+    // Return cleanup function
+    return () => {
+      if (listeners[listenerId]) {
+        listeners[listenerId]();
+        delete listeners[listenerId];
+      }
+    };
   } catch (error) {
     console.error('Error setting up shared reviews listener:', error);
-    callback([]);
-    return () => {}; // Return empty unsubscribe function
+    return () => {};
   }
 };
 
@@ -448,6 +491,33 @@ export const getUserMatches = async (userId: string): Promise<Match[]> => {
   } catch (error) {
     console.error('Error in getUserMatches:', error);
     return [];
+  }
+};
+
+// Update signOut function to ensure all listeners are cleaned up
+export const signOut = async () => {
+  try {
+    // Clean up all listeners first
+    Object.keys(listeners).forEach(key => {
+      try {
+        if (listeners[key]) {
+          listeners[key]();
+          delete listeners[key];
+        }
+      } catch (e) {
+        console.warn('Error cleaning up listener:', e);
+      }
+    });
+    
+    // Clear the listeners object
+    listeners = {};
+    
+    // Sign out
+    await auth.signOut();
+    return { error: null };
+  } catch (error: any) {
+    console.error('Sign out error:', error);
+    return { error: error.message };
   }
 };
 

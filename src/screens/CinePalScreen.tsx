@@ -172,32 +172,48 @@ const PersonalFeed: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
 
-  const loadData = async () => {
+  const loadData = async (isRefresh = false) => {
     try {
-      setIsLoading(true);
+      if (!isRefresh) {
+        setIsLoading(true);
+      }
       setError(null);
       
       const feeds = await fetchRSSFeeds();
-      console.log('Feeds received:', feeds.length);
-      setNewsItems(feeds);
+      
+      // Merge new feeds with existing ones, avoiding duplicates
+      setNewsItems(prevItems => {
+        if (isRefresh) {
+          // During refresh, append new items while keeping existing ones
+          const existingIds = new Set(prevItems.map(item => item.link));
+          const newItems = feeds.filter(feed => !existingIds.has(feed.link));
+          return [...prevItems, ...newItems];
+        }
+        return feeds;
+      });
+      
     } catch (err) {
       console.error('Error loading data:', err);
       setError('Failed to load content. Please try again.');
     } finally {
       setIsLoading(false);
+      setInitialLoadComplete(true);
     }
   };
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadData();
+    await loadData(true);
     setRefreshing(false);
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (!initialLoadComplete) {
+      loadData();
+    }
+  }, [initialLoadComplete]);
 
   if (isLoading) {
     return (
@@ -239,22 +255,40 @@ const PersonalFeed: React.FC = () => {
   );
 };
 
-const PublicFeed: React.FC<{ connectedUsers: string[], onUserConnect: (userId: string) => void }> = ({ connectedUsers, onUserConnect }) => {
+const PublicFeed: React.FC<{ connectedUsers: string[], onUserConnect: (userId: string) => void }> = ({ 
+  connectedUsers, 
+  onUserConnect 
+}) => {
   const [matches, setMatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+  const [persistedMatches, setPersistedMatches] = useState<any[]>([]);
 
   useEffect(() => {
-    fetchMatches();
+    const loadPersistedMatches = async () => {
+      try {
+        const stored = await AsyncStorage.getItem('@persisted_matches');
+        if (stored) {
+          setPersistedMatches(JSON.parse(stored));
+          setMatches(JSON.parse(stored));
+        }
+      } catch (error) {
+        console.error('Error loading persisted matches:', error);
+      }
+    };
+    loadPersistedMatches();
   }, []);
 
-  const fetchMatches = async () => {
+  const fetchMatches = async (isRefresh = false) => {
     if (!auth.currentUser) return;
     
-    setLoading(true);
+    if (!isRefresh) {
+      setLoading(true);
+    }
     setError(null);
+
     try {
-      // Validate current user data first
       const currentUserDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
       if (!currentUserDoc.exists()) {
         throw new Error('Current user profile not found');
@@ -262,7 +296,6 @@ const PublicFeed: React.FC<{ connectedUsers: string[], onUserConnect: (userId: s
 
       const matchResults = await calculateMatchScore(auth.currentUser.uid);
       
-      // Filter out any invalid match data
       const validMatches = matchResults.filter(match => 
         match && 
         match.userId && 
@@ -275,19 +308,42 @@ const PublicFeed: React.FC<{ connectedUsers: string[], onUserConnect: (userId: s
         )
       );
 
+      // Merge new matches with existing ones
+      setMatches(prevMatches => {
+        if (isRefresh) {
+          // During refresh, update scores of existing matches and add new ones
+          const existingMatchMap = new Map(prevMatches.map(m => [m.userId, m]));
+          validMatches.forEach(match => {
+            if (existingMatchMap.has(match.userId)) {
+              existingMatchMap.get(match.userId).score = match.score;
+            } else {
+              existingMatchMap.set(match.userId, match);
+            }
+          });
+          return Array.from(existingMatchMap.values());
+        }
+        return validMatches;
+      });
+
+      // Save matches to AsyncStorage
+      await AsyncStorage.setItem('@persisted_matches', JSON.stringify(validMatches));
+      setPersistedMatches(validMatches);
       setMatches(validMatches);
+
     } catch (error) {
       console.error('Error fetching matches:', error);
       setError('Failed to load matches. Please try again.');
-      
-      // Show user-friendly error
-      Platform.OS === 'android' 
-        ? ToastAndroid.show('Error loading matches', ToastAndroid.SHORT)
-        : Alert.alert('Error', 'Failed to load matches. Please try again.');
     } finally {
       setLoading(false);
+      setInitialLoadComplete(true);
     }
   };
+
+  useEffect(() => {
+    if (!initialLoadComplete) {
+      fetchMatches();
+    }
+  }, [initialLoadComplete]);
 
   if (loading) {
     return (
@@ -378,16 +434,17 @@ const CinePalScreen: React.FC = () => {
 
     switch (activeTab) {
       case 'cinefeed':
-        return <PersonalFeed />;
+        return <PersonalFeed key="cinefeed" />;
       case 'cinepal':
         return (
           <PublicFeed 
+            key="cinepal"
             connectedUsers={connectedUsers}
             onUserConnect={handleUserConnect}
           />
         );
       default:
-        return <PersonalFeed />;
+        return <PersonalFeed key="default" />;
     }
   };
 

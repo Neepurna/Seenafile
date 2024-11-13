@@ -20,6 +20,8 @@ import { db } from '../firebase';
 import { collection, doc, getDoc, addDoc, query, orderBy, onSnapshot, setDoc, where, updateDoc } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+const SEEN_MATCHES_KEY = '@seen_matches';
+
 interface Message {
   id: string;
   text: string;
@@ -74,6 +76,7 @@ const ChatList: React.FC<ChatListProps> = ({
   const [showMatchNotification, setShowMatchNotification] = useState(false);
   const [newMatchUser, setNewMatchUser] = useState<UserDetails | null>(null);
   const [isLoadingPersisted, setIsLoadingPersisted] = useState(true);
+  const [seenMatches, setSeenMatches] = useState<string[]>([]);
 
   const fetchUserDetails = async (userId: string) => {
     try {
@@ -107,23 +110,43 @@ const ChatList: React.FC<ChatListProps> = ({
     fetchAllUsers();
   }, [matches]);
 
-  // Modify this useEffect
+  useEffect(() => {
+    const loadSeenMatches = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(SEEN_MATCHES_KEY);
+        if (stored) {
+          setSeenMatches(JSON.parse(stored));
+        }
+      } catch (error) {
+        console.error('Error loading seen matches:', error);
+      }
+    };
+    loadSeenMatches();
+  }, []);
+
   useEffect(() => {
     const checkNewMatches = async () => {
-      const highMatches = matches.filter(match => match.score >= 30);
+      const highMatches = matches.filter(match => 
+        match.score >= 30 && !seenMatches.includes(match.userId)
+      );
+      
       if (highMatches.length > 0) {
         const lastMatch = highMatches[0];
         const matchUserDetails = userDetails[lastMatch.userId];
         if (matchUserDetails) {
           setNewMatchUser(matchUserDetails);
           setShowMatchNotification(true);
-          // Removed ToastAndroid/Alert notification
+          
+          // Add to seen matches
+          const updatedSeenMatches = [...seenMatches, lastMatch.userId];
+          setSeenMatches(updatedSeenMatches);
+          await AsyncStorage.setItem(SEEN_MATCHES_KEY, JSON.stringify(updatedSeenMatches));
         }
       }
     };
 
     checkNewMatches();
-  }, [matches, userDetails]);
+  }, [matches, userDetails, seenMatches]);
 
   useEffect(() => {
     // Listen for new matches
@@ -222,7 +245,7 @@ const ChatList: React.FC<ChatListProps> = ({
     }
   };
 
-  const handleSelectMatch = (match: Match) => {
+  const handleSelectMatch = async (match: Match) => {
     setSelectedMatch(match);
     if (onSelectMatch) {
       onSelectMatch(match);
@@ -231,6 +254,13 @@ const ChatList: React.FC<ChatListProps> = ({
       onUserConnect(match.userId);
     }
     openChat(match);
+
+    // Add match to seen matches if not already there
+    if (!seenMatches.includes(match.userId)) {
+      const updatedSeenMatches = [...seenMatches, match.userId];
+      setSeenMatches(updatedSeenMatches);
+      await AsyncStorage.setItem(SEEN_MATCHES_KEY, JSON.stringify(updatedSeenMatches));
+    }
   };
 
   // Filter out invalid matches

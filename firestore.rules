@@ -170,11 +170,17 @@ service cloud.firestore {
       allow update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
     }
 
-    // Shared reviews collection
+    // Shared reviews collection - Update these rules
     match /sharedReviews/{reviewId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow read: if isSignedIn();  // Allow any signed in user to read
+      allow create: if isSignedIn() 
+        && request.resource.data.userId == request.auth.uid
+        && isValidSharedReview();
+      allow update: if isSignedIn() 
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid;
+      allow delete: if isSignedIn() 
+        && resource.data.userId == request.auth.uid;
     }
 
     // Matches collection

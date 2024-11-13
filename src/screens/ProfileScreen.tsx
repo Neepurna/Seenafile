@@ -2,21 +2,33 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
-import { auth, db } from '../firebase';
+import { MaterialIcons } from '@expo/vector-icons';  // Changed from react-native-vector-icons
+import { auth, db, signOut } from '../firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+
+// Add type definition for routes
+type RootStackParamList = {
+  Login: undefined;
+  Profile: undefined;
+  // Add other screen names here
+};
+
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 interface ProfileScreenProps {
   onClose: () => void;
 }
 
 const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavigationProp>();
   const [userProfile, setUserProfile] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let isSubscribed = true;
+
     const loadUserProfile = async () => {
       if (!auth.currentUser) {
         navigation.navigate('Login' as never);
@@ -24,6 +36,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
       }
 
       try {
+        if (!isSubscribed) return;
         setIsLoading(true);
         setError(null);
         
@@ -34,24 +47,33 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
           const defaultProfile = {
             name: auth.currentUser.displayName || 'New User',
             email: auth.currentUser.email,
-            createdAt: serverTimestamp()
+            createdAt: new Date()  // Changed from serverTimestamp()
           };
           
           await setDoc(userRef, defaultProfile);
-          setUserProfile(defaultProfile);
+          if (isSubscribed) setUserProfile(defaultProfile);
         } else {
-          setUserProfile(userDoc.data());
+          if (isSubscribed) setUserProfile(userDoc.data());
         }
       } catch (err) {
         console.error('Profile loading error:', err);
-        setError('Failed to load profile');
-        Alert.alert('Error', 'Failed to load profile data');
+        if (isSubscribed) {
+          setError('Failed to load profile');
+          Alert.alert('Error', 'Failed to load profile data');
+        }
       } finally {
-        setIsLoading(false);
+        if (isSubscribed) setIsLoading(false);
       }
     };
 
     loadUserProfile();
+
+    // Cleanup function
+    return () => {
+      isSubscribed = false;
+      setUserProfile(null);
+      setError(null);
+    };
   }, [navigation]);
 
   const handleSignOut = async () => {
@@ -64,11 +86,11 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
           text: "Sign Out", 
           onPress: async () => {
             try {
-              await auth.signOut();
               navigation.reset({
                 index: 0,
                 routes: [{ name: 'Login' }],
               });
+              await signOut();
             } catch (error) {
               Alert.alert('Error', 'Failed to sign out');
             }
@@ -100,7 +122,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
         style={styles.closeButton} 
         onPress={onClose}
       >
-        <Icon name="close" size={24} color="#FFF" />
+        <MaterialIcons name="close" size={24} color="#FFF" />
       </TouchableOpacity>
 
       <View style={styles.profileHeader}>
@@ -110,7 +132,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
             style={styles.profileImage}
           />
           <TouchableOpacity style={styles.editButton}>
-            <Icon name="edit" size={18} color="#000" />
+            <MaterialIcons name="edit" size={18} color="#000" />
           </TouchableOpacity>
         </View>
         <Text style={styles.userName}>{userProfile?.name || 'Loading...'}</Text>
@@ -127,7 +149,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
       </View>
 
       <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-        <Icon name="logout" size={24} color="#FFF" />
+        <MaterialIcons name="logout" size={24} color="#FFF" />
         <Text style={styles.signOutText}>Sign Out</Text>
       </TouchableOpacity>
     </View>
