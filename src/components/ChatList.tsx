@@ -13,10 +13,12 @@ import {
   SafeAreaView,
   ToastAndroid,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { db } from '../firebase';
 import { collection, doc, getDoc, addDoc, query, orderBy, onSnapshot, setDoc, where, updateDoc } from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface Message {
   id: string;
@@ -53,13 +55,17 @@ interface ChatListProps {
   currentUserId: string;
   selectedMatch?: Match | null;
   onSelectMatch?: (match: Match | null) => void;
+  connectedUsers?: string[];
+  onUserConnect?: (userId: string) => void;
 }
 
 const ChatList: React.FC<ChatListProps> = ({ 
   matches, 
   currentUserId, 
   selectedMatch: propSelectedMatch,
-  onSelectMatch 
+  onSelectMatch,
+  connectedUsers = [],
+  onUserConnect 
 }) => {
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(propSelectedMatch || null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -67,6 +73,7 @@ const ChatList: React.FC<ChatListProps> = ({
   const [userDetails, setUserDetails] = useState<{ [key: string]: UserDetails }>({});
   const [showMatchNotification, setShowMatchNotification] = useState(false);
   const [newMatchUser, setNewMatchUser] = useState<UserDetails | null>(null);
+  const [isLoadingPersisted, setIsLoadingPersisted] = useState(true);
 
   const fetchUserDetails = async (userId: string) => {
     try {
@@ -100,21 +107,17 @@ const ChatList: React.FC<ChatListProps> = ({
     fetchAllUsers();
   }, [matches]);
 
-  // Add this useEffect to check for new matches
+  // Modify this useEffect
   useEffect(() => {
     const checkNewMatches = async () => {
-      const highMatches = matches.filter(match => match.score >= 30); // Changed from 70 to 30
+      const highMatches = matches.filter(match => match.score >= 30);
       if (highMatches.length > 0) {
         const lastMatch = highMatches[0];
         const matchUserDetails = userDetails[lastMatch.userId];
         if (matchUserDetails) {
           setNewMatchUser(matchUserDetails);
           setShowMatchNotification(true);
-          
-          // Add notification message
-          Platform.OS === 'android' ? 
-            ToastAndroid.show(`New match with ${matchUserDetails.name}!`, ToastAndroid.LONG) :
-            Alert.alert('New Match!', `You matched with ${matchUserDetails.name}!`);
+          // Removed ToastAndroid/Alert notification
         }
       }
     };
@@ -224,6 +227,9 @@ const ChatList: React.FC<ChatListProps> = ({
     if (onSelectMatch) {
       onSelectMatch(match);
     }
+    if (onUserConnect && !connectedUsers.includes(match.userId)) {
+      onUserConnect(match.userId);
+    }
     openChat(match);
   };
 
@@ -252,6 +258,64 @@ const ChatList: React.FC<ChatListProps> = ({
       </Text>
     </View>
   );
+
+  // Filter matches to show connected users first
+  const sortedMatches = [...filteredMatches].sort((a, b) => {
+    const aConnected = connectedUsers.includes(a.userId);
+    const bConnected = connectedUsers.includes(b.userId);
+    if (aConnected && !bConnected) return -1;
+    if (!aConnected && bConnected) return 1;
+    return b.score - a.score;
+  });
+
+  useEffect(() => {
+    const loadPersistedChats = async () => {
+      try {
+        const persistedChats = await AsyncStorage.getItem('persistedChats');
+        if (persistedChats) {
+          const chatData = JSON.parse(persistedChats);
+          // Update local state with persisted data
+          setMessages(chatData.messages || []);
+          if (chatData.selectedMatch) {
+            setSelectedMatch(chatData.selectedMatch);
+            openChat(chatData.selectedMatch);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading persisted chats:', error);
+      } finally {
+        setIsLoadingPersisted(false);
+      }
+    };
+
+    loadPersistedChats();
+  }, []);
+
+  useEffect(() => {
+    const persistChatData = async () => {
+      try {
+        const chatData = {
+          messages,
+          selectedMatch,
+        };
+        await AsyncStorage.setItem('persistedChats', JSON.stringify(chatData));
+      } catch (error) {
+        console.error('Error persisting chat data:', error);
+      }
+    };
+
+    if (!isLoadingPersisted) {
+      persistChatData();
+    }
+  }, [messages, selectedMatch, isLoadingPersisted]);
+
+  if (isLoadingPersisted) {
+    return (
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color="#BB86FC" />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -311,10 +375,13 @@ const ChatList: React.FC<ChatListProps> = ({
           </>
         ) : (
           <FlatList
-            data={filteredMatches}
+            data={sortedMatches}
             renderItem={({ item }) => (
               <TouchableOpacity 
-                style={styles.matchItem}
+                style={[
+                  styles.matchItem,
+                  connectedUsers.includes(item.userId) && styles.connectedMatchItem
+                ]}
                 onPress={() => handleSelectMatch(item)}
               >
                 <Image
@@ -324,6 +391,9 @@ const ChatList: React.FC<ChatListProps> = ({
                 <View style={styles.matchInfo}>
                   <Text style={styles.username}>
                     {userDetails[item.userId]?.name || 'Loading...'}
+                    {connectedUsers.includes(item.userId) && 
+                      <Text style={styles.connectedBadge}> • Connected</Text>
+                    }
                   </Text>
                   <Text style={styles.matchScore}>
                     {item.score.toFixed(0)}% Match • {item.commonMovies.length} movies in common
@@ -533,6 +603,21 @@ const styles = StyleSheet.create({
     color: '#000',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  connectedMatchItem: {
+    borderColor: '#BB86FC',
+    borderWidth: 1,
+  },
+  connectedBadge: {
+    color: '#BB86FC',
+    fontSize: 12,
+    fontWeight: 'normal',
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#121212',
   },
 });
 

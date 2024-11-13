@@ -1,5 +1,5 @@
 // src/screens/CinePalScreen.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Linking, ActivityIndicator, RefreshControl, Dimensions, Platform, ToastAndroid, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons'; // Replace the icon import
 import { db } from '../firebase';
@@ -9,8 +9,10 @@ import type { RSSItem } from '../types/rss';
 import { calculateMatchScore } from '../utils/matchingUtils';
 import { auth } from '../firebase';
 import ChatList from '../components/ChatList';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
+const STORAGE_KEY = '@connected_users';
 
 const ReelCard: React.FC<{data: any}> = ({ data }) => (
   <View style={styles.cardContainer}>
@@ -237,7 +239,7 @@ const PersonalFeed: React.FC = () => {
   );
 };
 
-const PublicFeed: React.FC = () => {
+const PublicFeed: React.FC<{ connectedUsers: string[], onUserConnect: (userId: string) => void }> = ({ connectedUsers, onUserConnect }) => {
   const [matches, setMatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -311,20 +313,79 @@ const PublicFeed: React.FC = () => {
       <ChatList 
         matches={matches} 
         currentUserId={auth.currentUser?.uid || ''} 
+        connectedUsers={connectedUsers}
+        onUserConnect={onUserConnect}
       />
     </View>
   );
 };
 
 const CinePalScreen: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('personal');
+  const [activeTab, setActiveTab] = useState('cinefeed');
+  const [connectedUsers, setConnectedUsers] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Load persisted connected users and matches
+  useEffect(() => {
+    const loadPersistedData = async () => {
+      try {
+        const storedUsers = await AsyncStorage.getItem(STORAGE_KEY);
+        if (storedUsers) {
+          setConnectedUsers(JSON.parse(storedUsers));
+        }
+      } catch (error) {
+        console.error('Error loading persisted data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadPersistedData();
+  }, []);
+
+  // Save connected users whenever they change
+  useEffect(() => {
+    const persistData = async () => {
+      try {
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(connectedUsers));
+      } catch (error) {
+        console.error('Error persisting data:', error);
+      }
+    };
+
+    if (!isLoading) {
+      persistData();
+    }
+  }, [connectedUsers, isLoading]);
+
+  const handleUserConnect = useCallback((userId: string) => {
+    setConnectedUsers(prev => {
+      if (!prev.includes(userId)) {
+        return [...prev, userId];
+      }
+      return prev;
+    });
+  }, []);
 
   const renderTab = () => {
+    if (isLoading) {
+      return (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#BB86FC" />
+        </View>
+      );
+    }
+
     switch (activeTab) {
-      case 'personal':
+      case 'cinefeed':
         return <PersonalFeed />;
-      case 'public':
-        return <PublicFeed />;
+      case 'cinepal':
+        return (
+          <PublicFeed 
+            connectedUsers={connectedUsers}
+            onUserConnect={handleUserConnect}
+          />
+        );
       default:
         return <PersonalFeed />;
     }
@@ -334,19 +395,19 @@ const CinePalScreen: React.FC = () => {
     <View style={styles.container}>
       <View style={styles.tabContainer}>
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'personal' && styles.activeTab]}
-          onPress={() => setActiveTab('personal')}
+          style={[styles.tab, activeTab === 'cinefeed' && styles.activeTab]}
+          onPress={() => setActiveTab('cinefeed')}
         >
-          <Text style={[styles.tabText, activeTab === 'personal' && styles.activeTabText]}>
-            For You
+          <Text style={[styles.tabText, activeTab === 'cinefeed' && styles.activeTabText]}>
+            CineFeed
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'public' && styles.activeTab]}
-          onPress={() => setActiveTab('public')}
+          style={[styles.tab, activeTab === 'cinepal' && styles.activeTab]}
+          onPress={() => setActiveTab('cinepal')}
         >
-          <Text style={[styles.tabText, activeTab === 'public' && styles.activeTabText]}>
-            Public
+          <Text style={[styles.tabText, activeTab === 'cinepal' && styles.activeTabText]}>
+            CinePal
           </Text>
         </TouchableOpacity>
       </View>

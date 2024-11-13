@@ -1,8 +1,9 @@
 // src/firebase.ts
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApp, getApps } from 'firebase/app';
 import { 
   initializeAuth, 
   getReactNativePersistence,
+  getAuth,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendEmailVerification,
@@ -35,11 +36,24 @@ const firebaseConfig = {
   measurementId: "G-7QGRHQBSWX"
 };
 
-const app = initializeApp(firebaseConfig);
-export const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(ReactNativeAsyncStorage)
-});
-export const db = getFirestore(app);
+// Initialize Firebase only if it hasn't been initialized
+let app;
+let auth;
+let db;
+
+if (getApps().length === 0) {
+  app = initializeApp(firebaseConfig);
+  auth = initializeAuth(app, {
+    persistence: getReactNativePersistence(ReactNativeAsyncStorage)
+  });
+  db = getFirestore(app);
+} else {
+  app = getApp();
+  auth = getAuth(app);
+  db = getFirestore(app);
+}
+
+export { auth, db };
 
 const actionCodeSettings = {
   url: 'https://seenafile.firebaseapp.com/verify-email',  // Change this to your verified domain
@@ -369,3 +383,72 @@ export const getUserReviews = async (userId: string) => {
     return [];
   }
 };
+
+// Add these new functions after existing code
+export const createMatch = async (matchData: {
+  userId: string;
+  targetId: string;
+  score: number;
+  commonMovies: any[];
+}) => {
+  try {
+    const matchesRef = collection(db, 'matches');
+    await addDoc(matchesRef, {
+      ...matchData,
+      timestamp: new Date(),
+      status: 'active'
+    });
+    return true;
+  } catch (error) {
+    console.error('Error creating match:', error);
+    return false;
+  }
+};
+
+// Add interfaces
+interface Match {
+  id?: string;
+  userId: string;
+  targetId?: string;
+  score: number;
+  commonMovies: Array<{
+    movieId: string;
+    category: string;
+  }>;
+  timestamp?: Date;
+  status?: string;
+}
+
+// Make sure to export the function
+export const getUserMatches = async (userId: string): Promise<Match[]> => {
+  try {
+    if (!userId) {
+      console.error('No userId provided to getUserMatches');
+      return [];
+    }
+
+    console.log('Fetching matches for user:', userId);
+
+    const matchesRef = collection(db, 'matches');
+    const userMatchesQuery = query(matchesRef, where('userId', '==', userId));
+    const receivedMatchesQuery = query(matchesRef, where('targetId', '==', userId));
+
+    const [userMatchesSnap, receivedMatchesSnap] = await Promise.all([
+      getDocs(userMatchesQuery),
+      getDocs(receivedMatchesQuery)
+    ]);
+
+    const allMatches = [
+      ...userMatchesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })),
+      ...receivedMatchesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+    ] as Match[];
+
+    console.log('Found matches:', allMatches.length);
+    return allMatches;
+  } catch (error) {
+    console.error('Error in getUserMatches:', error);
+    return [];
+  }
+};
+
+// ...existing code...
