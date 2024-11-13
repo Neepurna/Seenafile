@@ -94,7 +94,16 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
           text: "Sign Out", 
           onPress: async () => {
             try {
-              await signOut(); // Make sure signOut happens first
+              // First close the profile modal to trigger unmount cleanup
+              onClose();
+              
+              // Wait a bit for cleanup to complete
+              await new Promise(resolve => setTimeout(resolve, 100));
+              
+              // Then sign out
+              await signOut();
+              
+              // Finally navigate
               navigation.reset({
                 index: 0,
                 routes: [{ name: 'Login' }],

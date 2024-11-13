@@ -130,7 +130,8 @@ const Tabs: React.FC = () => {
         })}
       >
         <Tab.Screen name="CineBrowse" component={CineBrowseScreen} />
-        <Tab.Screen name="CinePal" component={CinePalScreen} />
+        {/* Temporarily disable CinePal tab */}
+        {/* <Tab.Screen name="CinePal" component={CinePalScreen} /> */}
         <Tab.Screen name="MovieSearch" component={MovieSearchScreen} />
         <Tab.Screen name="CineFile" component={CineFileScreen} />
         <Tab.Screen name="CineGames" component={CineGamesScreen} />

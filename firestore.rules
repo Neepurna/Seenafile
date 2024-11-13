@@ -1,192 +1,48 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper functions at the top
+    
+    // Helper functions
     function isSignedIn() { return request.auth != null; }
     function isOwner(userId) { return request.auth.uid == userId; }
-    function isEmailLookup() {
-      return request.query.limit == 1 
-        && request.query.filters.size() == 1
-        && request.query.filters[0].op == "=="
-        && request.query.filters[0].path[0] == "email";
-    }
-    function isValidMovieInteraction() {
-      let data = request.resource.data;
-      return data.keys().hasAll(['movieId', 'title', 'poster_path', 'category', 'timestamp', 'status']) 
-        && data.movieId is string
-        && data.title is string
-        && data.poster_path is string
-        && data.category in ['watched', 'most_watch', 'watch_later', 'custom']
-        && data.status in ['watched', 'most_watch', 'watch_later', 'custom']
-        && data.timestamp is timestamp;
-    }
-    function isValidUser() {
-      let user = request.resource.data;
-      return user.keys().hasAll(['email', 'displayName'])
-        && user.email is string
-        && user.displayName is string;
-    }
-
-    function isValidUserUpdate() {
-      let user = request.resource.data;
-      return user.diff(resource.data).affectedKeys()
-        .hasAny(['displayName', 'photoURL', 'preferences', 'matches'])
-        && (!user.keys().hasAny(['email']) || user.email == resource.data.email);
-    }
-
-    function isValidReview() {
-      let review = request.resource.data;
-      return review.keys().hasAll([
-        'movieId',
-        'movieTitle',
-        'rating',
-        'review',
-        'isPublic',
-        'createdAt',
-        'userId'
-      ]) 
-      && review.movieId is number
-      && review.movieTitle is string
-      && review.rating is number
-      && review.rating >= 0
-      && review.rating <= 5
-      && review.review is string
-      && review.isPublic is bool
-      && review.createdAt is timestamp
-      && review.userId is string;
-    }
-
-    function isValidSharedReview() {
-      let review = request.resource.data;
-      return review.keys().hasAll([
-        'movieId',
-        'movieTitle',
-        'backdrop',
-        'rating',
-        'review',
-        'userId',
-        'username',
-        'timestamp',
-        'likes'
-      ]) 
-      && review.movieId is number
-      && review.movieTitle is string
-      && (review.backdrop == null || review.backdrop is string)
-      && review.rating is number
-      && review.rating >= 1
-      && review.rating <= 5
-      && review.review is string
-      && review.userId is string
-      && review.username is string
-      && review.timestamp is timestamp
-      && review.likes is number
-      && review.likes >= 0;
-    }
-
-    function isValidMatch() {
-      let matchData = request.resource.data;
-      return matchData.keys().hasAll(['user1Id', 'user2Id', 'score', 'commonMovies', 'timestamp', 'isNew']) &&
-        matchData.user1Id is string &&
-        matchData.user2Id is string &&
-        matchData.score is number &&
-        matchData.score >= 20 &&  // Updated threshold
-        matchData.score <= 100 &&
-        matchData.commonMovies is list &&
-        matchData.timestamp is timestamp &&
-        matchData.isNew is bool;
-    }
-
-    function isChatParticipant(chatId) {
-      let chatData = get(/databases/$(database)/documents/chats/$(chatId)).data;
-      return chatData != null && 
-        chatData.participants is list &&
-        chatData.participants.hasAny([request.auth.uid]);
-    }
-
-    function getParent() {
-      return request.path[0:request.path.size()-2].join('/');
-    }
-
-    function isValidMessage() {
-      let message = request.resource.data;
-      return message.keys().hasAll(['text', 'senderId', 'timestamp']) &&
-        message.text is string &&
-        message.text.size() > 0 &&
-        message.text.size() <= 1000 &&
-        message.senderId == request.auth.uid &&
-        message.timestamp is timestamp;
-    }
-
+    
+    // Example for user document access
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow create, update: if isSignedIn() && isOwner(userId);
-      allow delete: if isSignedIn() && isOwner(userId);
-
+      allow create, update, delete: if isSignedIn() && isOwner(userId);
+      
+      // Movies subcollection
       match /movies/{movieId} {
         allow read: if isSignedIn();
         allow write: if isSignedIn() && isOwner(userId);
       }
-
-      // MovieInteractions subcollection
+      
+      // Movie interactions subcollection with owner validation
       match /movieInteractions/{movieId} {
-        allow read: if isSignedIn() && isOwner(userId);
-        allow write: if isSignedIn() && isOwner(userId) && isValidMovieInteraction();
+        allow read, write: if isSignedIn() && isOwner(userId) && request.resource.data.keys().hasAll(['movieId', 'status']);
       }
     }
-
-    match /movies/{movieId} {
-      allow read: if isSignedIn();
-      allow write: if false;
-
-      match /metadata/{metadataId} {
-        allow read: if isSignedIn();
-        allow write: if false;
-      }
-    }
-
-    match /chats/{chatId} {
-      allow create: if isSignedIn();
-      allow read, write: if isSignedIn() && isChatParticipant(chatId);
-
-      match /messages/{messageId} {
-        allow read: if isSignedIn() && isChatParticipant(chatId);
-        allow create: if isSignedIn() && 
-          isChatParticipant(chatId) && 
-          request.resource.data.senderId == request.auth.uid;
-        allow update: if false;
-        allow delete: if isSignedIn() && 
-          resource.data.senderId == request.auth.uid;
-      }
-    }
-
-    // Update reviews collection rules
-    match /reviews/{reviewId} {
-      allow read: if isSignedIn();
-      allow write: if false;  // Disable direct writes to root reviews
-      
-      match /{document=**} {
-        allow read: if isSignedIn();
-      }
-    }
-
-    // Update shared reviews collection rules
-    match /sharedReviews/{reviewId} {
-      allow read: if true;  // Public reads
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if false;
-      
-      match /{document=**} {
-        allow read: if true;  // Allow nested reads
-      }
-    }
-
+    
     // Matches collection
     match /matches/{matchId} {
-      allow read: if isSignedIn() && (
-        resource.data.user1Id == request.auth.uid || 
-        resource.data.user2Id == request.auth.uid
-      );
-      allow create: if isSignedIn() && isValidMatch();
+      allow read: if isSignedIn() && (resource.data.user1Id == request.auth.uid || resource.data.user2Id == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.keys().hasAll(['user1Id', 'user2Id', 'score']);
+      allow update, delete: if false;
+    }
+    
+    // Chats collection with participant validation
+    match /chats/{chatId} {
+      allow read, write: if isSignedIn() && get(/databases/$(database)/documents/chats/$(chatId)).data.participants.hasAny([request.auth.uid]);
+      
+      match /messages/{messageId} {
+        allow read, write: if isSignedIn() && get(/databases/$(database)/documents/chats/$(chatId)).data.participants.hasAny([request.auth.uid]);
+      }
+    }
+    
+    // Shared reviews (public read access)
+    match /sharedReviews/{reviewId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if false;
     }
   }
