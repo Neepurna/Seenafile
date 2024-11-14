@@ -124,7 +124,7 @@ const NewsCard: React.FC<{data: RSSItem}> = ({ data }) => {
               />
               {imageLoading && (
                 <View style={styles.imageLoadingOverlay}>
-                  <ActivityIndicator size="large" color="#BB86FC" />
+                  <ActivityIndicator size={24} color="#BB86FC" />
                 </View>
               )}
             </View>
@@ -218,7 +218,7 @@ const PersonalFeed: React.FC = () => {
   if (isLoading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#BB86FC" />
+        <ActivityIndicator size={24} color="#BB86FC" />
       </View>
     );
   }
@@ -348,7 +348,7 @@ const PublicFeed: React.FC<{ connectedUsers: string[], onUserConnect: (userId: s
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#BB86FC" />
+        <ActivityIndicator size={24} color="#BB86FC" />
       </View>
     );
   }
@@ -427,7 +427,7 @@ const CinePalScreen: React.FC = () => {
     if (isLoading) {
       return (
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#BB86FC" />
+          <ActivityIndicator size={24} color="#BB86FC" />
         </View>
       );
     }

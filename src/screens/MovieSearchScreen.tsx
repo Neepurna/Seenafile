@@ -78,7 +78,7 @@ const MovieSearchScreen: React.FC = () => {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#fff" />
+        <ActivityIndicator size={24} color="#fff" />
         <Text style={styles.loadingText}>Loading movies...</Text>
       </View>
     );
@@ -100,7 +100,7 @@ const MovieSearchScreen: React.FC = () => {
             {searchQuery ? 'Search Results' : 'Trending Today'}
           </Text>
           {isSearching ? (
-            <ActivityIndicator size="large" color="#fff" style={styles.searchSpinner} />
+            <ActivityIndicator size={24} color="#fff" style={styles.searchSpinner} />
           ) : error ? (
             <Text style={styles.errorText}>{error}</Text>
           ) : (

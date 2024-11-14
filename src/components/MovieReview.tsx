@@ -221,7 +221,7 @@ const MovieReview: React.FC<MovieReviewProps> = ({ movie, onDoubleTap }) => {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#ffffff" />
+        <ActivityIndicator size={24} color="#ffffff" />
       </View>
     );
   }

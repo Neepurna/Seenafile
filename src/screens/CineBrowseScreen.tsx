@@ -424,7 +424,7 @@ const CineBrowseScreen: React.FC = () => {
       </GestureHandlerRootView>
       {(loading || isFetching) && (
         <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#ffffff" />
+          <ActivityIndicator size={24} color="#ffffff" />
         </View>
       )}
     </View>

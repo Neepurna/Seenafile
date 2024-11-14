@@ -18,7 +18,7 @@ import {
   Keyboard,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { db, addListener, removeListener } from '../firebase';
+import { db, ListenerManager } from '../firebase';
 import { collection, doc, getDoc, addDoc, query, orderBy, onSnapshot, setDoc, where, updateDoc } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -231,14 +231,14 @@ const ChatList: React.FC<ChatListProps> = ({
 
       // Subscribe to messages
       const messagesRef = collection(chatRef, 'messages');
-      const q = query(messagesRef, orderBy('timestamp', 'asc')); // Changed to ascending order
+      const q = query(messagesRef, orderBy('timestamp', 'asc'));
 
       const unsubscribe = onSnapshot(q, (snapshot) => {
         const newMessages = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         } as Message));
-        setMessages(newMessages); // No need to reverse
+        setMessages(newMessages);
       });
 
       return unsubscribe;
@@ -248,6 +248,12 @@ const ChatList: React.FC<ChatListProps> = ({
   }, [currentUserId]);
 
   const handleSelectMatch = async (match: Match) => {
+    // Clean up previous chat listener if exists
+    if (selectedMatch) {
+      const previousChatId = [currentUserId, selectedMatch.userId].sort().join('_');
+      ListenerManager.removeListener(`chat_${previousChatId}`);
+    }
+    
     // Reset messages when selecting new match
     setMessages([]);
     setSelectedMatch(match);
@@ -417,7 +423,6 @@ const ChatList: React.FC<ChatListProps> = ({
         const chatId = [currentUserId, selectedMatch.userId].sort().join('_');
         const chatRef = doc(db, 'chats', chatId);
         
-        // First create/update the chat document
         await setDoc(chatRef, {
           participants: [currentUserId, selectedMatch.userId].sort(),
           createdAt: new Date(),
@@ -425,7 +430,6 @@ const ChatList: React.FC<ChatListProps> = ({
           lastMessageTime: null
         }, { merge: true });
 
-        // Then set up the messages listener
         const messagesRef = collection(chatRef, 'messages');
         const q = query(messagesRef, orderBy('timestamp', 'asc'));
         
@@ -439,12 +443,13 @@ const ChatList: React.FC<ChatListProps> = ({
           console.error('Chat listener error:', error);
         });
 
-        // Register listener with unique ID
+        // Register chat listener with unique ID
         chatListener = `chat_${chatId}_${Date.now()}`;
-        addListener({
+        ListenerManager.addListener({
           id: chatListener,
           type: 'chat',
-          unsubscribe
+          unsubscribe,
+          userId: currentUserId
         });
 
       } catch (error) {
@@ -457,15 +462,29 @@ const ChatList: React.FC<ChatListProps> = ({
     // Cleanup function
     return () => {
       if (chatListener) {
-        removeListener(chatListener);
+        ListenerManager.removeListener(chatListener);
       }
     };
   }, [selectedMatch, currentUserId]);
 
+  // Add cleanup effect
+  useEffect(() => {
+    return () => {
+      // Clean up chat listeners on unmount
+      const chatId = currentUserId && selectedMatch 
+        ? [currentUserId, selectedMatch.userId].sort().join('_')
+        : null;
+      
+      if (chatId) {
+        ListenerManager.removeListener(`chat_${chatId}`);
+      }
+    };
+  }, [currentUserId, selectedMatch]);
+
   if (isLoadingPersisted) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#BB86FC" />
+        <ActivityIndicator size={24} color="#BB86FC" />
       </View>
     );
   }

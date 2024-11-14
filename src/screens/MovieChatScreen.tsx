@@ -88,7 +88,7 @@ const MovieChatScreen: React.FC = () => {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#fff" />
+        <ActivityIndicator size={24} color="#fff" />
         <Text style={styles.loadingText}>Preparing your movie experience...</Text>
       </View>
     );
@@ -157,10 +157,12 @@ const styles = StyleSheet.create({
   chatContainer: {
     flex: 1,
     backgroundColor: '#111',
+    justifyContent: 'space-between', // Add this
   },
   messagesContainer: {
     flex: 1,
     padding: 16,
+    paddingBottom: Platform.OS === 'ios' ? 80 : 16, // Add this
   },
   message: {
     padding: 12,
@@ -186,6 +188,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#222',
     borderTopWidth: 1,
     borderTopColor: '#333',
+    paddingBottom: Platform.OS === 'ios' ? 30 : 16, // Add this
   },
   chatInput: {
     flex: 1,

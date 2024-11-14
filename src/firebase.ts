@@ -512,10 +512,67 @@ export const getUserMatches = async (userId: string): Promise<Match[]> => {
   }
 };
 
-// Update signOut function to ensure all listeners are cleaned up
+// ...existing code...
+
+// ...existing imports...
+
+interface FirebaseListener {
+  id: string;
+  type: string;
+  unsubscribe: () => void;
+  userId?: string;
+}
+
+class ListenerManagerClass {
+  private listeners: FirebaseListener[] = [];
+
+  addListener(listener: FirebaseListener) {
+    this.listeners.push(listener);
+  }
+
+  removeListener(id: string) {
+    const index = this.listeners.findIndex(l => l.id === id);
+    if (index !== -1) {
+      try {
+        this.listeners[index].unsubscribe();
+        this.listeners.splice(index, 1);
+      } catch (e) {
+        console.warn('Error removing listener:', e);
+      }
+    }
+  }
+
+  removeUserListeners(userId: string) {
+    this.listeners
+      .filter(l => l.userId === userId)
+      .forEach(l => this.removeListener(l.id));
+  }
+
+  removeAllListeners() {
+    while (this.listeners.length > 0) {
+      const listener = this.listeners.pop();
+      if (listener) {
+        try {
+          listener.unsubscribe();
+        } catch (e) {
+          console.warn('Error removing listener:', e);
+        }
+      }
+    }
+  }
+}
+
+export const ListenerManager = new ListenerManagerClass();
+
+// ...existing code...
+
+// Replace the old signOut function with this updated version
 export const signOut = async () => {
   try {
-    // Clean up all listeners first
+    // Clean up all listeners using ListenerManager
+    ListenerManager.removeAllListeners();
+    
+    // Clean up any legacy listeners
     Object.keys(listeners).forEach(key => {
       try {
         if (listeners[key]) {
@@ -530,7 +587,7 @@ export const signOut = async () => {
     // Clear the listeners object
     listeners = {};
     
-    // Clean up all listeners first
+    // Clean up active listeners array
     while (activeListeners.length > 0) {
       const listener = activeListeners.pop();
       try {
