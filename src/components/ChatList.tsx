@@ -1,3 +1,5 @@
+// chatlist.tsx
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
@@ -11,15 +13,25 @@ import {
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
-  ToastAndroid,
   Alert,
   ActivityIndicator,
   useWindowDimensions,
   Keyboard,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { db, ListenerManager } from '../firebase';
-import { collection, doc, getDoc, addDoc, query, orderBy, onSnapshot, setDoc, where, updateDoc } from 'firebase/firestore';
+import { db, auth } from '../firebase';
+import {
+  collection,
+  doc,
+  getDoc,
+  addDoc,
+  query,
+  orderBy,
+  onSnapshot,
+  setDoc,
+  where,
+  updateDoc,
+} from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SEEN_MATCHES_KEY = '@seen_matches';
@@ -49,69 +61,91 @@ interface Match {
 }
 
 interface UserDetails {
-  name: string;  // Changed from displayName to name
+  name: string;
   photoURL: string;
   email: string;
 }
 
 interface ChatListProps {
   matches: Match[];
-  currentUserId: string;
   selectedMatch?: Match | null;
   onSelectMatch?: (match: Match | null) => void;
   connectedUsers?: string[];
   onUserConnect?: (userId: string) => void;
 }
 
-const ChatList: React.FC<ChatListProps> = ({ 
-  matches, 
-  currentUserId, 
+const ChatList: React.FC<ChatListProps> = ({
+  matches,
   selectedMatch: propSelectedMatch,
   onSelectMatch,
   connectedUsers = [],
-  onUserConnect 
+  onUserConnect,
 }) => {
-  const [selectedMatch, setSelectedMatch] = useState<Match | null>(propSelectedMatch || null);
+  const currentUserId = auth.currentUser?.uid;
+
+  const [selectedMatch, setSelectedMatch] = useState<Match | null>(
+    propSelectedMatch || null
+  );
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
-  const [userDetails, setUserDetails] = useState<{ [key: string]: UserDetails }>({});
+  const [userDetails, setUserDetails] = useState<{ [key: string]: UserDetails }>(
+    {}
+  );
   const [showMatchNotification, setShowMatchNotification] = useState(false);
   const [newMatchUser, setNewMatchUser] = useState<UserDetails | null>(null);
   const [isLoadingPersisted, setIsLoadingPersisted] = useState(true);
   const [seenMatches, setSeenMatches] = useState<string[]>([]);
   const messagesListRef = useRef<FlatList>(null);
-  const { height: windowHeight } = useWindowDimensions();
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
+
+  // Store unsubscribe functions
+  const unsubscribeRefs = useRef<(() => void)[]>([]);
 
   const fetchUserDetails = async (userId: string) => {
     try {
       const userDoc = await getDoc(doc(db, 'users', userId));
       if (userDoc.exists()) {
         const userData = userDoc.data();
-        console.log('Fetched user data:', userData); // Debug log
-        
-        setUserDetails(prev => ({
+
+        setUserDetails((prev) => ({
           ...prev,
           [userId]: {
-            name: userData.name || userData.displayName || 'Anonymous User', // Try both fields
+            name:
+              userData.name || userData.displayName || 'Anonymous User', // Try both fields
             photoURL: userData.photoURL || 'https://via.placeholder.com/50',
-            email: userData.email || ''
-          }
+            email: userData.email || '',
+          },
         }));
       } else {
-        console.log('No user document found for:', userId); // Debug log
+        console.log('No user document found for:', userId);
       }
-    } catch (error) {
-      console.error('Error fetching user details:', error);
+    } catch (error: any) {
+      if (error.code === 'permission-denied') {
+        console.warn('Permission denied for user:', userId);
+        // Set a placeholder for users we can't access
+        setUserDetails((prev) => ({
+          ...prev,
+          [userId]: {
+            name: 'User',
+            photoURL: 'https://via.placeholder.com/50',
+            email: '',
+          },
+        }));
+      } else {
+        console.error('Error fetching user details:', error);
+      }
     }
   };
 
   useEffect(() => {
     const fetchAllUsers = async () => {
-      const userPromises = matches.map(match => fetchUserDetails(match.userId));
+      const userPromises = matches.map((match) =>
+        fetchUserDetails(match.userId)
+      );
       await Promise.all(userPromises);
     };
-    
+
     fetchAllUsers();
   }, [matches]);
 
@@ -131,21 +165,24 @@ const ChatList: React.FC<ChatListProps> = ({
 
   useEffect(() => {
     const checkNewMatches = async () => {
-      const highMatches = matches.filter(match => 
-        match.score >= 30 && !seenMatches.includes(match.userId)
+      const highMatches = matches.filter(
+        (match) => match.score >= 30 && !seenMatches.includes(match.userId)
       );
-      
+
       if (highMatches.length > 0) {
         const lastMatch = highMatches[0];
         const matchUserDetails = userDetails[lastMatch.userId];
         if (matchUserDetails) {
           setNewMatchUser(matchUserDetails);
           setShowMatchNotification(true);
-          
+
           // Add to seen matches
           const updatedSeenMatches = [...seenMatches, lastMatch.userId];
           setSeenMatches(updatedSeenMatches);
-          await AsyncStorage.setItem(SEEN_MATCHES_KEY, JSON.stringify(updatedSeenMatches));
+          await AsyncStorage.setItem(
+            SEEN_MATCHES_KEY,
+            JSON.stringify(updatedSeenMatches)
+          );
         }
       }
     };
@@ -164,29 +201,52 @@ const ChatList: React.FC<ChatListProps> = ({
       where('isNew', '==', true)
     );
 
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-      snapshot.docChanges().forEach(async (change) => {
-        if (change.type === 'added') {
-          const matchData = change.doc.data();
-          const userDoc = await getDoc(doc(db, 'users', matchData.user1Id));
-          const userData = userDoc.data();
+    const unsubscribe = onSnapshot(
+      q,
+      async (snapshot) => {
+        snapshot.docChanges().forEach(async (change) => {
+          if (change.type === 'added') {
+            const matchData = change.doc.data();
+            const userDoc = await getDoc(doc(db, 'users', matchData.user1Id));
+            const userData = userDoc.data();
 
-          if (userData) {
-            setNewMatchUser({
-              name: userData.name || userData.displayName || 'Anonymous User',
-              photoURL: userData.photoURL || 'https://via.placeholder.com/50',
-              email: userData.email || ''
-            });
-            setShowMatchNotification(true);
+            if (userData) {
+              setNewMatchUser({
+                name:
+                  userData.name ||
+                  userData.displayName ||
+                  'Anonymous User',
+                photoURL:
+                  userData.photoURL || 'https://via.placeholder.com/50',
+                email: userData.email || '',
+              });
+              setShowMatchNotification(true);
+            }
+
+            // Mark match as seen
+            await updateDoc(change.doc.ref, { isNew: false });
           }
-
-          // Mark match as seen
-          await updateDoc(change.doc.ref, { isNew: false });
+        });
+      },
+      (error) => {
+        if (error.code === 'permission-denied') {
+          console.warn('Permission denied in match listener:', error);
+        } else {
+          console.error('Error in match listener:', error);
         }
-      });
-    });
+      }
+    );
 
-    return () => unsubscribe();
+    // Store unsubscribe function
+    unsubscribeRefs.current.push(unsubscribe);
+
+    return () => {
+      unsubscribe();
+      // Remove the unsubscribe function from the array
+      unsubscribeRefs.current = unsubscribeRefs.current.filter(
+        (fn) => fn !== unsubscribe
+      );
+    };
   }, [currentUserId]);
 
   useEffect(() => {
@@ -213,87 +273,79 @@ const ChatList: React.FC<ChatListProps> = ({
     };
   }, []);
 
-  const openChat = useCallback(async (match: Match) => {
-    setSelectedMatch(match);
-    await fetchUserDetails(match.userId);
-
-    // Create or get chat document
-    const chatId = [currentUserId, match.userId].sort().join('_');
-    const chatRef = doc(db, 'chats', chatId);
-    
-    try {
-      // Create chat document if it doesn't exist
-      await setDoc(chatRef, {
-        participants: [currentUserId, match.userId],
-        createdAt: new Date(),
-        lastMessage: null
-      }, { merge: true });
-
-      // Subscribe to messages
-      const messagesRef = collection(chatRef, 'messages');
-      const q = query(messagesRef, orderBy('timestamp', 'asc'));
-
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const newMessages = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        } as Message));
-        setMessages(newMessages);
-      });
-
-      return unsubscribe;
-    } catch (error) {
-      console.error('Error opening chat:', error);
-    }
-  }, [currentUserId]);
-
   const handleSelectMatch = async (match: Match) => {
-    // Clean up previous chat listener if exists
-    if (selectedMatch) {
-      const previousChatId = [currentUserId, selectedMatch.userId].sort().join('_');
-      ListenerManager.removeListener(`chat_${previousChatId}`);
-    }
-    
-    // Reset messages when selecting new match
-    setMessages([]);
-    setSelectedMatch(match);
-    
-    if (onSelectMatch) {
-      onSelectMatch(match);
-    }
-    
-    if (onUserConnect && !connectedUsers.includes(match.userId)) {
-      onUserConnect(match.userId);
-    }
-
-    // Setup chat listeners
-    const chatId = [currentUserId, match.userId].sort().join('_');
-    const chatRef = doc(db, 'chats', chatId);
-    const messagesRef = collection(chatRef, 'messages');
-    
     try {
+      // Unsubscribe from previous chat listener
+      if (unsubscribeRefs.current.length > 0) {
+        unsubscribeRefs.current.forEach((unsubscribe) => unsubscribe());
+        unsubscribeRefs.current = [];
+      }
+
+      // Reset messages when selecting new match
+      setMessages([]);
+      setSelectedMatch(match);
+      setPermissionError(null);
+
+      if (onSelectMatch) {
+        onSelectMatch(match);
+      }
+
+      if (onUserConnect && !connectedUsers.includes(match.userId)) {
+        onUserConnect(match.userId);
+      }
+
+      if (!currentUserId) return;
+
+      // Setup chat listener
+      const chatId = [currentUserId, match.userId].sort().join('_');
+      const chatRef = doc(db, 'chats', chatId);
+      const messagesRef = collection(chatRef, 'messages');
+
       // Create chat document if it doesn't exist
-      await setDoc(chatRef, {
-        participants: [currentUserId, match.userId].sort(),
-        createdAt: new Date(),
-        lastMessage: null,
-        lastMessageTime: null
-      }, { merge: true });
+      await setDoc(
+        chatRef,
+        {
+          participants: [currentUserId, match.userId].sort(),
+          createdAt: new Date(),
+          lastMessage: null,
+          lastMessageTime: null,
+        },
+        { merge: true }
+      );
 
       // Listen to messages
       const q = query(messagesRef, orderBy('timestamp', 'asc'));
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const newMessages = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        } as Message));
-        setMessages(newMessages);
-      });
+      const unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          const newMessages = snapshot.docs.map(
+            (doc) =>
+              ({
+                id: doc.id,
+                ...doc.data(),
+              } as Message)
+          );
+          setMessages(newMessages);
+        },
+        (error) => {
+          if (error.code === 'permission-denied') {
+            setPermissionError(
+              'Unable to access this chat. Please try again later.'
+            );
+          } else {
+            console.error('Error in chat listener:', error);
+          }
+        }
+      );
 
       // Store unsubscribe function
-      return () => unsubscribe();
-    } catch (error) {
-      console.error('Error setting up chat:', error);
+      unsubscribeRefs.current.push(unsubscribe);
+    } catch (error: any) {
+      if (error.code === 'permission-denied') {
+        setPermissionError('Unable to access this chat. Please try again later.');
+      } else {
+        console.error('Error setting up chat:', error);
+      }
     }
   };
 
@@ -310,7 +362,7 @@ const ChatList: React.FC<ChatListProps> = ({
         text: newMessage.trim(),
         senderId: currentUserId,
         timestamp: new Date(),
-        read: false
+        read: false,
       };
 
       await addDoc(messagesRef, messageData);
@@ -319,7 +371,7 @@ const ChatList: React.FC<ChatListProps> = ({
       await updateDoc(chatRef, {
         lastMessage: newMessage.trim(),
         lastMessageTime: new Date(),
-        lastSenderId: currentUserId
+        lastSenderId: currentUserId,
       });
 
       setNewMessage('');
@@ -331,21 +383,22 @@ const ChatList: React.FC<ChatListProps> = ({
   };
 
   // Filter out invalid matches
-  const validMatches = matches.filter(match => 
-    match && 
-    match.userId && 
-    typeof match.score === 'number' && 
-    Array.isArray(match.commonMovies) &&
-    match.commonMovies.every(movie => 
-      movie && 
-      movie.movieId && 
-      movie.title && 
-      movie.category
-    )
+  const validMatches = matches.filter(
+    (match) =>
+      match &&
+      match.userId &&
+      typeof match.score === 'number' &&
+      Array.isArray(match.commonMovies) &&
+      match.commonMovies.every(
+        (movie) =>
+          movie && movie.movieId && movie.title && movie.category
+      )
   );
 
   // Update the filtered matches threshold to 20%
-  const filteredMatches = validMatches.filter(match => match.score >= 20);
+  const filteredMatches = validMatches.filter(
+    (match) => match.score >= 20
+  );
 
   // Update empty state message
   const EmptyState = () => (
@@ -375,7 +428,7 @@ const ChatList: React.FC<ChatListProps> = ({
           setMessages(chatData.messages || []);
           if (chatData.selectedMatch) {
             setSelectedMatch(chatData.selectedMatch);
-            openChat(chatData.selectedMatch);
+            handleSelectMatch(chatData.selectedMatch);
           }
         }
       } catch (error) {
@@ -395,7 +448,10 @@ const ChatList: React.FC<ChatListProps> = ({
           messages,
           selectedMatch,
         };
-        await AsyncStorage.setItem('persistedChats', JSON.stringify(chatData));
+        await AsyncStorage.setItem(
+          'persistedChats',
+          JSON.stringify(chatData)
+        );
       } catch (error) {
         console.error('Error persisting chat data:', error);
       }
@@ -406,80 +462,155 @@ const ChatList: React.FC<ChatListProps> = ({
     }
   }, [messages, selectedMatch, isLoadingPersisted]);
 
-  // Add this function to scroll to bottom
-  const scrollToBottom = () => {
-    if (messages.length > 0 && messagesListRef.current) {
-      messagesListRef.current.scrollToOffset({ offset: 0, animated: true });
+  // Clean up listeners on unmount or when currentUserId changes
+  useEffect(() => {
+    return () => {
+      unsubscribeRefs.current.forEach((unsubscribe) => unsubscribe());
+      unsubscribeRefs.current = [];
+    };
+  }, [currentUserId]);
+
+  // Clean up when user logs out
+  useEffect(() => {
+    if (!currentUserId) {
+      // User has logged out
+      // Clean up listeners
+      unsubscribeRefs.current.forEach((unsubscribe) => unsubscribe());
+      unsubscribeRefs.current = [];
+      // Reset state
+      setSelectedMatch(null);
+      setMessages([]);
+      setUserDetails({});
+      setNewMessage('');
+      setPermissionError(null);
     }
+  }, [currentUserId]);
+
+  const renderChat = () => {
+    if (permissionError) {
+      return (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{permissionError}</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => {
+              setPermissionError(null);
+              if (selectedMatch) {
+                handleSelectMatch(selectedMatch);
+              }
+            }}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.chatContainer}>
+        <View style={styles.chatHeader}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => setSelectedMatch(null)}
+          >
+            <MaterialIcons name="arrow-back" size={24} color="#FFF" />
+          </TouchableOpacity>
+          <Text style={styles.chatTitle}>
+            {userDetails[selectedMatch?.userId]?.name || 'Chat'}
+          </Text>
+        </View>
+
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardAvoidingView}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 150 : 120}
+        >
+          <View style={styles.chatContentContainer}>
+            <FlatList
+              ref={messagesListRef}
+              data={messages}
+              inverted={false}
+              renderItem={({ item }) => (
+                <View
+                  style={[
+                    styles.messageContainer,
+                    item.senderId === currentUserId
+                      ? styles.sentMessage
+                      : styles.receivedMessage,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.messageText,
+                      item.senderId === currentUserId
+                        ? styles.sentMessageText
+                        : styles.receivedMessageText,
+                    ]}
+                  >
+                    {item.text}
+                  </Text>
+                </View>
+              )}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={[
+                styles.messagesContentContainer,
+                {
+                  flexGrow: 1,
+                  justifyContent: 'flex-end',
+                  paddingBottom:
+                    Platform.OS === 'ios'
+                      ? keyboardHeight + 90
+                      : keyboardHeight + 60,
+                },
+              ]}
+              onLayout={() => {
+                messagesListRef.current?.scrollToEnd({ animated: false });
+              }}
+              onContentSizeChange={() => {
+                messagesListRef.current?.scrollToEnd({ animated: true });
+              }}
+            />
+          </View>
+
+          <View
+            style={[
+              styles.inputWrapper,
+              Platform.OS === 'android' && {
+                position: 'absolute',
+                bottom: keyboardHeight > 0 ? keyboardHeight + 30 : 0,
+                left: 0,
+                right: 0,
+                backgroundColor: '#1E1E1E',
+              },
+            ]}
+          >
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.input}
+                value={newMessage}
+                onChangeText={setNewMessage}
+                placeholder="Type a message..."
+                placeholderTextColor="#666"
+                multiline
+                maxLength={1000}
+              />
+              <TouchableOpacity
+                style={styles.sendButton}
+                onPress={sendMessage}
+                disabled={!newMessage.trim()}
+              >
+                <MaterialIcons
+                  name="send"
+                  size={24}
+                  color={newMessage.trim() ? '#BB86FC' : '#666'}
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </View>
+    );
   };
-
-  useEffect(() => {
-    let chatListener: string | undefined;
-
-    const setupChatListener = async () => {
-      if (!selectedMatch || !currentUserId) return;
-
-      try {
-        const chatId = [currentUserId, selectedMatch.userId].sort().join('_');
-        const chatRef = doc(db, 'chats', chatId);
-        
-        await setDoc(chatRef, {
-          participants: [currentUserId, selectedMatch.userId].sort(),
-          createdAt: new Date(),
-          lastMessage: null,
-          lastMessageTime: null
-        }, { merge: true });
-
-        const messagesRef = collection(chatRef, 'messages');
-        const q = query(messagesRef, orderBy('timestamp', 'asc'));
-        
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-          const newMessages = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          } as Message));
-          setMessages(newMessages);
-        }, (error) => {
-          console.error('Chat listener error:', error);
-        });
-
-        // Register chat listener with unique ID
-        chatListener = `chat_${chatId}_${Date.now()}`;
-        ListenerManager.addListener({
-          id: chatListener,
-          type: 'chat',
-          unsubscribe,
-          userId: currentUserId
-        });
-
-      } catch (error) {
-        console.error('Error setting up chat:', error);
-      }
-    };
-
-    setupChatListener();
-
-    // Cleanup function
-    return () => {
-      if (chatListener) {
-        ListenerManager.removeListener(chatListener);
-      }
-    };
-  }, [selectedMatch, currentUserId]);
-
-  // Add cleanup effect
-  useEffect(() => {
-    return () => {
-      // Clean up chat listeners on unmount
-      const chatId = currentUserId && selectedMatch 
-        ? [currentUserId, selectedMatch.userId].sort().join('_')
-        : null;
-      
-      if (chatId) {
-        ListenerManager.removeListener(`chat_${chatId}`);
-      }
-    };
-  }, [currentUserId, selectedMatch]);
 
   if (isLoadingPersisted) {
     return (
@@ -492,119 +623,37 @@ const ChatList: React.FC<ChatListProps> = ({
   return (
     <SafeAreaView style={styles.container}>
       {selectedMatch ? (
-        <View style={styles.chatContainer}>
-          <View style={styles.chatHeader}>
-            <TouchableOpacity 
-              style={styles.backButton}
-              onPress={() => setSelectedMatch(null)}
-            >
-              <MaterialIcons name="arrow-back" size={24} color="#FFF" />
-            </TouchableOpacity>
-            <Text style={styles.chatTitle}>
-              {userDetails[selectedMatch.userId]?.name || 'Chat'}
-            </Text>
-          </View>
-
-          <KeyboardAvoidingView 
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-            style={styles.keyboardAvoidingView}
-            keyboardVerticalOffset={Platform.OS === "ios" ? 150 : 120} // Increased offset significantly
-          >
-            <View style={styles.chatContentContainer}>
-              <FlatList
-                ref={messagesListRef}
-                data={messages} // Remove reverse
-                inverted={false} // Set to false
-                renderItem={({ item }) => (
-                  <View style={[
-                    styles.messageContainer,
-                    item.senderId === currentUserId ? styles.sentMessage : styles.receivedMessage
-                  ]}>
-                    <Text style={[
-                      styles.messageText,
-                      item.senderId === currentUserId ? styles.sentMessageText : styles.receivedMessageText
-                    ]}>{item.text}</Text>
-                  </View>
-                )}
-                keyExtractor={item => item.id}
-                contentContainerStyle={[
-                  styles.messagesContentContainer,
-                  { 
-                    flexGrow: 1,
-                    justifyContent: 'flex-end',
-                    paddingBottom: Platform.OS === 'ios' 
-                      ? keyboardHeight + 90  // Increased padding for iOS
-                      : keyboardHeight + 60  // Increased padding for Android
-                  }
-                ]}
-                onLayout={() => {
-                  messagesListRef.current?.scrollToEnd({ animated: false });
-                }}
-                onContentSizeChange={() => {
-                  messagesListRef.current?.scrollToEnd({ animated: true });
-                }}
-              />
-            </View>
-
-            <View style={[
-              styles.inputWrapper,
-              Platform.OS === 'android' && {
-                position: 'absolute',
-                bottom: keyboardHeight > 0 ? keyboardHeight + 30 : 0, // Added extra space
-                left: 0,
-                right: 0,
-                backgroundColor: '#1E1E1E',
-              }
-            ]}>
-              <View style={styles.inputContainer}>
-                <TextInput
-                  style={styles.input}
-                  value={newMessage}
-                  onChangeText={setNewMessage}
-                  placeholder="Type a message..."
-                  placeholderTextColor="#666"
-                  multiline
-                  maxLength={1000}
-                />
-                <TouchableOpacity 
-                  style={styles.sendButton}
-                  onPress={sendMessage}
-                  disabled={!newMessage.trim()}
-                >
-                  <MaterialIcons 
-                    name="send" 
-                    size={24} 
-                    color={newMessage.trim() ? "#BB86FC" : "#666"} 
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
-          </KeyboardAvoidingView>
-        </View>
+        renderChat()
       ) : (
         <FlatList
           data={sortedMatches}
           renderItem={({ item }) => (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={[
                 styles.matchItem,
-                connectedUsers.includes(item.userId) && styles.connectedMatchItem
+                connectedUsers.includes(item.userId) &&
+                  styles.connectedMatchItem,
               ]}
               onPress={() => handleSelectMatch(item)}
             >
               <Image
-                source={{ uri: userDetails[item.userId]?.photoURL || 'https://via.placeholder.com/50' }}
+                source={{
+                  uri:
+                    userDetails[item.userId]?.photoURL ||
+                    'https://via.placeholder.com/50',
+                }}
                 style={styles.avatar}
               />
               <View style={styles.matchInfo}>
                 <Text style={styles.username}>
                   {userDetails[item.userId]?.name || 'Loading...'}
-                  {connectedUsers.includes(item.userId) && 
+                  {connectedUsers.includes(item.userId) && (
                     <Text style={styles.connectedBadge}> • Connected</Text>
-                  }
+                  )}
                 </Text>
                 <Text style={styles.matchScore}>
-                  {item.score.toFixed(0)}% Match • {item.commonMovies.length} movies in common
+                  {item.score.toFixed(0)}% Match •{' '}
+                  {item.commonMovies.length} movies in common
                 </Text>
               </View>
             </TouchableOpacity>
@@ -624,7 +673,9 @@ const ChatList: React.FC<ChatListProps> = ({
       >
         <View style={styles.notificationOverlay}>
           <View style={styles.notificationBox}>
-            <Text style={styles.notificationTitle}>Congratulations! 🎉</Text>
+            <Text style={styles.notificationTitle}>
+              Congratulations! 🎉
+            </Text>
             <Text style={styles.notificationText}>
               You matched with {newMatchUser?.name}!
             </Text>
@@ -648,18 +699,27 @@ const ChatList: React.FC<ChatListProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: '#1E1E1E',
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   listContainer: {
+    flexGrow: 1,
     padding: 16,
   },
   matchItem: {
     flexDirection: 'row',
-    padding: 16,
-    backgroundColor: '#1E1E1E',
-    borderRadius: 12,
-    marginBottom: 12,
+    padding: 12,
+    backgroundColor: '#2C2C2C',
+    borderRadius: 8,
+    marginBottom: 8,
     alignItems: 'center',
+  },
+  connectedMatchItem: {
+    backgroundColor: '#3C3C3C',
   },
   avatar: {
     width: 50,
@@ -671,62 +731,61 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   username: {
-    fontSize: 16,
-    fontWeight: 'bold',
     color: '#FFF',
-    marginBottom: 4,
+    fontSize: 16,
+    fontWeight: '600',
   },
   matchScore: {
-    fontSize: 14,
     color: '#BB86FC',
+    fontSize: 14,
   },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  emptyText: {
-    color: '#888',
-    textAlign: 'center',
-    fontSize: 16,
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#121212',
+  connectedBadge: {
+    color: '#4CAF50',
+    fontSize: 14,
   },
   chatContainer: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: '#1E1E1E',
+  },
+  chatHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#2C2C2C',
+  },
+  backButton: {
+    marginRight: 16,
+  },
+  chatTitle: {
+    color: '#FFF',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  keyboardAvoidingView: {
+    flex: 1,
   },
   chatContentContainer: {
     flex: 1,
-    position: 'relative',
   },
   messagesContentContainer: {
-    flexGrow: 1,
-    paddingHorizontal: 16,
-    paddingTop: 8,
+    padding: 16,
   },
   messageContainer: {
-    margin: 4,
-    padding: 12,
-    borderRadius: 20,
     maxWidth: '80%',
+    marginVertical: 4,
+    padding: 12,
+    borderRadius: 16,
   },
   sentMessage: {
     alignSelf: 'flex-end',
     backgroundColor: '#BB86FC',
-    marginLeft: '20%',
   },
   receivedMessage: {
     alignSelf: 'flex-start',
-    backgroundColor: '#1E1E1E',
-    marginRight: '20%',
+    backgroundColor: '#2C2C2C',
   },
   messageText: {
     fontSize: 16,
-    lineHeight: 20,
   },
   sentMessageText: {
     color: '#000',
@@ -735,76 +794,78 @@ const styles = StyleSheet.create({
     color: '#FFF',
   },
   inputWrapper: {
-    borderTopWidth: 1,
-    borderTopColor: '#333',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    marginTop: 'auto',
+    width: '100%',
+    padding: 16,
+    backgroundColor: '#1E1E1E',
   },
   inputContainer: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
+    backgroundColor: '#2C2C2C',
     borderRadius: 24,
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    minHeight: 50,
   },
   input: {
     flex: 1,
-    fontSize: 16,
-    maxHeight: 100,
-    minHeight: 24,
     color: '#FFF',
-    marginRight: 8,
-    padding: 0,
-    paddingTop: Platform.OS === 'ios' ? 8 : 0,
+    fontSize: 16,
+    paddingVertical: 12,
+    maxHeight: 100,
   },
   sendButton: {
+    marginLeft: 8,
     padding: 8,
+  },
+  emptyContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
   },
-  chatHeader: {
-    flexDirection: 'row',
+  emptyText: {
+    color: '#999',
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#1E1E1E',
-    borderBottomWidth: 1,
-    borderBottomColor: '#333',
-    height: 60,
+    padding: 20,
   },
-  backButton: {
-    marginRight: 16,
+  errorText: {
+    color: '#FF5252',
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 16,
   },
-  chatTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFF',
+  retryButton: {
+    backgroundColor: '#BB86FC',
+    padding: 12,
+    borderRadius: 8,
   },
-  messagesContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    flexGrow: 1, // Add this
-    justifyContent: 'flex-end', // Add this
-    paddingBottom: 60, // Add this to account for input container height
+  retryButtonText: {
+    color: '#000',
+    fontSize: 16,
+    fontWeight: '600',
   },
   notificationOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   notificationBox: {
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#2C2C2C',
     padding: 24,
     borderRadius: 16,
     alignItems: 'center',
     width: '80%',
   },
   notificationTitle: {
-    color: '#BB86FC',
+    color: '#FFF',
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: '600',
     marginBottom: 16,
   },
   notificationText: {
@@ -814,43 +875,23 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   notificationAvatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     marginBottom: 16,
   },
   notificationButton: {
     backgroundColor: '#BB86FC',
-    paddingHorizontal: 32,
-    paddingVertical: 12,
-    borderRadius: 24,
+    padding: 12,
+    borderRadius: 8,
+    width: '100%',
   },
   notificationButtonText: {
     color: '#000',
     fontSize: 16,
-    fontWeight: 'bold',
-  },
-  connectedMatchItem: {
-    borderColor: '#BB86FC',
-    borderWidth: 1,
-  },
-  connectedBadge: {
-    color: '#BB86FC',
-    fontSize: 12,
-    fontWeight: 'normal',
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#121212',
-  },
-  keyboardAvoidingView: {
-    flex: 1,
-    position: 'relative',
-    backgroundColor: '#121212',
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });
-
 
 export default ChatList;

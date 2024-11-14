@@ -1,197 +1,144 @@
+// matchingutils.ts
+
 import { db } from '../firebase';
-import { collection, getDocs, getDoc, doc, addDoc } from 'firebase/firestore';
+import {
+  collection,
+  getDocs,
+  QueryDocumentSnapshot,
+  doc,
+  getDoc,
+} from 'firebase/firestore';
+import { MovieMatch, Match } from '../types/matching'; // Verify this path and exports
+import { auth } from '../firebase'; // Import auth to check authentication state
 
-const MATCH_THRESHOLD = 20; // Updated threshold to 20%
+const MATCH_THRESHOLD = 20;
 
-interface MovieMatch {
-  movieId: string;
-  title: string;
-  category: string;
-  poster_path: string;
-  status: string;
-  timestamp: Date;
-}
+// Helper functions
+const findCommonMovies = (
+  userMovies: QueryDocumentSnapshot[],
+  targetMovies: QueryDocumentSnapshot[]
+): MovieMatch[] => {
+  const userMovieMap = new Map(
+    userMovies.map((doc) => [doc.data().movieId, { ...doc.data(), id: doc.id }])
+  );
 
-interface MatchData {
-  user1Id: string;
-  user2Id: string;
-  score: number;
-  commonMovies: MovieMatch[];
-  timestamp: Date;
-  isNew: boolean;
-}
+  return targetMovies
+    .map((doc) => {
+      const targetMovie = doc.data();
+      const userMovie = userMovieMap.get(targetMovie.movieId);
 
-export const calculateMatchScore = async (currentUserId: string, targetUserId?: string) => {
-  if (!currentUserId) {
-    throw new Error('No user ID provided');
+      if (userMovie) {
+        return {
+          movieId: targetMovie.movieId,
+          title: targetMovie.title,
+          category: targetMovie.category,
+          poster_path: targetMovie.poster_path,
+          status: targetMovie.status,
+          timestamp: targetMovie.timestamp?.toDate() || new Date(),
+        };
+      }
+      return null;
+    })
+    .filter((movie): movie is MovieMatch => movie !== null);
+};
+
+const calculateScore = (commonMovies: MovieMatch[]): number => {
+  if (commonMovies.length === 0) return 0;
+
+  // Base score from number of movies in common
+  const baseScore = Math.min(commonMovies.length * 10, 100);
+
+  // Additional score for matching categories
+  const categoryMatches = commonMovies.reduce((acc, movie) => {
+    if (movie.category === 'favorites' || movie.category === 'most_watch') {
+      return acc + 5;
+    }
+    return acc;
+  }, 0);
+
+  // Combine scores and cap at 100
+  const totalScore = Math.min(baseScore + categoryMatches, 100);
+
+  return totalScore;
+};
+
+export const calculateMatchScore = async (): Promise<Match[]> => {
+  const userId = auth.currentUser?.uid;
+
+  if (!userId) {
+    console.error('User is not authenticated.');
+    return [];
   }
 
   try {
-    // Get current user's movies from their collection
-    const currentUserMoviesRef = collection(db, 'users', currentUserId, 'movies');
-    const currentUserMovies = await getDocs(currentUserMoviesRef);
-    
-    if (currentUserMovies.empty) {
+    // First check if the user exists
+    const userRef = doc(db, 'users', userId);
+    const userDoc = await getDoc(userRef);
+
+    if (!userDoc.exists()) {
+      console.error('User document not found');
       return [];
     }
 
-    // Create a map of current user's movies for faster lookup
-    const currentUserMovieMap = new Map(
-      currentUserMovies.docs
-        .filter(doc => {
-          const data = doc.data();
-          return data && data.movieId && data.title && data.category;
-        })
-        .map(doc => [
-          doc.data().movieId,
-          { ...doc.data(), id: doc.id }
-        ])
-    );
+    // Get all users except current user
+    const usersRef = collection(db, 'users');
+    const usersSnap = await getDocs(usersRef);
+    const matches: Match[] = [];
 
-    // If targetUserId is provided, only calculate match for that user
-    if (targetUserId) {
-      const otherUserMoviesRef = collection(db, 'users', targetUserId, 'movies');
-      const otherUserMovies = await getDocs(otherUserMoviesRef);
-      const userDoc = await getDoc(doc(db, 'users', targetUserId));
-      
-      if (!userDoc.exists()) return [];
+    // Get current user's movies first
+    const userMoviesRef = collection(db, 'users', userId, 'movies');
+    const userMoviesSnap = await getDocs(userMoviesRef);
+    const userMovies = userMoviesSnap.docs;
 
-      const commonMovies: MovieMatch[] = [];
-      otherUserMovies.forEach(doc => {
-        const movieData = doc.data();
-        if (movieData?.movieId && currentUserMovieMap.has(movieData.movieId)) {
-          commonMovies.push({
-            movieId: movieData.movieId,
-            title: movieData.title || 'Unknown Movie',
-            category: movieData.category || 'watched',
-            poster_path: movieData.poster_path || '',
-            status: movieData.status || 'watched',
-            timestamp: movieData.timestamp || new Date()
-          });
-        }
-      });
+    // Process each potential match
+    for (const targetUserDoc of usersSnap.docs) {
+      const targetUserId = targetUserDoc.id;
 
-      const score = (commonMovies.length / 
-        Math.max(currentUserMovies.size, otherUserMovies.size)) * 100;
-
-      // Validate and create match data
-      if (score >= 20 && commonMovies.length > 0) {
-        const matchData: MatchData = {
-          user1Id: currentUserId,
-          user2Id: targetUserId,
-          score,
-          commonMovies,
-          timestamp: new Date(),
-          isNew: true
-        };
-
-        // Double check all required fields are present and valid
-        const isValidMatchData = Object.values(matchData).every(value => 
-          value !== undefined && value !== null
-        ) && matchData.commonMovies.every(movie => 
-          movie.movieId && 
-          movie.title && 
-          movie.category && 
-          movie.status && 
-          movie.timestamp
-        );
-
-        if (isValidMatchData) {
-          await addDoc(collection(db, 'matches'), matchData);
-        }
+      // Skip self-matching and invalid users
+      if (targetUserId === userId || !targetUserDoc.exists()) {
+        continue;
       }
 
-      return [{
-        userId: targetUserId,
-        displayName: userDoc.data()?.name || 'Unknown User',
-        photoURL: userDoc.data()?.photoURL || '',
-        score,
-        commonMovies
-      }];
+      try {
+        // Get target user's movies
+        const targetMoviesRef = collection(db, 'users', targetUserId, 'movies');
+        const targetMoviesSnap = await getDocs(targetMoviesRef);
+        const targetMovies = targetMoviesSnap.docs;
+
+        // Find common movies
+        const commonMovies = findCommonMovies(userMovies, targetMovies);
+
+        if (commonMovies.length > 0) {
+          const score = calculateScore(commonMovies);
+          if (score >= MATCH_THRESHOLD) {
+            matches.push({
+              userId: targetUserId,
+              score,
+              commonMovies,
+            });
+          }
+        }
+      } catch (error: any) {
+        if (error.code === 'permission-denied') {
+          console.warn(
+            `Skipping match calculation for user ${targetUserId}: Permission denied.`
+          );
+        } else {
+          console.warn(
+            `Skipping match calculation for user ${targetUserId}:`,
+            error.message
+          );
+        }
+        continue;
+      }
     }
 
-    // Get all users
-    const usersRef = collection(db, 'users');
-    const usersSnapshot = await getDocs(usersRef);
-
-    // Calculate matches
-    const matches = await Promise.all(
-      usersSnapshot.docs
-        .filter(doc => doc.id !== currentUserId)
-        .map(async (userDoc) => {
-          try {
-            // Get other user's movies
-            const otherUserMoviesRef = collection(db, 'users', userDoc.id, 'movies');
-            const otherUserMovies = await getDocs(otherUserMoviesRef);
-            
-            // Find common movies
-            const commonMovies: MovieMatch[] = [];
-            otherUserMovies.forEach(doc => {
-              const movieData = doc.data();
-              if (currentUserMovieMap.has(movieData.movieId)) {
-                commonMovies.push({
-                  movieId: movieData.movieId,
-                  title: movieData.title,
-                  category: movieData.category,
-                  poster_path: movieData.poster_path,
-                  status: movieData.status,
-                  timestamp: movieData.timestamp
-                });
-              }
-            });
-
-            // Calculate match score
-            const score = (commonMovies.length / 
-              Math.max(currentUserMovies.size, otherUserMovies.size)) * 100;
-
-            // If score is >= 20%, create a match document
-            if (score >= 20) {
-              const matchId = [currentUserId, userDoc.id].sort().join('_');
-              const matchData: MatchData = {
-                user1Id: currentUserId,
-                user2Id: userDoc.id,
-                score,
-                commonMovies,
-                timestamp: new Date(),
-                isNew: true
-              };
-
-              // Double check all required fields are present and valid
-              const isValidMatchData = Object.values(matchData).every(value => 
-                value !== undefined && value !== null
-              ) && matchData.commonMovies.every(movie => 
-                movie.movieId && 
-                movie.title && 
-                movie.category && 
-                movie.status && 
-                movie.timestamp
-              );
-
-              if (isValidMatchData) {
-                await addDoc(collection(db, 'matches'), matchData);
-              }
-            }
-
-            return {
-              userId: userDoc.id,
-              displayName: userDoc.data().displayName || 'Unknown User',
-              photoURL: userDoc.data().photoURL,
-              score,
-              commonMovies
-            };
-          } catch (error) {
-            console.error(`Error processing user ${userDoc.id}:`, error);
-            return null;
-          }
-        })
-    );
-
-    return matches
-      .filter(match => match !== null && match.score >= MATCH_THRESHOLD) // Changed threshold
-      .sort((a, b) => b.score - a.score);
-
-  } catch (error) {
+    // Sort matches by score in descending order
+    return matches.sort((a, b) => b.score - a.score);
+  } catch (error: any) {
     console.error('Error in calculateMatchScore:', error);
-    throw error;
+    return [];
   }
 };
+
+export { findCommonMovies, calculateScore };

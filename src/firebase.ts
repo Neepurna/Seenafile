@@ -425,12 +425,12 @@ export const getSharedReviews = (callback: (reviews: any[]) => void) => {
   }
 };
 
+// Update getUserReviews to access 'users/{userId}/reviews'
 export const getUserReviews = async (userId: string) => {
   try {
-    const reviewsRef = collection(db, 'reviews');
+    const reviewsRef = collection(db, 'users', userId, 'reviews');
     const q = query(
       reviewsRef, 
-      where('userId', '==', userId),
       orderBy('createdAt', 'desc')
     );
     const querySnapshot = await getDocs(q);
@@ -444,6 +444,16 @@ export const getUserReviews = async (userId: string) => {
     return [];
   }
 };
+
+// Ensure the user is authenticated before accessing data
+auth.onAuthStateChanged(user => {
+  if (user) {
+    // User is signed in, safe to access protected resources
+    // ...existing code...
+  } else {
+    // No user is signed in, handle accordingly
+  }
+});
 
 // Add these new functions after existing code
 export const createMatch = async (matchData: {
@@ -523,56 +533,58 @@ interface FirebaseListener {
   userId?: string;
 }
 
-class ListenerManagerClass {
-  private listeners: FirebaseListener[] = [];
+// Remove the first ListenerManagerClass and combine it with the second implementation
+export class ListenerManager {
+  private static listeners: Map<string, () => void> = new Map();
+  private static userListeners: Map<string, string[]> = new Map();
 
-  addListener(listener: FirebaseListener) {
-    this.listeners.push(listener);
+  static addListener(id: string, unsubscribe: () => void, userId?: string) {
+    this.listeners.set(id, unsubscribe);
+    if (userId) {
+      const userListeners = this.userListeners.get(userId) || [];
+      userListeners.push(id);
+      this.userListeners.set(userId, userListeners);
+    }
   }
 
-  removeListener(id: string) {
-    const index = this.listeners.findIndex(l => l.id === id);
-    if (index !== -1) {
+  static removeListener(id: string) {
+    const unsubscribe = this.listeners.get(id);
+    if (unsubscribe) {
       try {
-        this.listeners[index].unsubscribe();
-        this.listeners.splice(index, 1);
+        unsubscribe();
+        this.listeners.delete(id);
       } catch (e) {
         console.warn('Error removing listener:', e);
       }
     }
   }
 
-  removeUserListeners(userId: string) {
-    this.listeners
-      .filter(l => l.userId === userId)
-      .forEach(l => this.removeListener(l.id));
+  static removeUserListeners(userId: string) {
+    const userListeners = this.userListeners.get(userId) || [];
+    userListeners.forEach(id => this.removeListener(id));
+    this.userListeners.delete(userId);
   }
 
-  removeAllListeners() {
-    while (this.listeners.length > 0) {
-      const listener = this.listeners.pop();
-      if (listener) {
-        try {
-          listener.unsubscribe();
-        } catch (e) {
-          console.warn('Error removing listener:', e);
-        }
+  static removeAllListeners() {
+    this.listeners.forEach(unsubscribe => {
+      try {
+        unsubscribe();
+      } catch (e) {
+        console.warn('Error cleaning up listener:', e);
       }
-    }
+    });
+    this.listeners.clear();
+    this.userListeners.clear();
   }
 }
 
-export const ListenerManager = new ListenerManagerClass();
-
-// ...existing code...
-
-// Replace the old signOut function with this updated version
+// Update signOut function to use the new implementation
 export const signOut = async () => {
   try {
-    // Clean up all listeners using ListenerManager
+    // Clean up all listeners
     ListenerManager.removeAllListeners();
     
-    // Clean up any legacy listeners
+    // Clean up legacy listeners
     Object.keys(listeners).forEach(key => {
       try {
         if (listeners[key]) {
@@ -580,26 +592,14 @@ export const signOut = async () => {
           delete listeners[key];
         }
       } catch (e) {
-        console.warn('Error cleaning up listener:', e);
+        console.warn('Error cleaning up legacy listener:', e);
       }
     });
     
-    // Clear the listeners object
+    // Clear the legacy listeners object
     listeners = {};
     
-    // Clean up active listeners array
-    while (activeListeners.length > 0) {
-      const listener = activeListeners.pop();
-      try {
-        if (listener) {
-          listener.unsubscribe();
-        }
-      } catch (e) {
-        console.warn('Error cleaning up listener:', e);
-      }
-    }
-    
-    // Sign out
+    // Sign out from Firebase
     await auth.signOut();
     return { error: null };
   } catch (error: any) {
