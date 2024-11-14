@@ -45,21 +45,30 @@ const findCommonMovies = (
 const calculateScore = (commonMovies: MovieMatch[]): number => {
   if (commonMovies.length === 0) return 0;
 
-  // Base score from number of movies in common
-  const baseScore = Math.min(commonMovies.length * 10, 100);
+  // Base score calculation
+  // Assuming 50 movies is a perfect match (100%)
+  const maxMovies = 50;
+  const basePercentage = Math.min((commonMovies.length / maxMovies) * 100, 70);
 
-  // Additional score for matching categories
-  const categoryMatches = commonMovies.reduce((acc, movie) => {
-    if (movie.category === 'favorites' || movie.category === 'most_watch') {
-      return acc + 5;
+  // Calculate status bonus (max 30%)
+  const statusBonus = commonMovies.reduce((bonus, movie) => {
+    if (movie.status === 'mostwatch') {
+      return bonus + 0.6; // 0.6% per mostwatch movie
     }
-    return acc;
+    if (movie.status === 'watched') {
+      return bonus + 0.4; // 0.4% per watched movie
+    }
+    if (movie.status === 'watchlater') {
+      return bonus + 0.2; // 0.2% per watchlater movie
+    }
+    return bonus;
   }, 0);
 
-  // Combine scores and cap at 100
-  const totalScore = Math.min(baseScore + categoryMatches, 100);
+  // Combine scores and ensure it's between 0-100
+  const totalScore = Math.min(basePercentage + statusBonus, 100);
 
-  return totalScore;
+  // Round to nearest integer
+  return Math.round(totalScore);
 };
 
 export const calculateMatchScore = async (): Promise<Match[]> => {
