@@ -3,6 +3,10 @@ import { View, StyleSheet, TextInput, Image, Dimensions, ActivityIndicator, Text
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Movie } from '../services/api';
 import { fetchRandomMovies } from '../services/helper';
+import { processRagQuery } from '../services/ragHelper';
+import { vectorStore } from '../services/vectorStore';
+import { ragProcessor } from '../services/ragHelper';
+import { embeddingService } from '../services/embeddings';
 
 const { width } = Dimensions.get('window');
 
@@ -22,17 +26,37 @@ const MovieChatScreen: React.FC = () => {
   const [messages, setMessages] = useState<Array<{text: string, isBot: boolean}>>([]);
   const [userInput, setUserInput] = useState('');
   const [recommendedMovies, setRecommendedMovies] = useState<Movie[]>([]);
+  const [contextMovies, setContextMovies] = useState<Movie[]>([]);
   const scrollViewRef = useRef<ScrollView>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
-    initializeChat();
+    initializeServices();
   }, []);
+
+  const initializeServices = async () => {
+    try {
+      await embeddingService.initialize();
+      await vectorStore.initialize();
+      initializeChat();
+    } catch (error) {
+      console.error('Error initializing services:', error);
+      // Handle initialization error
+    }
+  };
 
   const initializeChat = async () => {
     try {
       const movies = await fetchRandomMovies('popular', 3);
       setRecommendedMovies(movies);
+      setContextMovies(movies);
       
+      // Initialize vector store with movies
+      movies.forEach(movie => {
+        const embedding = Array(384).fill(0).map(() => Math.random()); // Replace with actual embeddings
+        vectorStore.addMovie(movie, embedding);
+      });
+
       const welcomeMessages = [
         {
           text: "👋 Welcome to MovieChat! I'm your personal movie companion.",
@@ -51,38 +75,47 @@ const MovieChatScreen: React.FC = () => {
     }
   };
 
-  const processMessage = (input: string) => {
-    const text = input.toLowerCase();
+  const handleSendMessage = async () => {
+    if (!userInput.trim() || isProcessing) return;
     
-    // Simple keyword matching instead of TensorFlow processing
-    if (text.includes('recommend') || text.includes('suggestion')) {
-      return "Based on the latest releases, I'd recommend checking out the movies shown above!";
-    }
-    if (text.includes('latest') || text.includes('new')) {
-      return "You can see the latest releases in the recommendations section at the top.";
-    }
-    if (text.includes('hello') || text.includes('hi')) {
-      return "Hi! I'm your movie chat assistant. Feel free to ask about movies!";
-    }
-    return "I understand you're interested in movies. Could you please rephrase your question?";
-  };
-
-  const handleSendMessage = () => {
-    if (!userInput.trim()) return;
-    
-    const newMessages = [
-      ...messages,
-      { text: userInput, isBot: false },
-      { text: processMessage(userInput), isBot: true }
-    ];
-    
-    setMessages(newMessages);
+    setIsProcessing(true);
+    const userMessage = { text: userInput, isBot: false };
+    setMessages(prev => [...prev, userMessage]);
     setUserInput('');
-    
-    // Scroll to bottom after message is sent
-    setTimeout(() => {
-      scrollViewRef.current?.scrollToEnd({ animated: true });
-    }, 100);
+
+    // Add typing indicator
+    const typingMessage = { text: '...', isBot: true };
+    setMessages(prev => [...prev, typingMessage]);
+
+    try {
+      let response = '';
+      await ragProcessor.processQuery(
+        userInput,
+        contextMovies,
+        (token: string) => {
+          response += token;
+          setMessages(prev => {
+            const updated = [...prev];
+            const lastMsg = updated[updated.length - 1];
+            lastMsg.text = response;
+            return updated;
+          });
+        }
+      );
+
+      // Update context with any new movies
+      if (response.includes('recommend') || response.includes('found')) {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }
+    } catch (error) {
+      console.error('❌ Chat Error:', error);
+      setMessages(prev => [
+        ...prev.slice(0, -1),
+        { text: 'Sorry, I encountered an error. Please try again.', isBot: true }
+      ]);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   if (loading) {
