@@ -12,9 +12,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { TouchableOpacity, Text } from 'react-native';
 import CineBrowseScreen from '../screens/CineBrowseScreen';
 import CinePalScreen from '../screens/CinePalScreen';
-import MovieSearchScreen from '../screens/MovieSearchScreen'; // Update this line
+import MovieChatScreen from '../screens/MovieChatScreen'; // Update this line
 import CineFileScreen from '../screens/CineFileScreen';
 import CineGamesScreen from '../screens/CineGamesScreen';
+import CineFeedScreen from '../screens/CineFeedScreen';
 
 const Tab = createBottomTabNavigator();
 const TAB_BAR_HEIGHT = 100; // Increased by 2% from 66 to 67
@@ -104,8 +105,10 @@ const Tabs: React.FC = () => {
               iconName = 'film-outline'; // Updated icon name
             } else if (route.name === 'CinePal') {
               iconName = 'people-outline'; // Updated icon name
-            } else if (route.name === 'MovieSearch') {  // Updated name
-              iconName = 'search-outline';  // Updated icon
+            } else if (route.name === 'CineFeed') {
+              iconName = 'newspaper-outline';
+            } else if (route.name === 'MovieChat') {  // Updated name
+              iconName = 'chatbubbles-outline';  // Updated icon
             } else if (route.name === 'CineFile') {
               iconName = 'folder-outline'; // Updated icon name
             } else if (route.name === 'CineGames') {
@@ -131,7 +134,8 @@ const Tabs: React.FC = () => {
       >
         <Tab.Screen name="CineBrowse" component={CineBrowseScreen} />
         <Tab.Screen name="CinePal" component={CinePalScreen} />
-        <Tab.Screen name="MovieSearch" component={MovieSearchScreen} />
+        <Tab.Screen name="CineFeed" component={CineFeedScreen} />
+        <Tab.Screen name="MovieChat" component={MovieChatScreen} />
         <Tab.Screen name="CineFile" component={CineFileScreen} />
         <Tab.Screen name="CineGames" component={CineGamesScreen} />
       </Tab.Navigator>

@@ -361,3 +361,22 @@ export interface TMDBMovie {
     name: string;
   }>;
 }
+
+// Function to fetch movie trailers and videos
+export const fetchMovieTrailers = async (page = 1) => {
+  try {
+    const trendingMovies = await fetchTrendingMovies(page);
+    const trailerPromises = trendingMovies.results.map(async movie => {
+      const videos = await fetchMovieVideos(movie.id);
+      return videos.results.filter(video => 
+        video.type === 'Trailer' && video.site === 'YouTube'
+      );
+    });
+    
+    const trailers = await Promise.all(trailerPromises);
+    return trailers.flat();
+  } catch (error) {
+    console.error('Error fetching trailers:', error);
+    return [];
+  }
+};

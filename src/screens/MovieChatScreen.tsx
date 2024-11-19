@@ -1,8 +1,9 @@
 import React, { useEffect, useState, memo, useRef } from 'react';
-import { View, StyleSheet, TextInput, Image, Dimensions, ActivityIndicator, Text, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, StyleSheet, TextInput, Image, Dimensions, ActivityIndicator, Text, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Movie } from '../services/api';
 import { fetchRandomMovies } from '../services/helper';
+import { searchMovies, fetchTrendingMovies } from '../services/tmdb'; // Update this import
 
 const { width } = Dimensions.get('window');
 
@@ -16,6 +17,20 @@ const MovieBanner = memo(({ movie }: { movie: Movie }) => (
   </View>
 ));
 
+// Modify SearchResult component for grid layout
+const SearchResult = memo(({ movie }: { movie: Movie }) => (
+  <View style={styles.gridItem}>
+    <Image
+      source={{ uri: `https://image.tmdb.org/t/p/w500${movie.poster_path}` }}
+      style={styles.gridImage}
+    />
+    <Text style={styles.gridMovieTitle} numberOfLines={1}>
+      {movie.title}
+    </Text>
+    <Text style={styles.gridRating}>⭐ {movie.vote_average.toFixed(1)}</Text>
+  </View>
+));
+
 const MovieChatScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showChat, setShowChat] = useState(false);
@@ -23,6 +38,8 @@ const MovieChatScreen: React.FC = () => {
   const [userInput, setUserInput] = useState('');
   const [recommendedMovies, setRecommendedMovies] = useState<Movie[]>([]);
   const scrollViewRef = useRef<ScrollView>(null);
+  const [searchResults, setSearchResults] = useState<Movie[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
   useEffect(() => {
     initializeChat();
@@ -30,7 +47,9 @@ const MovieChatScreen: React.FC = () => {
 
   const initializeChat = async () => {
     try {
-      const movies = await fetchRandomMovies('popular', 3);
+      // Replace fetchRandomMovies with fetchTrendingMovies
+      const trendingResponse = await fetchTrendingMovies();
+      const movies = trendingResponse.results.slice(0, 3);
       setRecommendedMovies(movies);
       
       const welcomeMessages = [
@@ -39,7 +58,7 @@ const MovieChatScreen: React.FC = () => {
           isBot: true
         },
         {
-          text: "Here are some popular movies you might enjoy:",
+          text: "Here are some trending movies you might enjoy:",
           isBot: true
         }
       ];
@@ -85,6 +104,55 @@ const MovieChatScreen: React.FC = () => {
     }, 100);
   };
 
+  // Modify handleInputChange to limit results to 6
+  const handleInputChange = async (text: string) => {
+    setUserInput(text);
+    
+    if (text.startsWith('@')) {
+      setIsSearching(true);
+      const searchQuery = text.slice(1);
+      if (searchQuery.length > 2) {
+        try {
+          const searchResponse = await searchMovies(searchQuery);
+          // Limit results to 6 items and sort by popularity
+          const limitedResults = searchResponse.results
+            .sort((a, b) => b.vote_average - a.vote_average)
+            .slice(0, 6);
+          setSearchResults(limitedResults);
+        } catch (error) {
+          console.error('Search error:', error);
+          setSearchResults([]);
+        }
+      }
+    } else {
+      setIsSearching(false);
+      setSearchResults([]);
+    }
+  };
+
+  // Add renderGridItem function
+  const renderGridItem = ({ item }: { item: Movie }) => (
+    <SearchResult movie={item} />
+  );
+
+  // Replace ScrollView with FlatList for chat messages
+  const renderChatItem = ({ item, index }: { item: {text: string, isBot: boolean}, index: number }) => (
+    <View style={[styles.message, item.isBot ? styles.botMessage : styles.userMessage]}>
+      <Text style={styles.messageText}>{item.text}</Text>
+    </View>
+  );
+
+  // Render recommendations header
+  const renderHeader = () => (
+    messages.length === 2 ? (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.recommendationsScroll}>
+        {recommendedMovies.map(movie => (
+          <MovieBanner key={movie.id} movie={movie} />
+        ))}
+      </ScrollView>
+    ) : null
+  );
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -101,36 +169,41 @@ const MovieChatScreen: React.FC = () => {
         style={styles.chatContainer}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
-        <ScrollView 
-          ref={scrollViewRef}
-          style={styles.messagesContainer}
-          contentContainerStyle={styles.messagesContent}
-          onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
-        >
-          {messages.map((msg, index) => (
-            <View key={index} style={[styles.message, msg.isBot ? styles.botMessage : styles.userMessage]}>
-              <Text style={styles.messageText}>{msg.text}</Text>
-            </View>
-          ))}
-          {messages.length === 2 && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.recommendationsScroll}>
-              {recommendedMovies.map(movie => (
-                <MovieBanner key={movie.id} movie={movie} />
-              ))}
-            </ScrollView>
-          )}
-        </ScrollView>
+        {!isSearching ? (
+          <FlatList
+            key="chat"
+            data={messages}
+            renderItem={renderChatItem}
+            keyExtractor={(_, index) => index.toString()}
+            contentContainerStyle={styles.messagesContent}
+            ListHeaderComponent={renderHeader}
+            ref={scrollViewRef}
+            onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+          />
+        ) : (
+          <FlatList
+            key="search"
+            data={searchResults}
+            renderItem={renderGridItem}
+            keyExtractor={(item) => item.id.toString()}
+            numColumns={3}
+            columnWrapperStyle={styles.gridRow}
+            contentContainerStyle={styles.gridContainer}
+          />
+        )}
 
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.chatInput}
             value={userInput}
-            onChangeText={setUserInput}
-            placeholder="Ask me about movies..."
+            onChangeText={handleInputChange}
+            placeholder="Type '@' to search movies or chat normally"
             placeholderTextColor="#666"
           />
           <TouchableOpacity onPress={handleSendMessage} style={styles.sendButton}>
-            <Text style={styles.sendButtonText}>Send</Text>
+            <Text style={styles.sendButtonText}>
+              {isSearching ? 'Clear' : 'Send'}
+            </Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -234,6 +307,71 @@ const styles = StyleSheet.create({
   messagesContent: {
     flexGrow: 1,
     paddingBottom: 20,
+  },
+  searchResultsContainer: {
+    padding: 10,
+  },
+  searchResult: {
+    flexDirection: 'row',
+    backgroundColor: '#222',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 10,
+  },
+  searchResultImage: {
+    width: 100,
+    height: 150,
+    borderRadius: 8,
+  },
+  movieInfo: {
+    flex: 1,
+    marginLeft: 15,
+    justifyContent: 'space-between',
+  },
+  movieDate: {
+    color: '#888',
+    fontSize: 14,
+    marginTop: 4,
+  },
+  movieRating: {
+    color: '#ffb700',
+    fontSize: 14,
+    marginTop: 4,
+  },
+  movieOverview: {
+    color: '#ccc',
+    fontSize: 13,
+    marginTop: 8,
+    lineHeight: 18,
+  },
+  gridContainer: {
+    padding: 8,
+  },
+  gridRow: {
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  gridItem: {
+    width: (width - 48) / 3, // 48 = padding * 2 + space between items
+    alignItems: 'center',
+  },
+  gridImage: {
+    width: (width - 48) / 3 - 8,
+    height: ((width - 48) / 3 - 8) * 1.5,
+    borderRadius: 8,
+  },
+  gridMovieTitle: {
+    color: '#fff',
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 4,
+    width: '100%',
+    paddingHorizontal: 4,
+  },
+  gridRating: {
+    color: '#ffb700',
+    fontSize: 12,
+    marginTop: 2,
   },
 });
 
