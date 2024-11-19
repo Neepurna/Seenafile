@@ -153,6 +153,25 @@ const NewsCard = ({ data }) => {
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
 
+  useEffect(() => {
+    if (data.imageUrl) {
+      console.log('Attempting to load image:', data.imageUrl);
+      Image.prefetch(data.imageUrl)
+        .then(() => {
+          console.log('Image prefetch successful:', data.imageUrl);
+          setImageLoading(false);
+        })
+        .catch((error) => {
+          console.error('Image prefetch failed:', data.imageUrl, error);
+          setImageError(true);
+          setImageLoading(false);
+        });
+    } else {
+      setImageError(true);
+      setImageLoading(false);
+    }
+  }, [data.imageUrl]);
+
   const handlePress = async () => {
     if (data.link) {
       try {
@@ -167,78 +186,82 @@ const NewsCard = ({ data }) => {
     }
   };
 
+  const getSourceDisplay = (source: string) => {
+    switch(source) {
+      case 'movies':
+        return 'Movie News';
+      default:
+        return source;
+    }
+  };
+
   return (
     <TouchableOpacity 
-      style={styles.newsCard}
+      style={styles.newsCardContainer}
       onPress={handlePress}
-      activeOpacity={0.7}
+      activeOpacity={0.8}
     >
-      {data.imageUrl && !imageError ? (
-        <View style={styles.newsImageContainer}>
-          <Image 
-            source={{ uri: data.imageUrl }}
-            style={styles.newsImage}
-            resizeMode="cover"
-            onError={() => setImageError(true)}
-            onLoad={() => setImageLoading(false)}
-          />
-          {imageLoading && (
-            <View style={styles.imageLoadingOverlay}>
-              <ActivityIndicator size="small" color="#BB86FC" />
-            </View>
-          )}
-        </View>
-      ) : (
-        <View style={styles.placeholderImage}>
-          <MaterialIcons name="movie" size={40} color="#555" />
-        </View>
-      )}
-      
-      <View style={styles.newsContent}>
-        <View style={styles.newsHeader}>
-          <Text style={styles.newsSource}>{data.source}</Text>
-          <Text style={styles.newsDate}>
-            {new Date(data.pubDate).toLocaleDateString()}
+      <View style={styles.cardInnerContainer}>
+        {data.imageUrl && !imageError ? (
+          <View style={styles.newsImageContainer}>
+            <Image 
+              source={{ uri: data.imageUrl }}
+              style={styles.newsImage}
+              resizeMode="cover"
+              onLoad={() => setImageLoading(false)}
+              onError={() => setImageError(true)}
+            />
+            {imageLoading && (
+              <View style={styles.imageLoadingOverlay}>
+                <ActivityIndicator size="large" color="#BB86FC" />
+              </View>
+            )}
+          </View>
+        ) : (
+          <View style={styles.placeholderContainer}>
+            <MaterialIcons name="movie" size={48} color="#555" />
+          </View>
+        )}
+        
+        <View style={styles.newsContentContainer}>
+          <View style={styles.newsHeader}>
+            <Text style={styles.newsSource}>
+              {getSourceDisplay(data.source)}
+            </Text>
+            <Text style={styles.newsDate}>
+              {new Date(data.pubDate).toLocaleDateString()}
+            </Text>
+          </View>
+          
+          <Text style={styles.newsTitle} numberOfLines={2}>
+            {data.title}
           </Text>
+          
+          <Text style={styles.newsDescription} numberOfLines={3}>
+            {data.description.replace(/<[^>]*>/g, '')}
+          </Text>
+
+          <View style={styles.newsFooter}>
+            <Text style={styles.readMore}>Read More</Text>
+            <MaterialIcons name="arrow-forward" size={16} color="#BB86FC" />
+          </View>
         </View>
-        <Text style={styles.newsTitle} numberOfLines={2}>
-          {data.title}
-        </Text>
-        <Text style={styles.newsDescription} numberOfLines={3}>
-          {data.description.replace(/<[^>]*>/g, '')}
-        </Text>
       </View>
     </TouchableOpacity>
   );
 };
 
 const ReviewCard = ({ data }) => {
-  const posterUrl = data.movie_details?.poster_path 
-    ? `https://image.tmdb.org/t/p/w185${data.movie_details.poster_path}`
-    : null;
-
   return (
     <View style={styles.reviewCard}>
-      <View style={styles.reviewCardHeader}>
-        <View style={styles.movieInfo}>
-          {posterUrl && (
-            <Image 
-              source={{ uri: posterUrl }}
-              style={styles.moviePoster}
-              resizeMode="cover"
-            />
-          )}
-          <View style={styles.movieTextInfo}>
-            <Text style={styles.movieTitle}>{data.movie_details?.title || 'Unknown Movie'}</Text>
-            <Text style={styles.releaseDate}>
-              {data.movie_details?.release_date?.split('-')[0] || ''}
-            </Text>
-          </View>
-        </View>
-      </View>
       <View style={styles.reviewContent}>
         <View style={styles.reviewHeader}>
-          <Text style={styles.authorName}>{data.author}</Text>
+          <View style={styles.reviewHeaderLeft}>
+            <Text style={styles.movieTitle}>
+              {data.movie_details?.title || 'Unknown Movie'} ({data.movie_details?.release_date?.split('-')[0] || ''})
+            </Text>
+            <Text style={styles.authorName}>Review by {data.author}</Text>
+          </View>
           <Text style={styles.reviewDate}>
             {new Date(data.created_at).toLocaleDateString()}
           </Text>
@@ -261,8 +284,14 @@ const ReelCard = ({ data }) => {
   return (
     <View style={styles.reelCard}>
       <WebView
-        source={{ uri: `https://www.youtube.com/embed/${data.videoId}` }}
+        source={{ 
+          uri: `https://www.youtube.com/embed/${data.videoId}?playsinline=1&autoplay=1` 
+        }}
         style={styles.webview}
+        allowsInlineMediaPlayback={true}
+        mediaPlaybackRequiresUserAction={false}
+        javaScriptEnabled={true}
+        domStorageEnabled={true}
       />
     </View>
   );
@@ -388,50 +417,46 @@ const styles = StyleSheet.create({
   },
   webview: {
     flex: 1,
+    backgroundColor: '#000',
   },
   reviewCard: {
     backgroundColor: '#1E1E1E',
     borderRadius: 12,
-    padding: 16,
     marginBottom: 16,
-  },
-  reviewCardHeader: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333',
-  },
-  movieInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  moviePoster: {
-    width: 60,
-    height: 90,
-    borderRadius: 6,
-    backgroundColor: '#2A2A2A',
-  },
-  movieTextInfo: {
-    marginLeft: 12,
-    flex: 1,
-  },
-  movieTitle: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  releaseDate: {
-    color: '#888',
-    fontSize: 12,
+    overflow: 'hidden',
   },
   reviewContent: {
     padding: 16,
+  },
+  reviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  reviewHeaderLeft: {
+    flex: 1,
+    marginRight: 8,
+  },
+  movieTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  authorName: {
+    color: '#BB86FC',
+    fontSize: 14,
+  },
+  reviewDate: {
+    color: '#888',
+    fontSize: 12,
   },
   reviewText: {
     color: '#B0B0B0',
     fontSize: 14,
     lineHeight: 20,
-    marginBottom: 8,
+    marginBottom: 12,
   },
   ratingContainer: {
     flexDirection: 'row',
@@ -493,6 +518,128 @@ const styles = StyleSheet.create({
     color: '#B0B0B0',
     fontSize: 14,
     lineHeight: 20,
+  },
+  fullCardContainer: {
+    height: SCREEN_HEIGHT - 120,
+    paddingVertical: 8,
+    justifyContent: 'center',
+  },
+  cardContainer: {
+    flex: 1,
+    borderRadius: 12,
+    backgroundColor: '#1E1E1E',
+    overflow: 'hidden',
+  },
+  newsCardContainer: {
+    backgroundColor: '#1E1E1E',
+    borderRadius: 12,
+    marginBottom: 16,
+    height: 400, // Fixed height for consistent cards
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  cardInnerContainer: {
+    flex: 1,
+  },
+  newsImageWrapper: {
+    height: '45%', // Changed from 50% to 45% to match CinePalScreen
+    width: '100%',
+    backgroundColor: '#2A2A2A',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    overflow: 'hidden',
+  },
+  newsBody: {
+    flex: 1,
+    gap: 8,
+  },
+  newsFooter: {
+    marginTop: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#333',
+  },
+  readMoreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 8,
+  },
+  readMoreText: {
+    color: '#BB86FC',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  placeholderText: {
+    color: '#555',
+    marginTop: 8,
+    fontSize: 14,
+  },
+  newsImageContainer: {
+    height: 200, // Fixed height for images
+    width: '100%',
+    backgroundColor: '#2A2A2A',
+  },
+  newsImage: {
+    width: '100%',
+    height: '100%',
+  },
+  placeholderContainer: {
+    height: 200,
+    width: '100%',
+    backgroundColor: '#2A2A2A',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  newsContentContainer: {
+    flex: 1,
+    padding: 16,
+  },
+  newsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  newsSource: {
+    color: '#BB86FC',
+    fontSize: 14,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
+  newsDate: {
+    color: '#888',
+    fontSize: 12,
+  },
+  newsTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFF',
+    marginBottom: 8,
+    lineHeight: 26,
+  },
+  newsDescription: {
+    fontSize: 14,
+    color: '#B0B0B0',
+    lineHeight: 20,
+    flex: 1,
+  },
+  newsFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginTop: 12,
+    gap: 8,
+  },
+  readMore: {
+    color: '#BB86FC',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 });
 

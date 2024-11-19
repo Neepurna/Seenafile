@@ -16,8 +16,24 @@ import MovieChatScreen from '../screens/MovieChatScreen'; // Update this line
 import CineFileScreen from '../screens/CineFileScreen';
 import CineGamesScreen from '../screens/CineGamesScreen';
 import CineFeedScreen from '../screens/CineFeedScreen';
+import MyWallScreen from '../screens/MyWallScreen';
 
 const Tab = createBottomTabNavigator();
+
+type TabsStackParamList = {
+  CineBrowse: undefined;
+  CinePal: undefined;
+  CineFeed: undefined;
+  MovieChat: undefined;
+  CineFile: undefined;
+  CineGames: undefined;
+  MyWall: {
+    userId: string;
+    username: string;
+    matchScore: number;
+  };
+};
+
 const TAB_BAR_HEIGHT = 100; // Increased by 2% from 66 to 67
 
 const Tabs: React.FC = () => {
@@ -80,7 +96,7 @@ const Tabs: React.FC = () => {
 
   return (
     <>
-      <Tab.Navigator
+      <Tab.Navigator<TabsStackParamList>
         screenOptions={({ route, navigation }) => ({
           headerShown: true, // Show header for all screens
           tabBarShowLabel: false,
@@ -138,6 +154,23 @@ const Tabs: React.FC = () => {
         <Tab.Screen name="MovieChat" component={MovieChatScreen} />
         <Tab.Screen name="CineFile" component={CineFileScreen} />
         <Tab.Screen name="CineGames" component={CineGamesScreen} />
+        <Tab.Screen 
+          name="MyWall" 
+          component={MyWallScreen}
+          options={({ navigation }) => ({
+            tabBarButton: () => null,
+            tabBarStyle: { display: 'none' },
+            headerLeft: () => (
+              <TouchableOpacity 
+                onPress={() => navigation.goBack()}
+                style={{ marginLeft: 15 }}
+              >
+                <Ionicons name="arrow-back" size={24} color="#fff" />
+              </TouchableOpacity>
+            ),
+            headerTitle: 'User Profile'
+          })}
+        />
       </Tab.Navigator>
 
       {isProfileVisible && (

@@ -494,32 +494,116 @@ interface Match {
 export const getUserMatches = async (userId: string): Promise<Match[]> => {
   try {
     if (!userId) {
-      console.error('No userId provided to getUserMatches');
-      return [];
+      throw new Error('No userId provided to getUserMatches');
     }
 
-    console.log('Fetching matches for user:', userId);
-
     const matchesRef = collection(db, 'matches');
-    const userMatchesQuery = query(matchesRef, where('userId', '==', userId));
-    const receivedMatchesQuery = query(matchesRef, where('targetId', '==', userId));
+    const q = query(
+      matchesRef,
+      where('userId', '==', userId),
+      orderBy('timestamp', 'desc')
+    );
 
-    const [userMatchesSnap, receivedMatchesSnap] = await Promise.all([
-      getDocs(userMatchesQuery),
-      getDocs(receivedMatchesQuery)
-    ]);
+    const querySnapshot = await getDocs(q);
+    const matches = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as Match[];
 
-    const allMatches = [
-      ...userMatchesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })),
-      ...receivedMatchesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-    ] as Match[];
-
-    console.log('Found matches:', allMatches.length);
-    return allMatches;
+    return matches;
   } catch (error) {
     console.error('Error in getUserMatches:', error);
+    // Return empty array instead of throwing to handle permission errors gracefully
     return [];
   }
+};
+
+// Add new helper function for real-time matches
+export const subscribeToMatches = (
+  userId: string,
+  callback: (matches: Match[]) => void
+): (() => void) => {
+  if (!userId) {
+    console.error('No userId provided to subscribeToMatches');
+    callback([]);
+    return () => {};
+  }
+
+  const matchesRef = collection(db, 'matches');
+  
+  // Create queries for both sent and received matches
+  const sentMatchesQuery = query(
+    matchesRef,
+    where('userId', '==', userId),
+    orderBy('timestamp', 'desc')
+  );
+  
+  const receivedMatchesQuery = query(
+    matchesRef,
+    where('targetId', '==', userId),
+    orderBy('timestamp', 'desc')
+  );
+
+  // Setup listeners for both queries
+  const unsubscribeSent = onSnapshot(
+    sentMatchesQuery,
+    (snapshot) => {
+      const sentMatches = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        type: 'sent'
+      }));
+      handleMatchUpdate(sentMatches);
+    },
+    handleError
+  );
+
+  const unsubscribeReceived = onSnapshot(
+    receivedMatchesQuery,
+    (snapshot) => {
+      const receivedMatches = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        type: 'received'
+      }));
+      handleMatchUpdate(receivedMatches);
+    },
+    handleError
+  );
+
+  let allMatches: Match[] = [];
+
+  function handleMatchUpdate(newMatches: Match[]) {
+    // Merge and deduplicate matches based on the match ID
+    const matchMap = new Map();
+    [...allMatches, ...newMatches].forEach(match => {
+      if (!matchMap.has(match.id)) {
+        matchMap.set(match.id, match);
+      }
+    });
+    
+    allMatches = Array.from(matchMap.values());
+    callback(allMatches);
+  }
+
+  function handleError(error: Error) {
+    console.error('Matches subscription error:', error);
+    callback([]); // Return empty array on error
+  }
+
+  // Add both unsubscribe functions to the listener manager
+  const listenerId = `matches_${userId}`;
+  ListenerManager.addListener(listenerId, () => {
+    unsubscribeSent();
+    unsubscribeReceived();
+  }, userId);
+
+  // Return a cleanup function that unsubscribes both listeners
+  return () => {
+    unsubscribeSent();
+    unsubscribeReceived();
+    ListenerManager.removeListener(listenerId);
+  };
 };
 
 // ...existing code...

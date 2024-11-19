@@ -1,354 +1,75 @@
-// src/screens/CinePalScreen.tsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Linking, ActivityIndicator, RefreshControl, Dimensions, Platform, ToastAndroid, Alert } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons'; // Replace the icon import
-import { db } from '../firebase';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Dimensions, ActivityIndicator } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import { db, auth } from '../firebase';
 import { collection, query, orderBy, onSnapshot, getDocs, where, doc, getDoc, updateDoc } from 'firebase/firestore';
-import { fetchRSSFeeds } from '../services/rssFeedService';
-import type { RSSItem } from '../types/rss';
 import { calculateMatchScore } from '../utils/matchingUtils';
-import { auth } from '../firebase';
-import ChatList from '../components/ChatList';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import ChatList from '../components/ChatList';
+import { useNavigation, NavigationProp } from '@react-navigation/native';
+import { subscribeToMatches } from '../firebase';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const STORAGE_KEY = '@connected_users';
 
-const ReelCard: React.FC<{data: any}> = ({ data }) => (
-  <View style={styles.cardContainer}>
-    <View style={styles.reelPreview}>
-      <MaterialIcons name="play-circle" size={40} color="#FFF" />
-    </View>
-    <View style={styles.cardFooter}>
-      <Text style={styles.username}>{data.username}</Text>
-      <Text style={styles.caption}>{data.caption}</Text>
-    </View>
-  </View>
-);
-
-const ImageCard: React.FC<{data: any}> = ({ data }) => (
-  <View style={styles.cardContainer}>
-    <Image source={{ uri: data.imageUrl }} style={styles.image} />
-    <View style={styles.cardFooter}>
-      <Text style={styles.username}>{data.username}</Text>
-      <Text style={styles.caption}>{data.caption}</Text>
-    </View>
-  </View>
-);
-
-const ReviewCard: React.FC<{data: any}> = ({ data }) => (
-  <View style={styles.cardContainer}>
-    <View style={styles.reviewHeader}>
-      <Text style={styles.movieTitle}>{data.movieTitle}</Text>
-      <View style={styles.rating}>
-        <MaterialIcons name="star" size={20} color="#FFD700" />
-        <Text style={styles.ratingText}>{data.rating}/5</Text>
-      </View>
-    </View>
-    <Text style={styles.reviewText}>{data.review}</Text>
-  </View>
-);
-
-const NewsCard: React.FC<{data: RSSItem}> = ({ data }) => {
-  const [imageError, setImageError] = useState(false);
-  const [imageLoading, setImageLoading] = useState(true);
-
-  useEffect(() => {
-    if (data.imageUrl) {
-      console.log('Attempting to load image:', data.imageUrl);
-      Image.prefetch(data.imageUrl)
-        .then(() => {
-          console.log('Image prefetch successful:', data.imageUrl);
-          setImageLoading(false);
-        })
-        .catch((error) => {
-          console.error('Image prefetch failed:', data.imageUrl, error);
-          setImageError(true);
-          setImageLoading(false);
-        });
-    } else {
-      setImageError(true);
-      setImageLoading(false);
-    }
-  }, [data.imageUrl]);
-
-  const handlePress = async () => {
-    if (data.link) {
-      try {
-        const url = data.link.trim();
-        const supported = await Linking.canOpenURL(url);
-        
-        if (supported) {
-          await Linking.openURL(url);
-        } else {
-          console.log("Don't know how to open URL:", url);
-        }
-      } catch (error) {
-        console.error('Error opening URL:', error);
-      }
-    }
-  };
-
-  const getSourceDisplay = (source: string) => {
-    switch(source) {
-      case 'movies':
-        return 'Movie News';
-      default:
-        return source;
-    }
-  };
-
-  return (
-    <View style={styles.fullCardContainer}>
-      <TouchableOpacity 
-        style={[styles.cardContainer, styles.newsCardContainer]}
-        onPress={handlePress}
-        activeOpacity={0.7}
-      >
-        <View style={styles.cardInnerContainer}>
-          {data.imageUrl && !imageError ? (
-            <View style={styles.newsImageWrapper}>
-              <Image 
-                source={{ uri: data.imageUrl }}
-                style={styles.newsImage}
-                resizeMode="cover"
-                onLoad={() => {
-                  console.log('Image loaded successfully:', data.imageUrl);
-                  setImageLoading(false);
-                }}
-                onError={(error) => {
-                  console.error('Image loading error:', error.nativeEvent.error);
-                  setImageError(true);
-                  setImageLoading(false);
-                }}
-              />
-              {imageLoading && (
-                <View style={styles.imageLoadingOverlay}>
-                  <ActivityIndicator size={24} color="#BB86FC" />
-                </View>
-              )}
-            </View>
-          ) : (
-            <View style={[styles.newsImageWrapper, styles.placeholderImage]}>
-              <MaterialIcons name="movie" size={60} color="#555" />
-              <Text style={styles.placeholderText}>No Image Available</Text>
-            </View>
-          )}
-          
-          <View style={styles.newsContent}>
-            <View style={styles.newsHeader}>
-              <Text style={styles.newsSource}>
-                {getSourceDisplay(data.source)}
-              </Text>
-              <Text style={styles.newsDate}>
-                {new Date(data.pubDate).toLocaleDateString()}
-              </Text>
-            </View>
-            
-            <View style={styles.newsBody}>
-              <Text style={styles.newsTitle} numberOfLines={2}>
-                {data.title}
-              </Text>
-              <Text style={styles.newsDescription} numberOfLines={3}>
-                {data.description.replace(/<[^>]*>/g, '')}
-              </Text>
-            </View>
-
-            <View style={styles.newsFooter}>
-              <TouchableOpacity style={styles.readMoreButton}>
-                <Text style={styles.readMoreText}>Read More</Text>
-                <MaterialIcons name="arrow-forward" size={16} color="#BB86FC" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </TouchableOpacity>
-    </View>
-  );
+type CinePalScreenProps = {
+  navigation: NavigationProp<TabsStackParamList>;
 };
 
-const PersonalFeed: React.FC = () => {
-  const [newsItems, setNewsItems] = useState<RSSItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
-
-  const loadData = async (isRefresh = false) => {
-    try {
-      if (!isRefresh) {
-        setIsLoading(true);
-      }
-      setError(null);
-      
-      const feeds = await fetchRSSFeeds();
-      
-      // Merge new feeds with existing ones, avoiding duplicates
-      setNewsItems(prevItems => {
-        if (isRefresh) {
-          // During refresh, append new items while keeping existing ones
-          const existingIds = new Set(prevItems.map(item => item.link));
-          const newItems = feeds.filter(feed => !existingIds.has(feed.link));
-          return [...prevItems, ...newItems];
-        }
-        return feeds;
-      });
-      
-    } catch (err) {
-      console.error('Error loading data:', err);
-      setError('Failed to load content. Please try again.');
-    } finally {
-      setIsLoading(false);
-      setInitialLoadComplete(true);
-    }
-  };
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadData(true);
-    setRefreshing(false);
-  };
-
-  useEffect(() => {
-    if (!initialLoadComplete) {
-      loadData();
-    }
-  }, [initialLoadComplete]);
-
-  if (isLoading) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size={24} color="#BB86FC" />
-      </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <View style={styles.centerContainer}>
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={loadData}>
-          <Text style={styles.retryButtonText}>Retry</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  return (
-    <ScrollView 
-      style={styles.feedContainer}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      snapToInterval={SCREEN_HEIGHT - 120}
-      decelerationRate="fast"
-      showsVerticalScrollIndicator={false}
-    >
-      {newsItems.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No content available</Text>
-        </View>
-      ) : (
-        newsItems.map((item, index) => (
-          <NewsCard key={`${item.source}-${index}`} data={item} />
-        ))
-      )}
-    </ScrollView>
-  );
-};
-
-const PublicFeed: React.FC<{ connectedUsers: string[], onUserConnect: (userId: string) => void }> = ({ 
-  connectedUsers, 
-  onUserConnect 
-}) => {
+const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
   const [matches, setMatches] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
-  const [persistedMatches, setPersistedMatches] = useState<any[]>([]);
+  const [connectedUsers, setConnectedUsers] = useState<string[]>([]);
 
   useEffect(() => {
-    const loadPersistedMatches = async () => {
-      try {
-        const stored = await AsyncStorage.getItem('@persisted_matches');
-        if (stored) {
-          setPersistedMatches(JSON.parse(stored));
-          setMatches(JSON.parse(stored));
-        }
-      } catch (error) {
-        console.error('Error loading persisted matches:', error);
-      }
-    };
-    loadPersistedMatches();
+    loadStoredData();
   }, []);
 
-  const fetchMatches = async (isRefresh = false) => {
+  useEffect(() => {
     if (!auth.currentUser) return;
-    
-    if (!isRefresh) {
-      setLoading(true);
-    }
-    setError(null);
 
-    try {
-      const currentUserDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-      if (!currentUserDoc.exists()) {
-        throw new Error('Current user profile not found');
-      }
-
-      const matchResults = await calculateMatchScore(auth.currentUser.uid);
+    const unsubscribe = subscribeToMatches(auth.currentUser.uid, (newMatches) => {
+      // Filter out invalid matches and sort by score
+      const validMatches = newMatches
+        .filter(match => match && match.score >= 20)
+        .sort((a, b) => b.score - a.score);
       
-      const validMatches = matchResults.filter(match => 
-        match && 
-        match.userId && 
-        typeof match.score === 'number' && 
-        Array.isArray(match.commonMovies) &&
-        match.commonMovies.every(movie => 
-          movie && 
-          movie.movieId && 
-          movie.category
-        )
-      );
-
-      // Merge new matches with existing ones
-      setMatches(prevMatches => {
-        if (isRefresh) {
-          // During refresh, update scores of existing matches and add new ones
-          const existingMatchMap = new Map(prevMatches.map(m => [m.userId, m]));
-          validMatches.forEach(match => {
-            if (existingMatchMap.has(match.userId)) {
-              existingMatchMap.get(match.userId).score = match.score;
-            } else {
-              existingMatchMap.set(match.userId, match);
-            }
-          });
-          return Array.from(existingMatchMap.values());
-        }
-        return validMatches;
-      });
-
-      // Save matches to AsyncStorage
-      await AsyncStorage.setItem('@persisted_matches', JSON.stringify(validMatches));
-      setPersistedMatches(validMatches);
       setMatches(validMatches);
-
-    } catch (error) {
-      console.error('Error fetching matches:', error);
-      setError('Failed to load matches. Please try again.');
-    } finally {
       setLoading(false);
-      setInitialLoadComplete(true);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  const loadStoredData = async () => {
+    try {
+      const storedUsers = await AsyncStorage.getItem(STORAGE_KEY);
+      if (storedUsers) {
+        setConnectedUsers(JSON.parse(storedUsers));
+      }
+    } catch (error) {
+      console.error('Error loading stored data:', error);
     }
   };
 
-  useEffect(() => {
-    if (!initialLoadComplete) {
-      fetchMatches();
+  const handleUserConnect = useCallback((userId: string) => {
+    const selectedUser = matches.find(match => match.userId === userId);
+    if (selectedUser) {
+      navigation.navigate('MyWall', {
+        userId,
+        username: selectedUser.username,
+        matchScore: selectedUser.score
+      });
     }
-  }, [initialLoadComplete]);
+  }, [matches, navigation]);
 
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size={24} color="#BB86FC" />
+        <ActivityIndicator size="large" color="#BB86FC" />
       </View>
     );
   }
@@ -365,110 +86,62 @@ const PublicFeed: React.FC<{ connectedUsers: string[], onUserConnect: (userId: s
   }
 
   return (
-    <View style={styles.feedContainer}>
-      <ChatList 
-        matches={matches} 
-        currentUserId={auth.currentUser?.uid || ''} 
-        connectedUsers={connectedUsers}
-        onUserConnect={onUserConnect}
-      />
-    </View>
-  );
-};
-
-const CinePalScreen: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('cinefeed');
-  const [connectedUsers, setConnectedUsers] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Load persisted connected users and matches
-  useEffect(() => {
-    const loadPersistedData = async () => {
-      try {
-        const storedUsers = await AsyncStorage.getItem(STORAGE_KEY);
-        if (storedUsers) {
-          setConnectedUsers(JSON.parse(storedUsers));
-        }
-      } catch (error) {
-        console.error('Error loading persisted data:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadPersistedData();
-  }, []);
-
-  // Save connected users whenever they change
-  useEffect(() => {
-    const persistData = async () => {
-      try {
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(connectedUsers));
-      } catch (error) {
-        console.error('Error persisting data:', error);
-      }
-    };
-
-    if (!isLoading) {
-      persistData();
-    }
-  }, [connectedUsers, isLoading]);
-
-  const handleUserConnect = useCallback((userId: string) => {
-    setConnectedUsers(prev => {
-      if (!prev.includes(userId)) {
-        return [...prev, userId];
-      }
-      return prev;
-    });
-  }, []);
-
-  const renderTab = () => {
-    if (isLoading) {
-      return (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size={24} color="#BB86FC" />
-        </View>
-      );
-    }
-
-    switch (activeTab) {
-      case 'cinefeed':
-        return <PersonalFeed key="cinefeed" />;
-      case 'cinepal':
-        return (
-          <PublicFeed 
-            key="cinepal"
-            connectedUsers={connectedUsers}
-            onUserConnect={handleUserConnect}
-          />
-        );
-      default:
-        return <PersonalFeed key="default" />;
-    }
-  };
-
-  return (
     <View style={styles.container}>
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'cinefeed' && styles.activeTab]}
-          onPress={() => setActiveTab('cinefeed')}
-        >
-          <Text style={[styles.tabText, activeTab === 'cinefeed' && styles.activeTabText]}>
-            CineFeed
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'cinepal' && styles.activeTab]}
-          onPress={() => setActiveTab('cinepal')}
-        >
-          <Text style={[styles.tabText, activeTab === 'cinepal' && styles.activeTabText]}>
-            CinePal
-          </Text>
-        </TouchableOpacity>
-      </View>
-      {renderTab()}
+      <ScrollView style={styles.scrollView}>
+        <View style={styles.headerSection}>
+          <Text style={styles.headerTitle}>Your Movie Matches</Text>
+          <Text style={styles.headerSubtitle}>Connect with cinema enthusiasts who share your taste</Text>
+        </View>
+        
+        <View style={styles.matchesContainer}>
+          {matches.map((match) => (
+            <TouchableOpacity 
+              key={match.userId} 
+              style={styles.matchCard}
+              onPress={() => handleUserConnect(match.userId)}
+            >
+              <View style={styles.matchHeader}>
+                <View style={styles.userInfo}>
+                  <View style={styles.avatarContainer}>
+                    <MaterialIcons name="person" size={30} color="#BB86FC" />
+                  </View>
+                  <View style={styles.nameSection}>
+                    <Text style={styles.username}>{match.username || 'Movie Enthusiast'}</Text>
+                    <Text style={styles.matchScore}>
+                      {Math.round(match.score)}% Match
+                    </Text>
+                  </View>
+                </View>
+                <MaterialIcons 
+                  name={connectedUsers.includes(match.userId) ? "chat" : "add-circle"} 
+                  size={24} 
+                  color="#BB86FC" 
+                />
+              </View>
+
+              <View style={styles.commonMoviesSection}>
+                <Text style={styles.sectionTitle}>Common Interests</Text>
+                <ScrollView 
+                  horizontal 
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.commonMoviesScroll}
+                >
+                  {match.commonMovies.slice(0, 5).map((movie, idx) => (
+                    <View key={idx} style={styles.movieTag}>
+                      <Text style={styles.movieTagText}>{movie.category}</Text>
+                    </View>
+                  ))}
+                  {match.commonMovies.length > 5 && (
+                    <View style={[styles.movieTag, styles.moreTag]}>
+                      <Text style={styles.movieTagText}>+{match.commonMovies.length - 5} more</Text>
+                    </View>
+                  )}
+                </ScrollView>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </ScrollView>
     </View>
   );
 };
@@ -478,150 +151,102 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#121212',
   },
-  tabContainer: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#333',
-    backgroundColor: '#1E1E1E',
-  },
-  tab: {
+  scrollView: {
     flex: 1,
-    paddingVertical: 15,
-    alignItems: 'center',
+    padding: 16,
   },
-  activeTab: {
-    borderBottomWidth: 2,
-    borderBottomColor: '#BB86FC', // Material Design purple for dark theme
+  headerSection: {
+    marginBottom: 24,
   },
-  tabText: {
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 8,
+  },
+  headerSubtitle: {
     fontSize: 16,
     color: '#888',
   },
-  activeTabText: {
-    color: '#BB86FC',
-    fontWeight: 'bold',
+  matchesContainer: {
+    gap: 16,
   },
-  feedContainer: {
-    flex: 1,
-    backgroundColor: '#121212',
-    paddingHorizontal: 16,
-  },
-  feedText: {
-    fontSize: 16,
-  },
-  cardContainer: {
+  matchCard: {
     backgroundColor: '#1E1E1E',
     borderRadius: 12,
+    padding: 16,
     marginBottom: 16,
+    elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.25,
     shadowRadius: 4,
-    elevation: 3,
   },
-  reelPreview: {
-    height: 200,
-    backgroundColor: '#000',
+  matchHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  userInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  avatarContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#2A2A2A',
     justifyContent: 'center',
     alignItems: 'center',
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
+    marginRight: 12,
   },
-  image: {
-    height: 200,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-  },
-  cardFooter: {
-    padding: 12,
+  nameSection: {
+    flex: 1,
   },
   username: {
-    fontWeight: 'bold',
-    fontSize: 14,
-    marginBottom: 4,
-    color: '#E1E1E1',
-  },
-  caption: {
-    fontSize: 14,
-    color: '#888',
-  },
-  reviewHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 12,
-  },
-  movieTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#E1E1E1',
-  },
-  rating: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  ratingText: {
-    marginLeft: 4,
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  reviewText: {
-    padding: 12,
-    paddingTop: 0,
-    fontSize: 14,
-    color: '#B0B0B0',
-  },
-  newsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 12,
-  },
-  newsSource: {
-    color: '#BB86FC',
-    fontSize: 14,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-  },
-  newsDate: {
-    color: '#888',
-    fontSize: 12,
-  },
-  newsTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#E1E1E1',
-    marginVertical: 8,
-    lineHeight: 24,
+    color: '#fff',
+    marginBottom: 4,
   },
-  newsDescription: {
+  matchScore: {
     fontSize: 14,
-    color: '#B0B0B0',
-    lineHeight: 20,
+    color: '#BB86FC',
+    fontWeight: '600',
   },
-  newsImage: {
-    height: '50%', // Take up half of card height
-    width: '100%',
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
+  commonMoviesSection: {
+    borderTopWidth: 1,
+    borderTopColor: '#333',
+    paddingTop: 16,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    color: '#888',
+    marginBottom: 8,
+  },
+  commonMoviesScroll: {
+    flexDirection: 'row',
+  },
+  movieTag: {
     backgroundColor: '#2A2A2A',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginRight: 8,
   },
-  placeholderImage: {
-    justifyContent: 'center',
-    alignItems: 'center',
+  movieTagText: {
+    color: '#fff',
+    fontSize: 12,
   },
-  newsContent: {
-    padding: 16,
-    flex: 1,
-    justifyContent: 'space-between',
-  },
-  newsCardContainer: {
-    height: SCREEN_HEIGHT - 160, // Account for padding
-    overflow: 'hidden',
+  moreTag: {
+    backgroundColor: '#333',
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#121212',
   },
   errorText: {
     color: '#FF5252',
@@ -638,192 +263,6 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 14,
     fontWeight: 'bold',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 32,
-  },
-  emptyText: {
-    color: '#888',
-    fontSize: 16,
-  },
-  placeholderText: {
-    color: '#555',
-    marginTop: 8,
-    fontSize: 14,
-  },
-  newsImageContainer: {
-    height: '45%',
-    width: '100%',
-    position: 'relative',
-  },
-  imageLoadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  matchItem: {
-    flexDirection: 'row',
-    padding: 16,
-    backgroundColor: '#1E1E1E',
-    borderRadius: 12,
-    marginBottom: 12,
-    alignItems: 'center',
-  },
-  matchAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    marginRight: 12,
-  },
-  matchInfo: {
-    flex: 1,
-  },
-  matchName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#FFF',
-    marginBottom: 4,
-  },
-  matchScore: {
-    fontSize: 14,
-    color: '#BB86FC',
-  },
-  fullCardContainer: {
-    height: SCREEN_HEIGHT - 120, // Account for header and padding
-    paddingVertical: 8,
-    justifyContent: 'center',
-  },
-  imageLoadingContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.3)',
-  },
-  newsImage: {
-    height: '45%', // Take up half of card height
-    width: '100%',
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    backgroundColor: '#2A2A2A',
-  },
-  newsContent: {
-    flex: 1,
-    padding: 16,
-    justifyContent: 'space-between',
-  },
-  newsTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#E1E1E1',
-    lineHeight: 32,
-  },
-  newsDescription: {
-    fontSize: 16,
-    color: '#B0B0B0',
-    lineHeight: 24,
-    flex: 1,
-  },
-  newsFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  newsSource: {
-    color: '#BB86FC',
-    fontSize: 14,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-  },
-  newsDate: {
-    color: '#888',
-    fontSize: 12,
-  },
-  cardInnerContainer: {
-    flex: 1,
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: '#1E1E1E',
-  },
-  newsImageWrapper: {
-    height: '50%',
-    width: '100%',
-    backgroundColor: '#2A2A2A',
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    overflow: 'hidden',
-  },
-  newsImage: {
-    width: '100%',
-    height: '100%',
-  },
-  newsContent: {
-    flex: 1,
-    padding: 16,
-    justifyContent: 'space-between',
-  },
-  newsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  newsBody: {
-    flex: 1,
-    gap: 8,
-  },
-  newsTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#E1E1E1',
-    lineHeight: 28,
-    marginBottom: 8,
-  },
-  newsDescription: {
-    fontSize: 16,
-    color: '#B0B0B0',
-    lineHeight: 22,
-  },
-  newsFooter: {
-    marginTop: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#333',
-  },
-  readMoreButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 8,
-  },
-  readMoreText: {
-    color: '#BB86FC',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  newsCardContainer: {
-    height: SCREEN_HEIGHT - 160,
-    marginVertical: 8,
-    borderRadius: 12,
-    overflow: 'hidden',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-  },
-  matchedUserContainer: {
-    flex: 1,
-    width: '100%',
   },
 });
 
