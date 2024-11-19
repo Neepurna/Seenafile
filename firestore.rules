@@ -19,19 +19,13 @@ service cloud.firestore {
 
     // Users collection
     match /users/{userId} {
-      allow read: if isSignedIn() && (
-        isOwner(userId) || 
-        isPotentialMatch(userId)
-      );
+      allow read: if isSignedIn();  // Allow any signed-in user to read user profiles
       allow create, update: if isSignedIn() && isOwner(userId);
       allow delete: if false; // Prevent deletion
       
       // User's private movie lists
       match /movies/{movieId} {
-        allow read: if isSignedIn() && (
-          isOwner(userId) || 
-          isPotentialMatch(userId)
-        );
+        allow read: if isSignedIn();  // Allow any signed-in user to read movies
         allow write: if isSignedIn() && isOwner(userId);
       }
       

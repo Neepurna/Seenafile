@@ -7,7 +7,6 @@ import { calculateMatchScore } from '../utils/matchingUtils';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ChatList from '../components/ChatList';
 import { useNavigation, NavigationProp } from '@react-navigation/native';
-import { subscribeToMatches } from '../firebase';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const STORAGE_KEY = '@connected_users';
@@ -23,25 +22,10 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
   const [connectedUsers, setConnectedUsers] = useState<string[]>([]);
 
   useEffect(() => {
-    loadStoredData();
-  }, []);
-
-  useEffect(() => {
     if (!auth.currentUser) return;
-
-    const unsubscribe = subscribeToMatches(auth.currentUser.uid, (newMatches) => {
-      // Filter out invalid matches and sort by score
-      const validMatches = newMatches
-        .filter(match => match && match.score >= 20)
-        .sort((a, b) => b.score - a.score);
-      
-      setMatches(validMatches);
-      setLoading(false);
-    });
-
-    return () => {
-      unsubscribe();
-    };
+    
+    loadStoredData();
+    fetchMatches();
   }, []);
 
   const loadStoredData = async () => {
@@ -52,6 +36,23 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
       }
     } catch (error) {
       console.error('Error loading stored data:', error);
+    }
+  };
+
+  const fetchMatches = async () => {
+    if (!auth.currentUser) return;
+    
+    setLoading(true);
+    try {
+      const matchResults = await calculateMatchScore(auth.currentUser.uid);
+      console.log('Match results:', matchResults); // Debug log
+      setMatches(matchResults);
+      setError(null);
+    } catch (error) {
+      console.error('Error fetching matches:', error);
+      setError('Failed to load matches');
+    } finally {
+      setLoading(false);
     }
   };
 

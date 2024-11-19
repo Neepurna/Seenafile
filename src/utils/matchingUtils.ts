@@ -71,80 +71,51 @@ const calculateScore = (commonMovies: MovieMatch[]): number => {
   return Math.round(totalScore);
 };
 
-export const calculateMatchScore = async (): Promise<Match[]> => {
-  const userId = auth.currentUser?.uid;
-
+export const calculateMatchScore = async (userId: string): Promise<Match[]> => {
   if (!userId) {
-    console.error('User is not authenticated.');
+    console.error('No userId provided');
     return [];
   }
 
   try {
-    // First check if the user exists
-    const userRef = doc(db, 'users', userId);
-    const userDoc = await getDoc(userRef);
-
-    if (!userDoc.exists()) {
-      console.error('User document not found');
-      return [];
-    }
-
-    // Get all users except current user
-    const usersRef = collection(db, 'users');
-    const usersSnap = await getDocs(usersRef);
-    const matches: Match[] = [];
-
-    // Get current user's movies first
+    // Get current user's movies
     const userMoviesRef = collection(db, 'users', userId, 'movies');
     const userMoviesSnap = await getDocs(userMoviesRef);
     const userMovies = userMoviesSnap.docs;
 
+    // Get all users
+    const usersRef = collection(db, 'users');
+    const usersSnap = await getDocs(usersRef);
+    const matches: Match[] = [];
+
     // Process each potential match
     for (const targetUserDoc of usersSnap.docs) {
-      const targetUserId = targetUserDoc.id;
-
-      // Skip self-matching and invalid users
-      if (targetUserId === userId || !targetUserDoc.exists()) {
-        continue;
-      }
+      if (targetUserDoc.id === userId) continue; // Skip self
 
       try {
-        // Get target user's movies
-        const targetMoviesRef = collection(db, 'users', targetUserId, 'movies');
+        const targetUserData = targetUserDoc.data();
+        const targetMoviesRef = collection(db, 'users', targetUserDoc.id, 'movies');
         const targetMoviesSnap = await getDocs(targetMoviesRef);
-        const targetMovies = targetMoviesSnap.docs;
+        
+        const commonMovies = findCommonMovies(userMovies, targetMoviesSnap.docs);
+        const score = calculateScore(commonMovies);
 
-        // Find common movies
-        const commonMovies = findCommonMovies(userMovies, targetMovies);
-
-        if (commonMovies.length > 0) {
-          const score = calculateScore(commonMovies);
-          if (score >= MATCH_THRESHOLD) {
-            matches.push({
-              userId: targetUserId,
-              score,
-              commonMovies,
-            });
-          }
+        if (score >= 20) { // Only include matches with 20% or higher
+          matches.push({
+            userId: targetUserDoc.id,
+            username: targetUserData.name || 'Movie Enthusiast',
+            score,
+            commonMovies
+          });
         }
-      } catch (error: any) {
-        if (error.code === 'permission-denied') {
-          console.warn(
-            `Skipping match calculation for user ${targetUserId}: Permission denied.`
-          );
-        } else {
-          console.warn(
-            `Skipping match calculation for user ${targetUserId}:`,
-            error.message
-          );
-        }
+      } catch (error) {
+        console.warn(`Skipping user ${targetUserDoc.id}:`, error);
         continue;
       }
     }
 
-    // Sort matches by score in descending order
     return matches.sort((a, b) => b.score - a.score);
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error in calculateMatchScore:', error);
     return [];
   }
