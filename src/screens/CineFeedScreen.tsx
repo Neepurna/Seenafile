@@ -28,11 +28,22 @@ const CineFeedScreen = () => {
   const loadReviews = async () => {
     try {
       const trendingMovies = await fetchTrendingMovies();
-      const reviewPromises = trendingMovies.results.slice(0, 5).map(movie => 
-        fetchMovieReviews(movie.id)
-      );
+      const reviewPromises = trendingMovies.results.slice(0, 5).map(async movie => {
+        const movieReviews = await fetchMovieReviews(movie.id);
+        // Attach movie details to each review
+        return movieReviews.results.map(review => ({
+          ...review,
+          movie_details: {
+            title: movie.title,
+            poster_path: movie.poster_path,
+            release_date: movie.release_date,
+            id: movie.id
+          }
+        }));
+      });
+      
       const reviewsData = await Promise.all(reviewPromises);
-      const allReviews = reviewsData.flatMap(data => data.results);
+      const allReviews = reviewsData.flat();
       setReviews(allReviews);
     } catch (error) {
       console.error('Error loading reviews:', error);
@@ -138,22 +149,110 @@ const CineFeedScreen = () => {
   );
 };
 
-// Component definitions for NewsCard, ReviewCard, and ReelCard
 const NewsCard = ({ data }) => {
-  // ... existing NewsCard implementation from CinePalScreen
+  const [imageError, setImageError] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
+
+  const handlePress = async () => {
+    if (data.link) {
+      try {
+        const url = data.link.trim();
+        const supported = await Linking.canOpenURL(url);
+        if (supported) {
+          await Linking.openURL(url);
+        }
+      } catch (error) {
+        console.error('Error opening URL:', error);
+      }
+    }
+  };
+
+  return (
+    <TouchableOpacity 
+      style={styles.newsCard}
+      onPress={handlePress}
+      activeOpacity={0.7}
+    >
+      {data.imageUrl && !imageError ? (
+        <View style={styles.newsImageContainer}>
+          <Image 
+            source={{ uri: data.imageUrl }}
+            style={styles.newsImage}
+            resizeMode="cover"
+            onError={() => setImageError(true)}
+            onLoad={() => setImageLoading(false)}
+          />
+          {imageLoading && (
+            <View style={styles.imageLoadingOverlay}>
+              <ActivityIndicator size="small" color="#BB86FC" />
+            </View>
+          )}
+        </View>
+      ) : (
+        <View style={styles.placeholderImage}>
+          <MaterialIcons name="movie" size={40} color="#555" />
+        </View>
+      )}
+      
+      <View style={styles.newsContent}>
+        <View style={styles.newsHeader}>
+          <Text style={styles.newsSource}>{data.source}</Text>
+          <Text style={styles.newsDate}>
+            {new Date(data.pubDate).toLocaleDateString()}
+          </Text>
+        </View>
+        <Text style={styles.newsTitle} numberOfLines={2}>
+          {data.title}
+        </Text>
+        <Text style={styles.newsDescription} numberOfLines={3}>
+          {data.description.replace(/<[^>]*>/g, '')}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
 };
 
 const ReviewCard = ({ data }) => {
+  const posterUrl = data.movie_details?.poster_path 
+    ? `https://image.tmdb.org/t/p/w185${data.movie_details.poster_path}`
+    : null;
+
   return (
     <View style={styles.reviewCard}>
-      <View style={styles.reviewHeader}>
-        <Text style={styles.authorName}>{data.author}</Text>
-        <Text style={styles.reviewDate}>
-          {new Date(data.created_at).toLocaleDateString()}
-        </Text>
+      <View style={styles.reviewCardHeader}>
+        <View style={styles.movieInfo}>
+          {posterUrl && (
+            <Image 
+              source={{ uri: posterUrl }}
+              style={styles.moviePoster}
+              resizeMode="cover"
+            />
+          )}
+          <View style={styles.movieTextInfo}>
+            <Text style={styles.movieTitle}>{data.movie_details?.title || 'Unknown Movie'}</Text>
+            <Text style={styles.releaseDate}>
+              {data.movie_details?.release_date?.split('-')[0] || ''}
+            </Text>
+          </View>
+        </View>
       </View>
-      <Text style={styles.reviewContent}>{data.content}</Text>
-      <Text style={styles.rating}>Rating: {data.rating || 'N/A'}</Text>
+      <View style={styles.reviewContent}>
+        <View style={styles.reviewHeader}>
+          <Text style={styles.authorName}>{data.author}</Text>
+          <Text style={styles.reviewDate}>
+            {new Date(data.created_at).toLocaleDateString()}
+          </Text>
+        </View>
+        <Text style={styles.reviewText} numberOfLines={5}>
+          {data.content}
+        </Text>
+        {data.rating && (
+          <View style={styles.ratingContainer}>
+            <MaterialIcons name="star" size={16} color="#FFD700" />
+            <Text style={styles.rating}>{data.rating}/10</Text>
+          </View>
+        )}
+      </View>
     </View>
   );
 };
@@ -296,25 +395,104 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 16,
   },
-  reviewHeader: {
+  reviewCardHeader: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  movieInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  moviePoster: {
+    width: 60,
+    height: 90,
+    borderRadius: 6,
+    backgroundColor: '#2A2A2A',
+  },
+  movieTextInfo: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  movieTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  releaseDate: {
+    color: '#888',
+    fontSize: 12,
+  },
+  reviewContent: {
+    padding: 16,
+  },
+  reviewText: {
+    color: '#B0B0B0',
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  rating: {
+    color: '#FFD700',
+    marginLeft: 4,
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  imageLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  newsCard: {
+    backgroundColor: '#1E1E1E',
+    borderRadius: 12,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  newsImageContainer: {
+    height: 200,
+    width: '100%',
+    backgroundColor: '#2A2A2A',
+  },
+  placeholderImage: {
+    height: 200,
+    backgroundColor: '#2A2A2A',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  newsContent: {
+    padding: 16,
+  },
+  newsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 8,
   },
-  authorName: {
+  newsSource: {
     color: '#BB86FC',
+    fontSize: 14,
     fontWeight: 'bold',
   },
-  reviewDate: {
+  newsDate: {
     color: '#888',
+    fontSize: 12,
   },
-  reviewContent: {
-    color: '#FFF',
-    lineHeight: 20,
+  newsTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
     marginBottom: 8,
   },
-  rating: {
-    color: '#FFD700',
+  newsDescription: {
+    color: '#B0B0B0',
+    fontSize: 14,
+    lineHeight: 20,
   },
 });
 
