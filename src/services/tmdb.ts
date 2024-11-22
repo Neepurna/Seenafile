@@ -346,6 +346,7 @@ const processMovieResponse = async (data: any) => {
 export const fetchMoviesByCategory = async (category: string, page: number = 1) => {
   try {
     let response;
+    const randomPage = Math.floor(Math.random() * 20) + 1;
     
     switch (category.toLowerCase()) {
       case 'critics\' choice':
@@ -355,21 +356,19 @@ export const fetchMoviesByCategory = async (category: string, page: number = 1) 
         response = await fetchClassics(page);
         break;
       case 'tv shows':
-        response = await fetchTVShows(page);
+        response = await fetchTVShows(randomPage);
         break;
       case 'animated':
-        response = await fetchAnimatedShows(page);
+        response = await fetchAnimatedShows(randomPage);
         break;
       case 'documentaries':
-        response = await fetchDocumentaries(page);
+        response = await fetchDocumentaries(randomPage);
         break;
       case 'all':
-        // Randomize page number for 'All' category to get different movies
-        const randomPage = Math.floor(Math.random() * 20) + 1;
         response = await fetchMovies(randomPage);
         break;
       default:
-        response = await fetchMovies(page);
+        response = await fetchMovies(randomPage);
     }
 
     // Ensure unique results and normalize data
@@ -377,7 +376,7 @@ export const fetchMoviesByCategory = async (category: string, page: number = 1) 
       const normalizedResults = response.results
         .map(normalizeMediaItem)
         .filter(movie => movie.vote_count >= 100 && movie.poster_path)
-        .sort((a, b) => b.vote_average - a.vote_average);
+        .sort(() => Math.random() - 0.5); // Randomize order
 
       return { ...response, results: normalizedResults };
     }

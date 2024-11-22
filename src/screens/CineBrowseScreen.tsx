@@ -83,6 +83,8 @@ const CineBrowseScreen: React.FC = () => {
   const MAX_ERROR_ATTEMPTS = 3;
   const MAX_RETRIES = 5;
   const retryTimeout = useRef<NodeJS.Timeout>();
+  const [isChangingCategory, setIsChangingCategory] = useState(false);
+  const previousCategory = useRef<string>('');
 
   useEffect(() => {
     fetchMoreMovies();
@@ -292,36 +294,40 @@ const CineBrowseScreen: React.FC = () => {
 
   // Update handleCategorySelect to reset pagination state
   const handleCategorySelect = async (category: string) => {
-    setLoading(true);
-    setCurrentIndex(0);
-    setMovies([]);
-    setBackgroundCards([]);
-    displayedMovieIds.current.clear();
+    if (category === selectedCategory || isChangingCategory) return;
+
+    setIsChangingCategory(true);
+    previousCategory.current = selectedCategory;
     setSelectedCategory(category);
     setCurrentPage(1);
-    setCategoryPages(prev => ({ ...prev, [category]: 1 }));
-    setCategoryTotalPages(prev => ({ ...prev, [category]: undefined }));
-    setErrorCount(0);
     
     try {
+      // Keep old cards visible while loading new ones
       const response = await fetchMoviesByCategory(category, 1);
+      
       if (response?.results?.length) {
         setMovies(response.results);
         setBackgroundCards(response.results.slice(1));
+        displayedMovieIds.current.clear();
         response.results.forEach(movie => displayedMovieIds.current.add(movie.id));
         
-        // Pre-fetch next batch immediately
-        fetchMoreMovies();
+        // Pre-fetch next batch
+        const nextBatch = await fetchMoviesByCategory(category, 2);
+        if (nextBatch?.results) {
+          setMovies(prev => [...prev, ...nextBatch.results]);
+          setBackgroundCards(prev => [...prev, ...nextBatch.results]);
+          nextBatch.results.forEach(movie => displayedMovieIds.current.add(movie.id));
+        }
       } else {
         throw new Error('No results for category');
       }
     } catch (error) {
       console.error('Error changing category:', error);
-      if (category !== 'All') {
-        handleCategorySelect('All');
-      }
+      // Revert to previous category on error
+      setSelectedCategory(previousCategory.current);
     } finally {
-      setLoading(false);
+      setCurrentPage(prev => prev + 1);
+      setIsChangingCategory(false);
     }
   };
 
@@ -532,7 +538,7 @@ const CineBrowseScreen: React.FC = () => {
           />
         </View>
       </GestureHandlerRootView>
-      {(loading || isFetching) && (
+      {(loading && !isChangingCategory) && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size={24} color="#ffffff" />
         </View>
