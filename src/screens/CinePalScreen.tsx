@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Dimensions, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Dimensions, ActivityIndicator, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { db, auth } from '../firebase';
-import { collection, query, orderBy, onSnapshot, getDocs, where, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, getDocs, where, doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
 import { calculateMatchScore } from '../utils/matchingUtils';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ChatList from '../components/ChatList';
@@ -56,16 +56,34 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
     }
   };
 
-  const handleUserConnect = useCallback((userId: string) => {
-    const selectedUser = matches.find(match => match.userId === userId);
-    if (selectedUser) {
+  const handleUserConnect = useCallback(async (userId: string) => {
+    if (!auth.currentUser) return;
+    
+    try {
+      const chatId = [auth.currentUser.uid, userId].sort().join('_');
+      const chatRef = doc(db, 'chats', chatId);
+      
+      // Initialize chat document
+      await setDoc(chatRef, {
+        participants: [auth.currentUser.uid, userId].sort(),
+        createdAt: new Date(),
+      }, { merge: true });
+
+      // Update connected users in local storage
+      const updatedConnectedUsers = [...connectedUsers, userId];
+      setConnectedUsers(updatedConnectedUsers);
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedConnectedUsers));
+
+      // Navigate to chat
       navigation.navigate('MyWall', {
         userId,
-        username: selectedUser.username,
-        matchScore: selectedUser.score
+        username: matches.find(match => match.userId === userId)?.username,
       });
+    } catch (error) {
+      console.error('Error connecting users:', error);
+      Alert.alert('Error', 'Failed to connect with user. Please try again.');
     }
-  }, [matches, navigation]);
+  }, [matches, connectedUsers, navigation]);
 
   if (loading) {
     return (

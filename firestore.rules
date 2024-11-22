@@ -40,18 +40,15 @@ service cloud.firestore {
     // Chats collection
     match /chats/{chatId} {
       allow read, write: if isSignedIn() && (
-        chatId.matches('^' + request.auth.uid + '_.*$') ||
-        chatId.matches('^.*_' + request.auth.uid + '$')
+        request.auth.uid in resource.data.participants ||
+        (request.method == 'create' && 
+         request.resource.data.participants.hasAny([request.auth.uid]))
       );
       
       // Messages subcollection
       match /messages/{messageId} {
-        allow read: if isSignedIn() && (
-          resource.data.senderId == request.auth.uid ||
-          get(/databases/$(database)/documents/chats/$(chatId)).data.participants.hasAny([request.auth.uid])
-        );
-        allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid;
-        allow update, delete: if false;
+        allow read, create: if isSignedIn() && 
+          get(/databases/$(database)/documents/chats/$(chatId)).data.participants.hasAny([request.auth.uid]);
       }
     }
     

@@ -275,77 +275,42 @@ const ChatList: React.FC<ChatListProps> = ({
 
   const handleSelectMatch = async (match: Match) => {
     try {
-      // Unsubscribe from previous chat listener
-      if (unsubscribeRefs.current.length > 0) {
-        unsubscribeRefs.current.forEach((unsubscribe) => unsubscribe());
-        unsubscribeRefs.current = [];
-      }
+      if (!currentUserId || !match.userId) return;
 
-      // Reset messages when selecting new match
-      setMessages([]);
-      setSelectedMatch(match);
-      setPermissionError(null);
-
-      if (onSelectMatch) {
-        onSelectMatch(match);
-      }
-
-      if (onUserConnect && !connectedUsers.includes(match.userId)) {
-        onUserConnect(match.userId);
-      }
-
-      if (!currentUserId) return;
-
-      // Setup chat listener
+      // Create unique chat ID
       const chatId = [currentUserId, match.userId].sort().join('_');
       const chatRef = doc(db, 'chats', chatId);
+      
+      // Initialize chat if it doesn't exist
+      await setDoc(chatRef, {
+        participants: [currentUserId, match.userId].sort(),
+        createdAt: new Date(),
+        lastMessage: null,
+        lastMessageTime: null,
+      }, { merge: true });
+
+      // Set up real-time listener for messages
       const messagesRef = collection(chatRef, 'messages');
-
-      // Create chat document if it doesn't exist
-      await setDoc(
-        chatRef,
-        {
-          participants: [currentUserId, match.userId].sort(),
-          createdAt: new Date(),
-          lastMessage: null,
-          lastMessageTime: null,
-        },
-        { merge: true }
-      );
-
-      // Listen to messages
       const q = query(messagesRef, orderBy('timestamp', 'asc'));
-      const unsubscribe = onSnapshot(
-        q,
-        (snapshot) => {
-          const newMessages = snapshot.docs.map(
-            (doc) =>
-              ({
-                id: doc.id,
-                ...doc.data(),
-              } as Message)
-          );
-          setMessages(newMessages);
-        },
-        (error) => {
-          if (error.code === 'permission-denied') {
-            setPermissionError(
-              'Unable to access this chat. Please try again later.'
-            );
-          } else {
-            console.error('Error in chat listener:', error);
-          }
-        }
-      );
+      
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const newMessages = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+        }) as Message);
+        setMessages(newMessages);
+        messagesListRef.current?.scrollToEnd({ animated: true });
+      });
 
       // Store unsubscribe function
       unsubscribeRefs.current.push(unsubscribe);
+      
+      setSelectedMatch(match);
+      setPermissionError(null);
+      
     } catch (error: any) {
-      if (error.code === 'permission-denied') {
-        setPermissionError('Unable to access this chat. Please try again later.');
-      } else {
-        console.error('Error setting up chat:', error);
-      }
+      console.error('Error setting up chat:', error);
+      setPermissionError('Failed to initialize chat. Please try again.');
     }
   };
 
@@ -357,7 +322,6 @@ const ChatList: React.FC<ChatListProps> = ({
     const messagesRef = collection(chatRef, 'messages');
 
     try {
-      // Create new message document
       const messageData = {
         text: newMessage.trim(),
         senderId: currentUserId,
@@ -365,9 +329,10 @@ const ChatList: React.FC<ChatListProps> = ({
         read: false,
       };
 
+      // Add message to Firestore
       await addDoc(messagesRef, messageData);
 
-      // Update chat document
+      // Update chat metadata
       await updateDoc(chatRef, {
         lastMessage: newMessage.trim(),
         lastMessageTime: new Date(),
@@ -377,7 +342,6 @@ const ChatList: React.FC<ChatListProps> = ({
       setNewMessage('');
     } catch (error) {
       console.error('Error sending message:', error);
-      // Show error to user
       Alert.alert('Error', 'Failed to send message. Please try again.');
     }
   };

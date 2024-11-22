@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { db, auth } from '../firebase';
-import { collection, query, where, getDocs, onSnapshot, addDoc, orderBy, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, addDoc, orderBy, serverTimestamp, doc, setDoc } from 'firebase/firestore';
 import { RouteProp } from '@react-navigation/native';
 import { TextInput } from 'react-native-gesture-handler';
 
@@ -25,23 +25,33 @@ const MyWallScreen: React.FC<MyWallScreenProps> = ({ route, navigation }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [activeTab, setActiveTab] = useState('Profile');
+  const scrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     fetchUserStats();
 
-    const messagesRef = collection(db, 'messages');
+    if (!auth.currentUser?.uid || !userId) return;
+
+    const messagesRef = collection(db, 'chats');
+    const chatId = [auth.currentUser.uid, userId].sort().join('_');
+    const chatDocRef = doc(messagesRef, chatId);
+    const messagesCollectionRef = collection(chatDocRef, 'messages');
+    
     const q = query(
-      messagesRef,
-      where('participants', 'array-contains', [auth.currentUser?.uid, userId].sort().join('_')),
+      messagesCollectionRef,
       orderBy('timestamp', 'desc')
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const messageData = snapshot.docs.map(doc => ({
         id: doc.id,
-        ...doc.data()
+        ...doc.data(),
+        timestamp: doc.data().timestamp?.toDate(),
       }));
       setMessages(messageData);
+    }, (error) => {
+      console.error('Error fetching messages:', error);
+      // Handle error state if needed
     });
 
     return () => unsubscribe();
@@ -75,17 +85,30 @@ const MyWallScreen: React.FC<MyWallScreenProps> = ({ route, navigation }) => {
     if (!newMessage.trim() || !auth.currentUser) return;
 
     try {
-      const messagesRef = collection(db, 'messages');
-      await addDoc(messagesRef, {
-        text: newMessage,
+      const chatId = [auth.currentUser.uid, userId].sort().join('_');
+      const messagesRef = collection(db, 'chats');
+      const chatDocRef = doc(messagesRef, chatId);
+      const messagesCollectionRef = collection(chatDocRef, 'messages');
+
+      // Ensure chat document exists
+      await setDoc(chatDocRef, {
+        participants: [auth.currentUser.uid, userId],
+        lastMessage: newMessage.trim(),
+        lastMessageTime: serverTimestamp(),
+      }, { merge: true });
+
+      // Add new message
+      await addDoc(messagesCollectionRef, {
+        text: newMessage.trim(),
         senderId: auth.currentUser.uid,
-        receiverId: userId,
-        participants: [auth.currentUser.uid, userId].sort().join('_'),
         timestamp: serverTimestamp(),
+        read: false,
       });
+
       setNewMessage('');
     } catch (error) {
       console.error('Error sending message:', error);
+      // Could add error alert here
     }
   };
 
@@ -129,7 +152,11 @@ const MyWallScreen: React.FC<MyWallScreenProps> = ({ route, navigation }) => {
 
   const renderChat = () => (
     <View style={styles.chatContainer}>
-      <ScrollView style={styles.messagesContainer}>
+      <ScrollView 
+        style={styles.messagesContainer}
+        ref={scrollViewRef}
+        onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+      >
         {messages.map((message) => (
           <View 
             key={message.id}
@@ -139,10 +166,21 @@ const MyWallScreen: React.FC<MyWallScreenProps> = ({ route, navigation }) => {
                 styles.sentMessage : styles.receivedMessage
             ]}
           >
-            <Text style={styles.messageText}>{message.text}</Text>
-            <Text style={styles.messageTime}>
-              {message.timestamp?.toDate().toLocaleTimeString()}
+            <Text style={[
+              styles.messageText,
+              message.senderId === auth.currentUser?.uid ?
+                styles.sentMessageText : styles.receivedMessageText
+            ]}>
+              {message.text}
             </Text>
+            {message.timestamp && (
+              <Text style={styles.messageTime}>
+                {message.timestamp.toLocaleTimeString([], { 
+                  hour: '2-digit', 
+                  minute: '2-digit'
+                })}
+              </Text>
+            )}
           </View>
         ))}
       </ScrollView>
@@ -154,12 +192,22 @@ const MyWallScreen: React.FC<MyWallScreenProps> = ({ route, navigation }) => {
           onChangeText={setNewMessage}
           placeholder="Type a message..."
           placeholderTextColor="#666"
+          multiline
+          maxLength={1000}
         />
         <TouchableOpacity 
-          style={styles.sendButton}
+          style={[
+            styles.sendButton,
+            !newMessage.trim() && styles.sendButtonDisabled
+          ]}
           onPress={sendMessage}
+          disabled={!newMessage.trim()}
         >
-          <MaterialIcons name="send" size={24} color="#BB86FC" />
+          <MaterialIcons 
+            name="send" 
+            size={24} 
+            color={newMessage.trim() ? "#BB86FC" : "#666"}
+          />
         </TouchableOpacity>
       </View>
     </View>
@@ -355,6 +403,12 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
   },
+  sentMessageText: {
+    color: '#000',
+  },
+  receivedMessageText: {
+    color: '#fff',
+  },
   messageTime: {
     color: '#rgba(255,255,255,0.6)',
     fontSize: 12,
@@ -384,6 +438,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#2A2A2A',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  sendButtonDisabled: {
+    opacity: 0.5,
   },
   tabBar: {
     flexDirection: 'row',

@@ -24,13 +24,16 @@
       "@components/*": [
         "src/components/*"
       ]
-    }
+    },
+    "typeRoots": ["./src/types", "./node_modules/@types"]
   },
   "include": [
     "**/*.ts",
     "**/*.tsx",
     ".expo/types/**/*.ts",
-    "expo-env.d.ts"
+    "expo-env.d.ts",
+    "src/**/*",
+    "src/types/environment.d.ts"
   ],
   "exclude": [
     "node_modules"

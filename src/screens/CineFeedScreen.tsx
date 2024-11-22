@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Linking, ActivityIndicator, RefreshControl, Dimensions } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { fetchRSSFeeds } from '../services/rssFeedService';
 import { fetchMovieReviews, fetchTrendingMovies } from '../services/tmdb';
 import type { RSSItem } from '../types/rss';
-import WebView from 'react-native-webview';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 
@@ -12,7 +11,6 @@ const CineFeedScreen = () => {
   const [activeTab, setActiveTab] = useState('News');
   const [newsItems, setNewsItems] = useState<RSSItem[]>([]);
   const [reviews, setReviews] = useState([]);
-  const [reels, setReels] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -50,24 +48,10 @@ const CineFeedScreen = () => {
     }
   };
 
-  const loadReels = async () => {
-    try {
-      // Example query to fetch latest movie trailers
-      const searchQuery = 'new movie trailers 2024 shorts';
-      // You'll need to implement the YouTube API service
-      // const reelsData = await fetchYouTubeShorts(searchQuery);
-      // setReels(reelsData);
-      // For now, using placeholder data
-      setReels([{ id: '1', videoId: 'example' }]);
-    } catch (error) {
-      console.error('Error loading reels:', error);
-    }
-  };
-
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true);
-      await Promise.all([loadNews(), loadReviews(), loadReels()]);
+      await Promise.all([loadNews(), loadReviews()]);
       setIsLoading(false);
     };
     loadData();
@@ -75,7 +59,7 @@ const CineFeedScreen = () => {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadNews(), loadReviews(), loadReels()]);
+    await Promise.all([loadNews(), loadReviews()]);
     setRefreshing(false);
   };
 
@@ -112,27 +96,13 @@ const CineFeedScreen = () => {
             ))}
           </ScrollView>
         );
-      
-      case 'Reels':
-        return (
-          <ScrollView 
-            pagingEnabled
-            snapToInterval={SCREEN_HEIGHT}
-            decelerationRate="fast"
-            style={styles.reelsContainer}
-          >
-            {reels.map((reel, index) => (
-              <ReelCard key={index} data={reel} />
-            ))}
-          </ScrollView>
-        );
     }
   };
 
   return (
     <View style={styles.container}>
       <View style={styles.tabBar}>
-        {['News', 'Reviews', 'Reels'].map((tab) => (
+        {['News', 'Reviews'].map((tab) => (
           <TouchableOpacity
             key={tab}
             style={[styles.tab, activeTab === tab && styles.activeTab]}
@@ -219,7 +189,7 @@ const NewsCard = ({ data }) => {
           </View>
         ) : (
           <View style={styles.placeholderContainer}>
-            <MaterialIcons name="movie" size={48} color="#555" />
+            <Ionicons name="videocam" size={48} color="#555" />
           </View>
         )}
         
@@ -243,7 +213,7 @@ const NewsCard = ({ data }) => {
 
           <View style={styles.newsFooter}>
             <Text style={styles.readMore}>Read More</Text>
-            <MaterialIcons name="arrow-forward" size={16} color="#BB86FC" />
+            <Ionicons name="arrow-forward" size={16} color="#BB86FC" />
           </View>
         </View>
       </View>
@@ -271,28 +241,11 @@ const ReviewCard = ({ data }) => {
         </Text>
         {data.rating && (
           <View style={styles.ratingContainer}>
-            <MaterialIcons name="star" size={16} color="#FFD700" />
+            <Ionicons name="star" size={16} color="#FFD700" />
             <Text style={styles.rating}>{data.rating}/10</Text>
           </View>
         )}
       </View>
-    </View>
-  );
-};
-
-const ReelCard = ({ data }) => {
-  return (
-    <View style={styles.reelCard}>
-      <WebView
-        source={{ 
-          uri: `https://www.youtube.com/embed/${data.videoId}?playsinline=1&autoplay=1` 
-        }}
-        style={styles.webview}
-        allowsInlineMediaPlayback={true}
-        mediaPlaybackRequiresUserAction={false}
-        javaScriptEnabled={true}
-        domStorageEnabled={true}
-      />
     </View>
   );
 };
@@ -407,17 +360,6 @@ const styles = StyleSheet.create({
   rating: {
     color: '#FFD700',
     fontSize: 16,
-  },
-  reelsContainer: {
-    flex: 1,
-  },
-  reelCard: {
-    height: SCREEN_HEIGHT,
-    backgroundColor: '#000',
-  },
-  webview: {
-    flex: 1,
-    backgroundColor: '#000',
   },
   reviewCard: {
     backgroundColor: '#1E1E1E',
@@ -534,7 +476,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E1E1E',
     borderRadius: 12,
     marginBottom: 16,
-    height: 400, // Fixed height for consistent cards
+    height: 400,
     overflow: 'hidden',
     elevation: 4,
     shadowColor: '#000',
@@ -546,7 +488,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   newsImageWrapper: {
-    height: '45%', // Changed from 50% to 45% to match CinePalScreen
+    height: '45%',
     width: '100%',
     backgroundColor: '#2A2A2A',
     borderTopLeftRadius: 12,
@@ -581,7 +523,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   newsImageContainer: {
-    height: 200, // Fixed height for images
+    height: 200,
     width: '100%',
     backgroundColor: '#2A2A2A',
   },
@@ -640,6 +582,22 @@ const styles = StyleSheet.create({
     color: '#BB86FC',
     fontSize: 14,
     fontWeight: 'bold',
+  },
+  loadingMore: {
+    height: 100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000',
+  },
+  videoLoading: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
 });
 
