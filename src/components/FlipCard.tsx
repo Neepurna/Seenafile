@@ -205,8 +205,12 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
   const fetchMovieCredits = async (movieId: number) => {
     try {
       setIsLoadingCredits(true);
+      const endpoint = movie.media_type === 'tv' 
+        ? `tv/${movieId}/credits` 
+        : `movie/${movieId}/credits`;
+
       const response = await fetch(
-        `https://api.themoviedb.org/3/movie/${movieId}/credits?api_key=${API_KEY}`,
+        `https://api.themoviedb.org/3/${endpoint}?api_key=${API_KEY}`,
         {
           headers: {
             'Accept': 'application/json',
@@ -215,15 +219,13 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
         }
       );
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
       const data = await response.json();
       setCredits({
         cast: data.cast?.slice(0, 10) || [],
         crew: data.crew?.filter((c: CrewMember) => 
-          ['Director', 'Producer', 'Screenplay'].includes(c.job)
+          ['Director', 'Producer', 'Screenplay', 'Creator'].includes(c.job)
         ).slice(0, 5) || []
       });
     } catch (error) {
@@ -237,39 +239,16 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
   const fetchMovieDetailsAndReviews = async (movieId: number) => {
     try {
       setIsLoadingDetails(true);
+      const endpoint = movie.media_type === 'tv' ? 'tv' : 'movie';
       
       const [detailsResponse, reviewsResponse, imagesResponse] = await Promise.all([
-        fetch(
-          `https://api.themoviedb.org/3/movie/${movieId}?api_key=${API_KEY}`,
-          {
-            headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/json'
-            },
-          }
-        ),
-        fetch(
-          `https://api.themoviedb.org/3/movie/${movieId}/reviews?api_key=${API_KEY}`,
-          {
-            headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/json'
-            },
-          }
-        ),
-        fetch(
-          `https://api.themoviedb.org/3/movie/${movieId}/images?api_key=${API_KEY}`,
-          {
-            headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/json'
-            },
-          }
-        )
+        fetch(`https://api.themoviedb.org/3/${endpoint}/${movieId}?api_key=${API_KEY}`),
+        fetch(`https://api.themoviedb.org/3/${endpoint}/${movieId}/reviews?api_key=${API_KEY}`),
+        fetch(`https://api.themoviedb.org/3/${endpoint}/${movieId}/images?api_key=${API_KEY}`)
       ]);
 
       if (!detailsResponse.ok || !reviewsResponse.ok || !imagesResponse.ok) {
-        throw new Error('Failed to fetch movie data');
+        throw new Error('Failed to fetch data');
       }
 
       const [details, reviewsData, imagesData] = await Promise.all([
@@ -282,7 +261,7 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
       setReviews(reviewsData.results?.slice(0, 5) || []);
 
     } catch (error) {
-      console.error('Error fetching movie details and reviews:', error);
+      console.error('Error fetching details:', error);
       setReviews([]);
     } finally {
       setIsLoadingDetails(false);

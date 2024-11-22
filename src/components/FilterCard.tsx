@@ -43,6 +43,15 @@ const FilterCard: React.FC<FilterCardProps> = ({
     setShowCategoryPanel(!showCategoryPanel);
   };
 
+  const mainCategories = [
+    'All',
+    'TV Shows',
+    'Animated',
+    'Documentaries',
+    'Classics',
+    "Critics' Choice"
+  ];
+
   const renderMainFilter = () => (
     <View style={styles.filterContainer}>
       <ScrollView
@@ -50,16 +59,7 @@ const FilterCard: React.FC<FilterCardProps> = ({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {[
-          'All',
-          'Top Rated',
-          'Classics',
-          'Award Winners',
-          "Critics' Choice",
-          'International',
-          'TV Shows',
-          'Documentaries'
-        ].map((category) => (
+        {mainCategories.map((category) => (
           <TouchableOpacity
             key={category}
             style={[

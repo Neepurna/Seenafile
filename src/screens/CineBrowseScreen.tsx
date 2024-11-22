@@ -2,7 +2,7 @@
 
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import React, { useEffect, useState, useRef } from 'react';
-import { View, StyleSheet, ActivityIndicator, Alert, Dimensions, Platform, Text } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Alert, Dimensions, Platform, Text, Image } from 'react-native';
 import Swiper from 'react-native-deck-swiper';
 import FlipCard from '../components/FlipCard';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,7 +23,8 @@ import {
   fetchClassics,
   fetchCriticsChoice,
   fetchTVShows,
-  fetchDocumentaries
+  fetchDocumentaries,
+  fetchAnimatedShows
 } from '../services/tmdb'; // Update imports
 
 const { width, height } = Dimensions.get('window');
@@ -61,6 +62,11 @@ const CineBrowseScreen: React.FC = () => {
   const [isFetching, setIsFetching] = useState<boolean>(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [customCategories, setCustomCategories] = useState<string[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [backgroundCards, setBackgroundCards] = useState<Movie[]>([]);
+  const [categoryMovies, setCategoryMovies] = useState<{ [key: string]: Movie[] }>({});
+  const [categoryPages, setCategoryPages] = useState<{ [key: string]: number }>({});
+  const [categoryTotalPages, setCategoryTotalPages] = useState<{ [key: string]: number }>({});
 
   const displayedMovieIds = useRef<Set<number>>(new Set());
 
@@ -73,52 +79,109 @@ const CineBrowseScreen: React.FC = () => {
   const [topRatedPage, setTopRatedPage] = useState(1);
   const [highestRatedPage, setHighestRatedPage] = useState(1);
 
+  const [errorCount, setErrorCount] = useState(0);
+  const MAX_ERROR_ATTEMPTS = 3;
+  const MAX_RETRIES = 5;
+  const retryTimeout = useRef<NodeJS.Timeout>();
+
   useEffect(() => {
     fetchMoreMovies();
   }, []);
 
-  const fetchMoreMovies = async () => {
-    if (isFetching) return;
+  // Add focus listener for screen refresh
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      handleRefresh();
+    });
+
+    return unsubscribe;
+  }, [navigation]);
+
+  const handleRefresh = async () => {
+    setCurrentPage(1);
+    setMovies([]);
+    displayedMovieIds.current.clear();
+    await fetchMoreMovies();
+  };
+
+  // Update fetchMoreMovies to handle background cards
+  const fetchMoreMovies = async (retryCount = 0) => {
+    if (isFetching || errorCount >= MAX_ERROR_ATTEMPTS) return;
     
     try {
       setIsFetching(true);
-      setLoading(true);
+      const currentCategoryPage = categoryPages[selectedCategory] || 1;
+      const totalPages = categoryTotalPages[selectedCategory];
 
-      const [popularMovies, topRatedMovies, highestVotedMovies] = await Promise.all([
-        fetchRandomMovies('popular', 10),
-        fetchRandomMovies('top_rated', 10),
-        fetchRandomMovies('discover', 10, {
-          sort_by: 'vote_count.desc',
-          'vote_count.gte': 1000,
-          with_original_language: 'en' // Add language filter for better results
-        })
-      ]);
+      // Reset error count on successful attempt
+      setErrorCount(0);
 
-      // Filter out any undefined/null results
-      const validMovies = [
-        ...(popularMovies || []).map(m => ({ ...m, category: 'Popular' })),
-        ...(topRatedMovies || []).map(m => ({ ...m, category: 'Highest Rated' })),
-        ...(highestVotedMovies || []).map(m => ({ ...m, category: 'Most Voted' }))
-      ].filter(movie => 
-        movie && 
-        movie.poster_path && 
-        !displayedMovieIds.current.has(movie.id)
-      );
-
-      if (validMovies.length === 0) {
-        console.warn('No new movies fetched');
+      // Check if we've reached the end of available pages
+      if (totalPages && currentCategoryPage > totalPages) {
+        console.log('Reached end of pages for category:', selectedCategory);
+        if (selectedCategory !== 'All') {
+          handleCategorySelect('All');
+        }
         return;
       }
+      
+      const response = await fetchMoviesByCategory(
+        selectedCategory, 
+        currentCategoryPage
+      );
+      
+      if (!response?.results?.length) {
+        throw new Error('No results returned');
+      }
 
-      setMovies(prevMovies => [...prevMovies, ...shuffleArray(validMovies)]);
-      validMovies.forEach(movie => displayedMovieIds.current.add(movie.id));
+      const newMovies = response.results.filter(
+        movie => !displayedMovieIds.current.has(movie.id)
+      );
+
+      if (newMovies.length === 0 && retryCount < MAX_RETRIES) {
+        // Try next page if no new movies found
+        setCategoryPages(prev => ({
+          ...prev,
+          [selectedCategory]: currentCategoryPage + 1
+        }));
+        return fetchMoreMovies(retryCount + 1);
+      }
+
+      setMovies(prevMovies => [...prevMovies, ...newMovies]);
+      setBackgroundCards(prevCards => [...prevCards, ...newMovies]);
+      newMovies.forEach(movie => displayedMovieIds.current.add(movie.id));
+      
+      setCategoryPages(prev => ({
+        ...prev,
+        [selectedCategory]: currentCategoryPage + 1
+      }));
+
+      if (response.total_pages) {
+        setCategoryTotalPages(prev => ({
+          ...prev,
+          [selectedCategory]: response.total_pages
+        }));
+      }
 
     } catch (error) {
       console.error('Error fetching more movies:', error);
-      Alert.alert('Error', 'Failed to load more movies. Please try again.');
+      setErrorCount(prev => prev + 1);
+      
+      if (retryCount < MAX_RETRIES) {
+        // Clear any existing retry timeout
+        if (retryTimeout.current) {
+          clearTimeout(retryTimeout.current);
+        }
+        
+        // Retry after delay
+        retryTimeout.current = setTimeout(() => {
+          fetchMoreMovies(retryCount + 1);
+        }, 1000 * (retryCount + 1)); // Exponential backoff
+      } else if (selectedCategory !== 'All') {
+        handleCategorySelect('All');
+      }
     } finally {
       setIsFetching(false);
-      setLoading(false);
     }
   };
 
@@ -159,17 +222,20 @@ const CineBrowseScreen: React.FC = () => {
         return;
       }
   
-      // Only save if we have the required fields
-      if (movie.id && movie.title) {
-        await setDoc(movieRef, {
-          movieId: movie.id.toString(),
-          title: movie.title,
-          poster_path: movie.poster_path || null,
-          category,
-          timestamp: new Date()
-        });
+      // Normalize the data before saving
+      const mediaData = {
+        movieId: movie.id.toString(),
+        title: movie.title || movie.name, // Handle both movies and TV shows
+        poster_path: movie.poster_path || null,
+        media_type: movie.media_type || 'movie',
+        category,
+        timestamp: new Date()
+      };
+  
+      if (movie.id && (movie.title || movie.name)) {
+        await setDoc(movieRef, mediaData);
       } else {
-        console.warn('Invalid movie data:', movie);
+        console.warn('Missing required fields:', movie);
       }
     } catch (error) {
       console.error('Error saving movie:', error);
@@ -208,8 +274,8 @@ const CineBrowseScreen: React.FC = () => {
   const handleSwiped = (index: number) => {
     setCurrentIndex(index + 1);
     
-    // Pre-fetch more cards when we're running low
-    if (movies.length - (index + 1) <= 5) {
+    // Pre-fetch more cards when we're running lower
+    if (movies.length - (index + 1) <= 15) {
       fetchMoreMovies();
     }
   };
@@ -218,16 +284,45 @@ const CineBrowseScreen: React.FC = () => {
     'All',
     'Top Rated',
     'Classics',
-    'Award Winners',
     "Critics' Choice",
-    'International',
     'TV Shows',
+    'Animated',
     'Documentaries'
   ];
 
-  const handleCategorySelect = (category: string) => {
+  // Update handleCategorySelect to reset pagination state
+  const handleCategorySelect = async (category: string) => {
+    setLoading(true);
+    setCurrentIndex(0);
+    setMovies([]);
+    setBackgroundCards([]);
+    displayedMovieIds.current.clear();
     setSelectedCategory(category);
-    filterMoviesByCategory(category);
+    setCurrentPage(1);
+    setCategoryPages(prev => ({ ...prev, [category]: 1 }));
+    setCategoryTotalPages(prev => ({ ...prev, [category]: undefined }));
+    setErrorCount(0);
+    
+    try {
+      const response = await fetchMoviesByCategory(category, 1);
+      if (response?.results?.length) {
+        setMovies(response.results);
+        setBackgroundCards(response.results.slice(1));
+        response.results.forEach(movie => displayedMovieIds.current.add(movie.id));
+        
+        // Pre-fetch next batch immediately
+        fetchMoreMovies();
+      } else {
+        throw new Error('No results for category');
+      }
+    } catch (error) {
+      console.error('Error changing category:', error);
+      if (category !== 'All') {
+        handleCategorySelect('All');
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleAddCustomCategory = () => {
@@ -271,6 +366,9 @@ const CineBrowseScreen: React.FC = () => {
         case 'tv shows':
           response = await fetchTVShows();
           break;
+        case 'animated':
+          response = await fetchAnimatedShows();
+          break;
         case 'documentaries':
           response = await fetchDocumentaries();
           break;
@@ -301,6 +399,7 @@ const CineBrowseScreen: React.FC = () => {
     }
   };
 
+  // Update Swiper component render
   return (
     <View style={styles.mainContainer}>
       <View style={styles.filterContainer}>
@@ -316,13 +415,24 @@ const CineBrowseScreen: React.FC = () => {
         <View style={styles.container}>
           <Swiper
             cards={movies}
-            renderCard={(movie) => {
+            renderCard={(movie, index) => {
               if (!movie) return null;
               return (
-                <FlipCard
-                  movie={movie}
-                  onSwipingStateChange={setSwipingEnabled}
-                />
+                <View style={styles.cardContainer}>
+                  {backgroundCards[index + 1] && (
+                    <Image
+                      source={{ 
+                        uri: `https://image.tmdb.org/t/p/w500${backgroundCards[index + 1]?.poster_path}` 
+                      }}
+                      style={[styles.blurredCard, { opacity: 0.3 }]}
+                      blurRadius={15}
+                    />
+                  )}
+                  <FlipCard
+                    movie={movie}
+                    onSwipingStateChange={setSwipingEnabled}
+                  />
+                </View>
               );
             }}
             infinite={false}
@@ -331,14 +441,14 @@ const CineBrowseScreen: React.FC = () => {
             cardHorizontalMargin={0}
             stackSize={3}
             stackScale={10}
-            stackSeparation={14}
+            stackSeparation={-30}
             overlayOpacityHorizontalThreshold={width / 8}
             overlayOpacityVerticalThreshold={SCREEN_HEIGHT / 8}
             inputRotationRange={[-width / 2, 0, width / 2]}
             outputRotationRange={["-10deg", "0deg", "10deg"]}
             onSwipedAll={() => {
-              setCurrentIndex(0);
               fetchMoreMovies();
+              setCurrentIndex(0);
             }}
             onSwipedTop={handleSwipedTop}
             onSwipedBottom={handleSwipedBottom}
@@ -503,6 +613,34 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 3,
   },
+  cardContainer: {
+    width: DIMS.width,
+    height: getCardHeight(),
+    position: 'relative',
+  },
+  blurredCard: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    opacity: 0.3,
+    backgroundColor: '#000',
+  },
 });
 
 export default CineBrowseScreen;
+
+interface Movie {
+  id: number;
+  title?: string;
+  name?: string;
+  poster_path: string | null;
+  vote_average: number;
+  overview: string;
+  release_date?: string;
+  first_air_date?: string;
+  runtime?: number;
+  genres?: Array<{ id: number; name: string }>;
+  category?: string;
+  vote_count?: number;
+  media_type?: 'movie' | 'tv';
+}

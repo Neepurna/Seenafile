@@ -280,7 +280,7 @@ export const fetchAwardWinners = async (page = 1) => {
 // Function to fetch critics' choice (highly rated movies)
 export const fetchCriticsChoice = async (page = 1) => {
   const response = await fetch(
-    `${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&sort_by=vote_average.desc&vote_count.gte=2000&vote_average.gte=8&page=${page}`
+    `${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&sort_by=vote_average.desc&vote_count.gte=2000&vote_average.gte=7.5&page=${page}`
   );
   return processMovieResponse(await response.json());
 };
@@ -293,16 +293,39 @@ export const fetchInternationalMovies = async (page = 1) => {
   return processMovieResponse(await response.json());
 };
 
+// Add new function to fetch animated shows
+export const fetchAnimatedShows = async (page = 1) => {
+  try {
+    const response = await fetch(
+      `${TMDB_BASE_URL}/discover/tv?api_key=${TMDB_API_KEY}&with_genres=16&sort_by=vote_average.desc&vote_count.gte=100&page=${page}`
+    );
+    const data = await response.json();
+    const normalizedResults = data.results.map(normalizeMediaItem);
+    return processMovieResponse({ ...data, results: normalizedResults });
+  } catch (error) {
+    console.error('Error fetching animated shows:', error);
+    return { results: [] };
+  }
+};
+
+// Update fetchTVShows to exclude animation genre
 export const fetchTVShows = async (page = 1) => {
-  const response = await fetch(
-    `${TMDB_BASE_URL}/discover/tv?api_key=${TMDB_API_KEY}&sort_by=popularity.desc&page=${page}`
-  );
-  return processMovieResponse(await response.json());
+  try {
+    const response = await fetch(
+      `${TMDB_BASE_URL}/discover/tv?api_key=${TMDB_API_KEY}&without_genres=16&sort_by=vote_average.desc&vote_count.gte=1000&page=${page}`
+    );
+    const data = await response.json();
+    const normalizedResults = data.results.map(normalizeMediaItem);
+    return processMovieResponse({ ...data, results: normalizedResults });
+  } catch (error) {
+    console.error('Error fetching TV shows:', error);
+    return { results: [] };
+  }
 };
 
 export const fetchDocumentaries = async (page = 1) => {
   const response = await fetch(
-    `${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&with_genres=99&sort_by=popularity.desc&page=${page}`
+    `${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&with_genres=99&sort_by=vote_average.desc&vote_count.gte=500&page=${page}`
   );
   return processMovieResponse(await response.json());
 };
@@ -322,30 +345,75 @@ const processMovieResponse = async (data: any) => {
 
 export const fetchMoviesByCategory = async (category: string, page: number = 1) => {
   try {
+    let response;
+    
     switch (category.toLowerCase()) {
-      case 'top rated':
-        return await fetchTopRatedMovies(page);
+      case 'critics\' choice':
+        response = await fetchCriticsChoice(page);
+        break;
       case 'classics':
-        return await fetchClassics(page);
-      case 'award winners':
-        return await fetchAwardWinners(page);
-      case "critics' choice":
-        return await fetchCriticsChoice(page);
-      case 'international':
-        return await fetchInternationalMovies(page);
+        response = await fetchClassics(page);
+        break;
       case 'tv shows':
-        return await fetchTVShows(page);
+        response = await fetchTVShows(page);
+        break;
+      case 'animated':
+        response = await fetchAnimatedShows(page);
+        break;
       case 'documentaries':
-        return await fetchDocumentaries(page);
+        response = await fetchDocumentaries(page);
+        break;
       case 'all':
-        return await fetchMovies(page);
+        // Randomize page number for 'All' category to get different movies
+        const randomPage = Math.floor(Math.random() * 20) + 1;
+        response = await fetchMovies(randomPage);
+        break;
       default:
-        return await fetchMovies(page);
+        response = await fetchMovies(page);
     }
+
+    // Ensure unique results and normalize data
+    if (response?.results) {
+      const normalizedResults = response.results
+        .map(normalizeMediaItem)
+        .filter(movie => movie.vote_count >= 100 && movie.poster_path)
+        .sort((a, b) => b.vote_average - a.vote_average);
+
+      return { ...response, results: normalizedResults };
+    }
+
+    return response;
   } catch (error) {
     console.error(`Error fetching ${category} movies:`, error);
     return { results: [] };
   }
+};
+
+// Add this utility function
+const shuffleArray = <T>(array: T[]): T[] => {
+  const newArray = [...array];
+  for (let i = newArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+  }
+  return newArray;
+};
+
+// Add this normalization function at the top with other utility functions
+const normalizeMediaItem = (item: any) => {
+  return {
+    id: item.id,
+    title: item.title || item.name,
+    poster_path: item.poster_path,
+    backdrop_path: item.backdrop_path,
+    vote_average: item.vote_average,
+    vote_count: item.vote_count,
+    overview: item.overview,
+    release_date: item.release_date || item.first_air_date,
+    media_type: item.name ? 'tv' : 'movie',
+    genre_ids: item.genre_ids,
+    genres: item.genres,
+  };
 };
 
 export interface TMDBMovie {
