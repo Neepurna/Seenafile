@@ -158,8 +158,7 @@ const Tabs: React.FC = () => {
           name="MyWall" 
           component={MyWallScreen}
           options={({ navigation }) => ({
-            tabBarButton: () => null,
-            tabBarStyle: { display: 'none' },
+            tabBarButton: () => null,  // This hides just this screen's tab button
             headerLeft: () => (
               <TouchableOpacity 
                 onPress={() => navigation.goBack()}

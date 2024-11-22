@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { db, auth } from '../firebase';
 import { collection, query, where, getDocs, onSnapshot, addDoc, orderBy, serverTimestamp, doc, setDoc } from 'firebase/firestore';
@@ -39,7 +39,7 @@ const MyWallScreen: React.FC<MyWallScreenProps> = ({ route, navigation }) => {
     
     const q = query(
       messagesCollectionRef,
-      orderBy('timestamp', 'desc')
+      orderBy('timestamp', 'asc') // Changed to ascending order
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -224,13 +224,17 @@ const MyWallScreen: React.FC<MyWallScreenProps> = ({ route, navigation }) => {
   return (
     <View style={styles.container}>
       <View style={styles.profileHeader}>
-        <View style={styles.avatarContainer}>
-          <MaterialIcons name="person" size={60} color="#BB86FC" />
-        </View>
-        <Text style={styles.username}>{username}</Text>
-        <View style={styles.matchScoreContainer}>
-          <MaterialIcons name="favorite" size={20} color="#BB86FC" />
-          <Text style={styles.matchScore}>{Math.round(matchScore)}% Match</Text>
+        <View style={styles.headerContent}>
+          <View style={styles.avatarContainer}>
+            <MaterialIcons name="person" size={40} color="#BB86FC" />
+          </View>
+          <View style={styles.headerText}>
+            <Text style={styles.username}>{username}</Text>
+            <View style={styles.matchScoreContainer}>
+              <MaterialIcons name="favorite" size={16} color="#BB86FC" />
+              <Text style={styles.matchScore}>{Math.round(matchScore)}% Match</Text>
+            </View>
+          </View>
         </View>
       </View>
 
@@ -253,7 +257,13 @@ const MyWallScreen: React.FC<MyWallScreenProps> = ({ route, navigation }) => {
         ))}
       </View>
 
-      {activeTab === 'Profile' ? renderProfileContent() : renderChat()}
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+      >
+        {activeTab === 'Profile' ? renderProfileContent() : renderChat()}
+      </KeyboardAvoidingView>
     </View>
   );
 };
@@ -269,35 +279,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   profileHeader: {
-    alignItems: 'center',
-    padding: 20,
+    padding: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#333',
+    maxHeight: 80,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   avatarContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: '#2A2A2A',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginRight: 10,
+  },
+  headerText: {
+    flex: 1,
   },
   username: {
-    fontSize: 24,
+    fontSize: 18,
     color: '#fff',
     fontWeight: 'bold',
-    marginBottom: 8,
   },
   matchScoreContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 4,
   },
   matchScore: {
     color: '#BB86FC',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 14,
   },
   statsGrid: {
     flexDirection: 'row',
@@ -379,7 +394,6 @@ const styles = StyleSheet.create({
   },
   chatContainer: {
     flex: 1,
-    backgroundColor: '#121212',
   },
   messagesContainer: {
     flex: 1,
@@ -416,20 +430,22 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     flexDirection: 'row',
-    padding: 16,
+    padding: 10,
     borderTopWidth: 1,
     borderTopColor: '#333',
     backgroundColor: '#1E1E1E',
+    alignItems: 'center',
   },
   input: {
     flex: 1,
     backgroundColor: '#2A2A2A',
-    borderRadius: 24,
+    borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 8,
     marginRight: 8,
     color: '#fff',
-    fontSize: 16,
+    maxHeight: 100, // Limit input height
+    minHeight: 40,
   },
   sendButton: {
     width: 44,
