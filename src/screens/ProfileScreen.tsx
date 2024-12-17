@@ -1,31 +1,36 @@
 // src/screens/ProfileScreen.tsx
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Alert, FlatList, Dimensions } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { MaterialIcons } from '@expo/vector-icons';  // Changed from react-native-vector-icons
+import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { auth, db, signOut } from '../firebase';
-import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, collection, query, onSnapshot } from 'firebase/firestore';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { ListenerManager } from '../firebase';
 
-// Add type definition for routes
-type RootStackParamList = {
-  Login: undefined;
-  Profile: undefined;
-  // Add other screen names here
-};
+const { width } = Dimensions.get('window');
+const FOLDER_SIZE = width / 2 - 30;
 
-type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
-
-interface ProfileScreenProps {
-  onClose: () => void;
+interface FolderData {
+  id: string;
+  name: string;
+  color: string;
+  count: number;
+  icon: string;
 }
 
-const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
-  const navigation = useNavigation<NavigationProp>();
+const folders: FolderData[] = [
+  { id: 'watched', name: 'Watched', color: '#4BFF4B', count: 0, icon: 'checkmark-circle' },
+  { id: 'most_watch', name: 'Most Watched', color: '#FFD700', count: 0, icon: 'repeat' },
+  { id: 'watch_later', name: 'Watch Later', color: '#00BFFF', count: 0, icon: 'time' },
+  { id: 'custom', name: 'Custom List', color: '#9C27B0', count: 0, icon: 'list' },
+];
+
+const ProfileScreen: React.FC = () => {
+  const navigation = useNavigation();
   const [userProfile, setUserProfile] = useState<any>(null);
+  const [folderCounts, setFolderCounts] = useState<{ [key: string]: number }>({});
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null); // Add error state
 
   useEffect(() => {
     if (!auth.currentUser) {
@@ -35,26 +40,38 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
 
     const userId = auth.currentUser.uid;
     const userRef = doc(db, 'users', userId);
-    
-    const unsubscribe = onSnapshot(userRef, 
-      (doc) => {
-        if (doc.exists()) {
-          setUserProfile(doc.data());
-        }
-        setIsLoading(false);
-      },
-      (error) => {
-        console.error('Profile loading error:', error);
-        setError('Failed to load profile');
-        setIsLoading(false);
-      }
-    );
+    const moviesRef = collection(userRef, 'movies');
 
-    // Register the listener
-    ListenerManager.addListener(`profile_${userId}`, unsubscribe);
+    // Fetch user profile
+    const profileUnsubscribe = onSnapshot(userRef, (doc) => {
+      if (doc.exists()) {
+        setUserProfile(doc.data());
+      }
+      setIsLoading(false);
+    });
+
+    // Fetch movie counts
+    const moviesUnsubscribe = onSnapshot(moviesRef, (snapshot) => {
+      const counts: { [key: string]: number } = {
+        watched: 0,
+        most_watch: 0,
+        watch_later: 0,
+        custom: 0
+      };
+
+      snapshot.docs.forEach(doc => {
+        const category = doc.data().category;
+        if (category in counts) {
+          counts[category]++;
+        }
+      });
+
+      setFolderCounts(counts);
+    });
 
     return () => {
-      ListenerManager.removeListener(`profile_${userId}`);
+      profileUnsubscribe();
+      moviesUnsubscribe();
     };
   }, [navigation]);
 
@@ -68,16 +85,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
           text: "Sign Out", 
           onPress: async () => {
             try {
-              // First close the profile modal
-              onClose();
-              
-              // Wait for modal animation
-              await new Promise(resolve => setTimeout(resolve, 100));
-              
-              // Then sign out (which will clean up all listeners)
               await signOut();
-              
-              // Finally navigate
               navigation.reset({
                 index: 0,
                 routes: [{ name: 'Login' }],
@@ -90,6 +98,23 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
       ]
     );
   };
+
+  const renderFolder = ({ item: folder }: { item: FolderData }) => (
+    <TouchableOpacity 
+      style={[styles.folderContainer, { borderColor: folder.color }]}
+      onPress={() => navigation.navigate('MovieGridScreen', { 
+        folderId: folder.id,
+        folderName: folder.name,
+        folderColor: folder.color
+      })}
+    >
+      <Ionicons name={folder.icon as any} size={40} color={folder.color} />
+      <Text style={styles.folderName}>{folder.name}</Text>
+      <Text style={[styles.folderCount, { color: folder.color }]}>
+        {folderCounts[folder.id] || 0} movies
+      </Text>
+    </TouchableOpacity>
+  );
 
   if (isLoading) {
     return (
@@ -109,13 +134,6 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity 
-        style={styles.closeButton} 
-        onPress={onClose}
-      >
-        <MaterialIcons name="close" size={24} color="#FFF" />
-      </TouchableOpacity>
-
       <View style={styles.profileHeader}>
         <View style={styles.profileImageContainer}>
           <Image
@@ -130,14 +148,13 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ onClose }) => {
         <Text style={styles.userHandle}>{userProfile?.email}</Text>
       </View>
 
-      <View style={styles.dashboard}>
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>
-            {userProfile?.joinDate ? new Date(userProfile.joinDate).getFullYear() : new Date().getFullYear()}
-          </Text>
-          <Text style={styles.statLabel}>Member Since</Text>
-        </View>
-      </View>
+      <FlatList
+        data={folders}
+        renderItem={renderFolder}
+        keyExtractor={item => item.id}
+        numColumns={2}
+        contentContainerStyle={styles.gridContainer}
+      />
 
       <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
         <MaterialIcons name="logout" size={24} color="#FFF" />
@@ -248,6 +265,31 @@ const styles = StyleSheet.create({
   errorText: {
     color: '#FFF',
     fontSize: 16,
+  },
+  gridContainer: {
+    padding: 15,
+  },
+  folderContainer: {
+    width: FOLDER_SIZE,
+    height: FOLDER_SIZE,
+    margin: 7.5,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 2,
+    padding: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  folderName: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  folderCount: {
+    fontSize: 14,
+    marginTop: 5,
   },
 });
 

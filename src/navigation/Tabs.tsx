@@ -1,8 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
-  
   PanResponder,
-  
   StyleSheet
 } from 'react-native';
 import { Modal, Animated, Dimensions } from 'react-native';
@@ -13,7 +11,6 @@ import { TouchableOpacity, Text } from 'react-native';
 import CineBrowseScreen from '../screens/CineBrowseScreen';
 import CinePalScreen from '../screens/CinePalScreen';
 import MovieChatScreen from '../screens/MovieChatScreen'; // Update this line
-import CineFileScreen from '../screens/CineFileScreen';
 import CineGamesScreen from '../screens/CineGamesScreen';
 import CineFeedScreen from '../screens/CineFeedScreen';
 import MyWallScreen from '../screens/MyWallScreen';
@@ -131,10 +128,10 @@ const Tabs: React.FC = () => {
               iconName = 'newspaper-outline';
             } else if (route.name === 'MovieChat') {  // Updated name
               iconName = 'chatbubbles-outline';  // Updated icon
-            } else if (route.name === 'CineFile') {
-              iconName = 'folder-outline'; // Updated icon name
             } else if (route.name === 'CineGames') {
               iconName = 'game-controller-outline';
+            } else if (route.name === 'Profile') {
+              iconName = 'person-circle-outline';
             }
 
             return <Ionicons name={iconName} size={size} color={color} />;
@@ -158,8 +155,8 @@ const Tabs: React.FC = () => {
         <Tab.Screen name="CinePal" component={CinePalScreen} />
         <Tab.Screen name="CineFeed" component={CineFeedScreen} />
         <Tab.Screen name="MovieChat" component={MovieChatScreen} />
-        <Tab.Screen name="CineFile" component={CineFileScreen} />
         <Tab.Screen name="CineGames" component={CineGamesScreen} />
+        <Tab.Screen name="Profile" component={ProfileScreen} />
         <Tab.Screen 
           name="MyWall" 
           component={MyWallScreen}

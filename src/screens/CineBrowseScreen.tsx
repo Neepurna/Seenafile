@@ -136,6 +136,18 @@ const CineBrowseScreen: React.FC = () => {
     await fetchMoreMovies();
   };
 
+  // Add this new function
+  const appendMovies = useCallback((newMovies: Movie[]) => {
+    if (!Array.isArray(newMovies) || newMovies.length === 0) return;
+    
+    setMovies(prevMovies => {
+      const uniqueNewMovies = newMovies.filter(
+        movie => !prevMovies.some(existing => existing.id === movie.id)
+      );
+      return [...prevMovies, ...uniqueNewMovies];
+    });
+  }, []);
+
   // Update fetchMoreMovies with caching and optimized fetching
   const fetchMoreMovies = async (retryCount = 0) => {
     if (isFetching || errorCount >= MAX_ERROR_ATTEMPTS) return;
@@ -175,7 +187,7 @@ const CineBrowseScreen: React.FC = () => {
       movieCache.data.set(cacheKey, newMovies);
       movieCache.timestamp.set(cacheKey, now);
 
-      setMovies(prev => [...prev, ...newMovies]);
+      appendMovies(newMovies);
       setBackgroundCards(prev => [...prev, ...newMovies.slice(0, 3)]);
       newMovies.forEach(movie => displayedMovieIds.current.add(movie.id));
 
@@ -300,6 +312,9 @@ const CineBrowseScreen: React.FC = () => {
     setIsChangingCategory(true);
     previousCategory.current = selectedCategory;
     setSelectedCategory(category);
+    setMovies([]); // Clear existing movies
+    setCurrentIndex(0); // Reset index
+    displayedMovieIds.current.clear(); // Clear tracked IDs
 
     // Debounce the fetch
     debouncedFetch.current = setTimeout(async () => {
