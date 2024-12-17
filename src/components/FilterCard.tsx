@@ -11,160 +11,102 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { DIMS } from '../theme';  // Make sure this import is at the top
+import CountrySelector from './CountrySelector';
 
 const { width } = Dimensions.get('window');
 
 interface FilterCardProps {
   selectedCategory: string;
   onSelectCategory: (category: string) => void;
-  onAddCustomCategory: () => void;
   categories: string[];
-  customCategories: string[];
 }
 
 const FilterCard: React.FC<FilterCardProps> = ({
   selectedCategory,
   onSelectCategory,
-  onAddCustomCategory,
-  categories,
-  customCategories,
+  categories
 }) => {
-  const [showCategoryPanel, setShowCategoryPanel] = useState(false);
-  const slideAnim = new Animated.Value(width); // Changed from -width to width
+  const [showCountrySelector, setShowCountrySelector] = useState(false);
 
-  const toggleCategoryPanel = () => {
-    const toValue = showCategoryPanel ? width : 0; // Changed from -width to width
-    Animated.spring(slideAnim, {
-      toValue,
-      useNativeDriver: true,
-      friction: 8,
-      tension: 40,
-    }).start();
-    setShowCategoryPanel(!showCategoryPanel);
+  const handleCategoryPress = (category: string) => {
+    if (category === 'Countries') {
+      setShowCountrySelector(true);
+    } else {
+      onSelectCategory(category);
+    }
   };
 
-  const mainCategories = [
-    'All',
-    'TV Shows',
-    'Animated',
-    'Documentaries',
-    'Classics',
-    "Critics' Choice"
-  ];
-
-  const renderMainFilter = () => (
-    <View style={styles.filterContainer}>
+  return (
+    <View style={styles.mainContainer}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={styles.container}
       >
-        {mainCategories.map((category) => (
+        {categories.map((category) => (
           <TouchableOpacity
             key={category}
             style={[
-              styles.categoryPill,
-              selectedCategory === category && styles.selectedPill,
+              styles.categoryButton,
+              selectedCategory === category && styles.selectedCategory
             ]}
-            onPress={() => onSelectCategory(category)}
+            onPress={() => handleCategoryPress(category)}
           >
-            <Text
-              style={[
-                styles.categoryText,
-                selectedCategory === category && styles.selectedText,
-              ]}
-            >
+            <Text style={[
+              styles.categoryText,
+              selectedCategory === category && styles.selectedCategoryText
+            ]}>
               {category}
             </Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
-      <TouchableOpacity
-        style={styles.addButton}
-        onPress={toggleCategoryPanel}
-      >
-        <Ionicons 
-          name={showCategoryPanel ? "close-circle-outline" : "add-circle-outline"} 
-          size={24} 
-          color="#fff" 
-        />
-      </TouchableOpacity>
-    </View>
-  );
 
-  return (
-    <View style={styles.container}>
-      {renderMainFilter()}
-      <Animated.View 
-        style={[
-          styles.categoryPanel,
-          { transform: [{ translateX: slideAnim }] }
-        ]}
-      >
-        <ScrollView style={styles.categoryList}>
-          {categories
-            .filter(cat => ![
-              'All',
-              'Trending',
-              'New Releases',
-              'Top Rated',
-              'Classics',
-              'Award Winners',
-              "Critics' Choice",
-              'International',
-              'TV Shows',
-              'Documentaries'
-            ].includes(cat))
-            .map((category) => (
-              <TouchableOpacity
-                key={category}
-                style={[
-                  styles.categoryListItem,
-                  selectedCategory === category && styles.selectedListItem,
-                ]}
-                onPress={() => {
-                  onSelectCategory(category);
-                  toggleCategoryPanel();
-                }}
-              >
-                <Text style={styles.categoryListText}>{category}</Text>
-              </TouchableOpacity>
-            ))}
-          {customCategories.map((category) => (
-            <TouchableOpacity
-              key={category}
-              style={[
-                styles.categoryListItem,
-                selectedCategory === category && styles.selectedListItem,
-              ]}
-              onPress={() => {
-                onSelectCategory(category);
-                toggleCategoryPanel();
-              }}
-            >
-              <Text style={styles.categoryListText}>{category}</Text>
-            </TouchableOpacity>
-          ))}
-          <TouchableOpacity
-            style={styles.addCategoryButton}
-            onPress={onAddCustomCategory}
-          >
-            <Text style={styles.addCategoryText}>Add Custom Category</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </Animated.View>
+      <CountrySelector
+        isVisible={showCountrySelector}
+        onClose={() => setShowCountrySelector(false)}
+        onSelectCountry={(country) => {
+          onSelectCategory(country.english_name);
+          setShowCountrySelector(false);
+        }}
+      />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    height: DIMS.filterHeight,
+  mainContainer: {
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
     borderTopWidth: 1,
     borderTopColor: 'rgba(255, 255, 255, 0.1)',
-    padding: 0,
-    margin: 0,
+    paddingVertical: 10,
+  },
+  container: {
+    paddingHorizontal: 15,
+    alignItems: 'center',
+    gap: 10,
+  },
+  categoryButton: {
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    marginHorizontal: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  selectedCategory: {
+    backgroundColor: '#fff',
+  },
+  categoryText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  selectedCategoryText: {
+    color: '#000',
   },
   filterContainer: {
     flexDirection: 'row',
@@ -190,11 +132,6 @@ const styles = StyleSheet.create({
   },
   selectedPill: {
     backgroundColor: '#fff',
-  },
-  categoryText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
   },
   selectedText: {
     color: '#000',

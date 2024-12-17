@@ -324,10 +324,16 @@ export const fetchTVShows = async (page = 1) => {
 };
 
 export const fetchDocumentaries = async (page = 1) => {
-  const response = await fetch(
-    `${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&with_genres=99&sort_by=vote_average.desc&vote_count.gte=500&page=${page}`
-  );
-  return processMovieResponse(await response.json());
+  try {
+    const response = await fetch(
+      `${TMDB_BASE_URL}/discover/movie?api_key=${TMDB_API_KEY}&with_genres=99&sort_by=vote_count.desc&vote_count.gte=1000&vote_average.gte=7&page=${page}`
+    );
+    const data = await response.json();
+    return processMovieResponse(data);
+  } catch (error) {
+    console.error('Error fetching documentaries:', error);
+    return { results: [] };
+  }
 };
 
 // Helper function to process movie response and add genres
@@ -343,50 +349,132 @@ const processMovieResponse = async (data: any) => {
   return { ...data, results: moviesWithGenres };
 };
 
-export const fetchMoviesByCategory = async (category: string, page: number = 1) => {
+// Add these types at the top
+export interface CountryConfig {
+  iso_3166_1: string;
+  english_name: string;
+  native_name: string;
+}
+
+// Add this constant for featured countries
+const FEATURED_COUNTRIES = {
+  'India': { iso: 'IN', language: 'hi' },
+  'Korea': { iso: 'KR', language: 'ko' },
+  'Japan': { iso: 'JP', language: 'ja' },
+  'France': { iso: 'FR', language: 'fr' },
+  'China': { iso: 'CN', language: 'zh' },
+  'Iran': { iso: 'IR', language: 'fa' }
+} as const;
+
+// Add this new function to fetch available countries
+export const fetchAvailableCountries = async (): Promise<CountryConfig[]> => {
   try {
-    let response;
-    const randomPage = Math.floor(Math.random() * 20) + 1;
-    
-    switch (category.toLowerCase()) {
-      case 'critics\' choice':
-        response = await fetchCriticsChoice(page);
-        break;
-      case 'classics':
-        response = await fetchClassics(page);
-        break;
-      case 'tv shows':
-        response = await fetchTVShows(randomPage);
-        break;
-      case 'animated':
-        response = await fetchAnimatedShows(randomPage);
-        break;
-      case 'documentaries':
-        response = await fetchDocumentaries(randomPage);
-        break;
-      case 'all':
-        response = await fetchMovies(randomPage);
-        break;
-      default:
-        response = await fetchMovies(randomPage);
-    }
-
-    // Ensure unique results and normalize data
-    if (response?.results) {
-      const normalizedResults = response.results
-        .map(normalizeMediaItem)
-        .filter(movie => movie.vote_count >= 100 && movie.poster_path)
-        .sort(() => Math.random() - 0.5); // Randomize order
-
-      return { ...response, results: normalizedResults };
-    }
-
-    return response;
+    const response = await fetch(
+      `${TMDB_BASE_URL}/configuration/countries?api_key=${TMDB_API_KEY}`
+    );
+    if (!response.ok) throw new Error('Failed to fetch countries');
+    return await response.json();
   } catch (error) {
-    console.error(`Error fetching ${category} movies:`, error);
+    console.error('Error fetching countries:', error);
+    return [];
+  }
+};
+
+// Update the movie fetching function to be more centralized
+export const fetchMoviesByCategory = async (
+  category: string,
+  page: number = 1,
+  options: { language?: string; region?: string } = {}
+) => {
+  try {
+    const randomPage = Math.floor(Math.random() * 20) + 1;
+    const actualPage = page > 1 ? page : randomPage;
+    
+    // Base query parameters
+    const baseParams = {
+      api_key: TMDB_API_KEY,
+      page: actualPage,
+      'vote_count.gte': 100,
+      ...options
+    };
+
+    let endpoint = `${TMDB_BASE_URL}/discover/movie`;
+    let additionalParams = {};
+
+    // Handle different categories
+    if (category in FEATURED_COUNTRIES) {
+      const countryConfig = FEATURED_COUNTRIES[category];
+      additionalParams = {
+        with_original_language: countryConfig.language,
+        region: countryConfig.iso,
+        sort_by: 'vote_count.desc',
+        'vote_count.gte': 200,
+        'vote_average.gte': 6.5
+      };
+    } else {
+      switch (category.toLowerCase()) {
+        case 'documentaries':
+          additionalParams = {
+            with_genres: '99',
+            'vote_count.gte': 500,
+            'vote_average.gte': 7
+          };
+          break;
+        case 'animated':
+          endpoint = `${TMDB_BASE_URL}/discover/movie`;
+          additionalParams = {
+            with_genres: '16',
+            'vote_count.gte': 300
+          };
+          break;
+        case 'tv shows':
+          endpoint = `${TMDB_BASE_URL}/discover/tv`;
+          additionalParams = {
+            'vote_count.gte': 200,
+            sort_by: 'popularity.desc'
+          };
+          break;
+        case 'all':
+        default:
+          endpoint = `${TMDB_BASE_URL}/movie/popular`;
+          break;
+      }
+    }
+
+    const queryParams = new URLSearchParams({
+      ...baseParams,
+      ...additionalParams
+    }).toString();
+
+    const response = await fetch(`${endpoint}?${queryParams}`);
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+    const data = await response.json();
+    return processAndNormalizeResults(data);
+  } catch (error) {
+    console.error(`Error fetching ${category} content:`, error);
     return { results: [] };
   }
 };
+
+// Add this helper function for processing results
+const processAndNormalizeResults = (data: any) => {
+  const normalizedResults = data.results
+    .filter((item: any) => (
+      item.poster_path && 
+      item.vote_count >= 100 &&
+      item.vote_average >= 6
+    ))
+    .map(normalizeMediaItem)
+    .sort(() => Math.random() - 0.5);
+
+  return {
+    ...data,
+    results: normalizedResults
+  };
+};
+
+// Remove redundant individual fetch functions that are now handled by fetchMoviesByCategory
 
 // Add this utility function
 const shuffleArray = <T>(array: T[]): T[] => {
@@ -445,5 +533,94 @@ export const fetchMovieTrailers = async (page = 1) => {
   } catch (error) {
     console.error('Error fetching trailers:', error);
     return [];
+  }
+};
+
+// Add these constants at the top
+const COUNTRIES = {
+  'India': 'in',
+  'Korea': 'ko',
+  'Japan': 'ja',
+  'France': 'fr',
+  'China': 'zh',
+  'Iran': 'fa'
+};
+
+// Add these interfaces
+export interface CountryConfig {
+  iso_3166_1: string;
+  english_name: string;
+  native_name: string;
+}
+
+export interface RegionGroup {
+  name: string;
+  countries: CountryConfig[];
+}
+
+// Add these constants
+const FEATURED_REGIONS: RegionGroup[] = [
+  {
+    name: 'Asia',
+    countries: ['IN', 'KR', 'JP', 'CN', 'TH', 'VN']
+  },
+  {
+    name: 'Europe',
+    countries: ['FR', 'DE', 'IT', 'ES', 'GB']
+  },
+  {
+    name: 'Middle East',
+    countries: ['IR', 'TR', 'EG']
+  },
+  {
+    name: 'Americas',
+    countries: ['BR', 'MX', 'AR']
+  }
+];
+
+// Add this new function to fetch countries
+export const fetchCountries = async (): Promise<CountryConfig[]> => {
+  const url = `${TMDB_BASE_URL}/configuration/countries`;
+  const options = {
+    method: 'GET',
+    headers: {
+      accept: 'application/json',
+      Authorization: 'Bearer eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI1NTk4MTlkNDhiOTVhMmUzNDQwZGYwNTA0ZGVhMzBmZCIsIm5iZiI6MTcwNDY2MDA0OC45NDIwMDAyLCJzdWIiOiI2NTliMGM1MDg3NDFjNDAyNTg5NDc3OTMiLCJzY29wZXMiOlsiYXBpX3JlYWQiXSwidmVyc2lvbiI6MX0.WbiASUzKIPL9_1xX9xfUUZNV6yV4OEOjSvYGVxd6NFg'
+    }
+  };
+
+  try {
+    const response = await fetch(url, options);
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error fetching countries:', error);
+    return [];
+  }
+};
+
+// Update fetchMoviesByCountry function
+export const fetchMoviesByCountry = async (
+  iso_3166_1: string,
+  page: number = 1
+): Promise<any> => {
+  try {
+    const url = `${TMDB_BASE_URL}/discover/movie`;
+    const params = new URLSearchParams({
+      api_key: TMDB_API_KEY,
+      with_original_language: iso_3166_1.toLowerCase(),
+      region: iso_3166_1,
+      sort_by: 'popularity.desc',
+      'vote_count.gte': '100',
+      'vote_average.gte': '6.5',
+      page: page.toString()
+    });
+
+    const response = await fetch(`${url}?${params}`);
+    const data = await response.json();
+    return processAndNormalizeResults(data);
+  } catch (error) {
+    console.error(`Error fetching movies for country ${iso_3166_1}:`, error);
+    return { results: [] };
   }
 };

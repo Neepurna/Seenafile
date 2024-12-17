@@ -2,7 +2,7 @@
 
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import React, { useEffect, useState, useRef } from 'react';
-import { View, StyleSheet, ActivityIndicator, Alert, Dimensions, Platform, Text, Image } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Alert, Dimensions, Platform, Text, Image, Animated } from 'react-native';
 import Swiper from 'react-native-deck-swiper';
 import FlipCard from '../components/FlipCard';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,24 +14,16 @@ import { auth, db } from '../firebase';
 import { collection, doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 import FilterCard from '../components/FilterCard';
 import { DIMS, getCardHeight } from '../theme';
-import { 
-  fetchMoviesByCategory,
-  fetchInternationalMovies,
-  fetchAwardWinners,
-  fetchMovieImages,
-  fetchTopRatedMovies,
-  fetchClassics,
-  fetchCriticsChoice,
-  fetchTVShows,
-  fetchDocumentaries,
-  fetchAnimatedShows
-} from '../services/tmdb'; // Update imports
+import { fetchMoviesByCategory } from '../services/tmdb'; // Update imports
 
 const { width, height } = Dimensions.get('window');
 const TAB_BAR_HEIGHT = 67; // Match new tab bar height
 const HEADER_HEIGHT = Platform.OS === 'ios' ? 44 : 56; // Standard header heights
 const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 44 : 0;
 const SCREEN_HEIGHT = height - TAB_BAR_HEIGHT - HEADER_HEIGHT - STATUS_BAR_HEIGHT;
+
+const NEXT_CARD_SCALE = 0.92;
+const NEXT_CARD_OPACITY = 0.5;
 
 interface Genre {
   label: string;
@@ -53,15 +45,24 @@ type RootStackParamList = {
 
 type NavigationProp = StackNavigationProp<RootStackParamList, 'CineBrowse'>;
 
+// Update the categories array
+const defaultCategories = [
+  'All',
+  'TV Shows',
+  'Animated',
+  'Japan',
+  'France'
+
+  
+];
+
 const CineBrowseScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const [movies, setMovies] = useState<Movie[]>([]);
-  const [loading, setLoading] = useState(true);
   const [swipingEnabled, setSwipingEnabled] = useState(true);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [isFetching, setIsFetching] = useState<boolean>(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
-  const [customCategories, setCustomCategories] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [backgroundCards, setBackgroundCards] = useState<Movie[]>([]);
   const [categoryMovies, setCategoryMovies] = useState<{ [key: string]: Movie[] }>({});
@@ -85,6 +86,8 @@ const CineBrowseScreen: React.FC = () => {
   const retryTimeout = useRef<NodeJS.Timeout>();
   const [isChangingCategory, setIsChangingCategory] = useState(false);
   const previousCategory = useRef<string>('');
+
+  const swipeAnimatedValue = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     fetchMoreMovies();
@@ -282,16 +285,6 @@ const CineBrowseScreen: React.FC = () => {
     }
   };
 
-  const defaultCategories = [
-    'All',
-    'Top Rated',
-    'Classics',
-    "Critics' Choice",
-    'TV Shows',
-    'Animated',
-    'Documentaries'
-  ];
-
   // Update handleCategorySelect to reset pagination state
   const handleCategorySelect = async (category: string) => {
     if (category === selectedCategory || isChangingCategory) return;
@@ -331,78 +324,68 @@ const CineBrowseScreen: React.FC = () => {
     }
   };
 
-  const handleAddCustomCategory = () => {
-    Alert.prompt(
-      'Add Custom Category',
-      'Enter category name:',
-      (text) => {
-        if (text && text.trim()) {
-          setCustomCategories(prev => [...prev, text.trim()]);
-        }
-      }
+  const renderBackgroundCard = (index: number) => {
+    const nextMovie = movies[index + 1];
+    if (!nextMovie?.poster_path) return null;
+    
+    return (
+      <Image
+        source={{ 
+          uri: `https://image.tmdb.org/t/p/w500${nextMovie.poster_path}` 
+        }}
+        style={[styles.blurredCard, { opacity: 0.3 }]}
+        blurRadius={20}
+        resizeMode="cover"
+      />
     );
   };
 
   const filterMoviesByCategory = async (category: string) => {
-    setLoading(true);
     try {
       setMovies([]);
       displayedMovieIds.current.clear();
 
-      let response;
-      switch (category.toLowerCase()) {
-        case 'all':
-          await fetchMoreMovies();
-          return;
-        case 'top rated':
-          response = await fetchTopRatedMovies();
-          break;
-        case 'classics':
-          response = await fetchClassics();
-          break;
-        case 'award winners':
-          response = await fetchAwardWinners();
-          break;
-        case "critics' choice":
-          response = await fetchCriticsChoice();
-          break;
-        case 'international':
-          response = await fetchInternationalMovies();
-          break;
-        case 'tv shows':
-          response = await fetchTVShows();
-          break;
-        case 'animated':
-          response = await fetchAnimatedShows();
-          break;
-        case 'documentaries':
-          response = await fetchDocumentaries();
-          break;
-        default:
-          await fetchMoreMovies();
-          return;
-      }
-
+      const response = await fetchMoviesByCategory(category, 1);
+      
       if (response?.results) {
-        const filteredMovies = response.results.filter(movie => 
-          movie && 
-          movie.poster_path && 
-          !displayedMovieIds.current.has(movie.id)
-        ).map(movie => ({
-          ...movie,
-          category: category
-        }));
-
-        setMovies(filteredMovies);
-        filteredMovies.forEach(movie => displayedMovieIds.current.add(movie.id));
+        setMovies(response.results);
+        response.results.forEach(movie => 
+          displayedMovieIds.current.add(movie.id)
+        );
       }
     } catch (error) {
       console.error('Error filtering movies:', error);
-      Alert.alert('Error', 'Failed to filter movies. Please try again.');
-      await fetchMoreMovies(); // Fallback
-    } finally {
-      setLoading(false);
+      // Fallback to all movies if category fetch fails
+      const fallback = await fetchMoviesByCategory('all', 1);
+      setMovies(fallback.results || []);
     }
+  };
+
+  const calculateNextCardStyle = (index: number) => {
+    if (index !== currentIndex + 1) return {};
+
+    const scale = swipeAnimatedValue.interpolate({
+      inputRange: [-width, 0, width],
+      outputRange: [1, NEXT_CARD_SCALE, 1],
+      extrapolate: 'clamp'
+    });
+
+    const opacity = swipeAnimatedValue.interpolate({
+      inputRange: [-width, 0, width],
+      outputRange: [1, NEXT_CARD_OPACITY, 1],
+      extrapolate: 'clamp'
+    });
+
+    const translateY = swipeAnimatedValue.interpolate({
+      inputRange: [-width, 0, width],
+      outputRange: [0, 20, 0],
+      extrapolate: 'clamp'
+    });
+
+    return {
+      transform: [{ scale }, { translateY }],
+      opacity
+    };
   };
 
   // Update Swiper component render
@@ -412,9 +395,7 @@ const CineBrowseScreen: React.FC = () => {
         <FilterCard
           selectedCategory={selectedCategory}
           onSelectCategory={handleCategorySelect}
-          onAddCustomCategory={handleAddCustomCategory}
           categories={defaultCategories}
-          customCategories={customCategories}
         />
       </View>
       <GestureHandlerRootView style={styles.gestureContainer}>
@@ -423,23 +404,45 @@ const CineBrowseScreen: React.FC = () => {
             cards={movies}
             renderCard={(movie, index) => {
               if (!movie) return null;
+              const isNextCard = index === currentIndex + 1;
+              
               return (
-                <View style={styles.cardContainer}>
-                  {backgroundCards[index + 1] && (
-                    <Image
-                      source={{ 
-                        uri: `https://image.tmdb.org/t/p/w500${backgroundCards[index + 1]?.poster_path}` 
-                      }}
-                      style={[styles.blurredCard, { opacity: 0.3 }]}
-                      blurRadius={15}
-                    />
+                <Animated.View 
+                  style={[
+                    styles.cardContainer,
+                    isNextCard && calculateNextCardStyle(index)
+                  ]}
+                >
+                  {isNextCard && (
+                    <View style={styles.nextCardOverlay}>
+                      <Image
+                        source={{ 
+                          uri: `https://image.tmdb.org/t/p/w500${movie.poster_path}` 
+                        }}
+                        style={styles.nextCardBackground}
+                        blurRadius={10}
+                      />
+                    </View>
                   )}
                   <FlipCard
                     movie={movie}
                     onSwipingStateChange={setSwipingEnabled}
                   />
-                </View>
+                </Animated.View>
               );
+            }}
+            onSwiping={(x: number) => {
+              swipeAnimatedValue.setValue(x);
+            }}
+            onSwipeStart={() => {
+              swipeAnimatedValue.setValue(0);
+            }}
+            onSwipeEnd={() => {
+              Animated.timing(swipeAnimatedValue, {
+                toValue: 0,
+                duration: 300,
+                useNativeDriver: true
+              }).start();
             }}
             infinite={false}
             backgroundColor="transparent"
@@ -538,11 +541,6 @@ const CineBrowseScreen: React.FC = () => {
           />
         </View>
       </GestureHandlerRootView>
-      {(loading && !isChangingCategory) && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size={24} color="#ffffff" />
-        </View>
-      )}
     </View>
   );
 };
@@ -583,17 +581,6 @@ const styles = StyleSheet.create({
     width: width,
     height: SCREEN_HEIGHT,
   },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: '#000',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingOverlay: {
-    position: 'absolute',
-    top: '50%',
-    alignSelf: 'center',
-  },
   overlayWrapper: {
     position: 'absolute',
     top: '50%',
@@ -623,6 +610,9 @@ const styles = StyleSheet.create({
     width: DIMS.width,
     height: getCardHeight(),
     position: 'relative',
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: '#000',
   },
   blurredCard: {
     position: 'absolute',
@@ -630,6 +620,23 @@ const styles = StyleSheet.create({
     height: '100%',
     opacity: 0.3,
     backgroundColor: '#000',
+    transform: [{ scale: 0.95 }], // Slightly smaller than the main card
+  },
+  nextCardOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  nextCardBackground: {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
+    opacity: 0.5,
   },
 });
 
