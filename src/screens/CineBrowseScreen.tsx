@@ -1,7 +1,7 @@
 // src/screens/CineBrowseScreen.tsx
 
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { View, StyleSheet, ActivityIndicator, Alert, Dimensions, Platform, Text, Image, Animated } from 'react-native';
 import Swiper from 'react-native-deck-swiper';
 import FlipCard from '../components/FlipCard';
@@ -15,6 +15,7 @@ import { collection, doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 import FilterCard from '../components/FilterCard';
 import { DIMS, getCardHeight } from '../theme';
 import { fetchMoviesByCategory } from '../services/tmdb'; // Update imports
+import PerformanceLogger from '../utils/performanceLogger';
 
 const { width, height } = Dimensions.get('window');
 const TAB_BAR_HEIGHT = 67; // Match new tab bar height
@@ -56,6 +57,13 @@ const defaultCategories = [
   
 ];
 
+// Add new caching mechanism
+const movieCache = {
+  data: new Map<string, Movie[]>(),
+  timestamp: new Map<string, number>(),
+  CACHE_DURATION: 5 * 60 * 1000, // 5 minutes
+};
+
 const CineBrowseScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const [movies, setMovies] = useState<Movie[]>([]);
@@ -88,6 +96,25 @@ const CineBrowseScreen: React.FC = () => {
   const previousCategory = useRef<string>('');
 
   const swipeAnimatedValue = useRef(new Animated.Value(0)).current;
+  const debouncedFetch = useRef(null);
+
+  // Add batch size constant
+  const BATCH_SIZE = 20;
+  
+  // Add memo for background cards
+  const memoizedBackgroundCards = useMemo(() => 
+    backgroundCards.slice(0, 3), [backgroundCards]
+  );
+
+  const [preloadedCards, setPreloadedCards] = useState<Movie[]>([]);
+
+  // Add this new function for preloading
+  const preloadNextCards = useCallback((currentIndex: number) => {
+    PerformanceLogger.start('preloadNextCards');
+    const nextCards = movies.slice(currentIndex + 1, currentIndex + 4);
+    setPreloadedCards(nextCards);
+    PerformanceLogger.end('preloadNextCards');
+  }, [movies]);
 
   useEffect(() => {
     fetchMoreMovies();
@@ -109,31 +136,32 @@ const CineBrowseScreen: React.FC = () => {
     await fetchMoreMovies();
   };
 
-  // Update fetchMoreMovies to handle background cards
+  // Update fetchMoreMovies with caching and optimized fetching
   const fetchMoreMovies = async (retryCount = 0) => {
     if (isFetching || errorCount >= MAX_ERROR_ATTEMPTS) return;
     
+    PerformanceLogger.start('fetchMoreMovies');
     try {
       setIsFetching(true);
-      const currentCategoryPage = categoryPages[selectedCategory] || 1;
-      const totalPages = categoryTotalPages[selectedCategory];
-
-      // Reset error count on successful attempt
-      setErrorCount(0);
-
-      // Check if we've reached the end of available pages
-      if (totalPages && currentCategoryPage > totalPages) {
-        console.log('Reached end of pages for category:', selectedCategory);
-        if (selectedCategory !== 'All') {
-          handleCategorySelect('All');
-        }
+      const cacheKey = `${selectedCategory}_${currentPage}`;
+      const now = Date.now();
+      
+      // Check cache first
+      if (movieCache.data.has(cacheKey) && 
+          now - movieCache.timestamp.get(cacheKey)! < movieCache.CACHE_DURATION) {
+        PerformanceLogger.log('Using cached data for', cacheKey);
+        const cachedData = movieCache.data.get(cacheKey)!;
+        appendMovies(cachedData);
         return;
       }
-      
+
+      PerformanceLogger.start('API_request');
       const response = await fetchMoviesByCategory(
         selectedCategory, 
-        currentCategoryPage
+        currentPage,
+        { batchSize: BATCH_SIZE }
       );
+      PerformanceLogger.end('API_request');
       
       if (!response?.results?.length) {
         throw new Error('No results returned');
@@ -143,50 +171,20 @@ const CineBrowseScreen: React.FC = () => {
         movie => !displayedMovieIds.current.has(movie.id)
       );
 
-      if (newMovies.length === 0 && retryCount < MAX_RETRIES) {
-        // Try next page if no new movies found
-        setCategoryPages(prev => ({
-          ...prev,
-          [selectedCategory]: currentCategoryPage + 1
-        }));
-        return fetchMoreMovies(retryCount + 1);
-      }
+      // Cache the results
+      movieCache.data.set(cacheKey, newMovies);
+      movieCache.timestamp.set(cacheKey, now);
 
-      setMovies(prevMovies => [...prevMovies, ...newMovies]);
-      setBackgroundCards(prevCards => [...prevCards, ...newMovies]);
+      setMovies(prev => [...prev, ...newMovies]);
+      setBackgroundCards(prev => [...prev, ...newMovies.slice(0, 3)]);
       newMovies.forEach(movie => displayedMovieIds.current.add(movie.id));
-      
-      setCategoryPages(prev => ({
-        ...prev,
-        [selectedCategory]: currentCategoryPage + 1
-      }));
-
-      if (response.total_pages) {
-        setCategoryTotalPages(prev => ({
-          ...prev,
-          [selectedCategory]: response.total_pages
-        }));
-      }
 
     } catch (error) {
       console.error('Error fetching more movies:', error);
-      setErrorCount(prev => prev + 1);
-      
-      if (retryCount < MAX_RETRIES) {
-        // Clear any existing retry timeout
-        if (retryTimeout.current) {
-          clearTimeout(retryTimeout.current);
-        }
-        
-        // Retry after delay
-        retryTimeout.current = setTimeout(() => {
-          fetchMoreMovies(retryCount + 1);
-        }, 1000 * (retryCount + 1)); // Exponential backoff
-      } else if (selectedCategory !== 'All') {
-        handleCategorySelect('All');
-      }
+      handleFetchError(error, retryCount);
     } finally {
       setIsFetching(false);
+      PerformanceLogger.end('fetchMoreMovies');
     }
   };
 
@@ -276,52 +274,62 @@ const CineBrowseScreen: React.FC = () => {
     navigation.navigate('MovieReview', { movie });
   };
 
-  const handleSwiped = (index: number) => {
+  const handleSwiped = useCallback((index: number) => {
+    PerformanceLogger.start('cardSwipe');
     setCurrentIndex(index + 1);
+    preloadNextCards(index + 1);
     
     // Pre-fetch more cards when we're running lower
     if (movies.length - (index + 1) <= 15) {
       fetchMoreMovies();
     }
-  };
+    PerformanceLogger.end('cardSwipe');
+  }, [movies.length, fetchMoreMovies, preloadNextCards]);
 
-  // Update handleCategorySelect to reset pagination state
-  const handleCategorySelect = async (category: string) => {
+  // Add optimized category selection
+  const handleCategorySelect = (category: string) => {
     if (category === selectedCategory || isChangingCategory) return;
+
+    PerformanceLogger.start(`categoryChange_${category}`);
+
+    // Clear previous timeout if exists
+    if (debouncedFetch.current) {
+      clearTimeout(debouncedFetch.current);
+    }
 
     setIsChangingCategory(true);
     previousCategory.current = selectedCategory;
     setSelectedCategory(category);
-    setCurrentPage(1);
-    
-    try {
-      // Keep old cards visible while loading new ones
-      const response = await fetchMoviesByCategory(category, 1);
-      
-      if (response?.results?.length) {
-        setMovies(response.results);
-        setBackgroundCards(response.results.slice(1));
-        displayedMovieIds.current.clear();
-        response.results.forEach(movie => displayedMovieIds.current.add(movie.id));
-        
-        // Pre-fetch next batch
-        const nextBatch = await fetchMoviesByCategory(category, 2);
-        if (nextBatch?.results) {
-          setMovies(prev => [...prev, ...nextBatch.results]);
-          setBackgroundCards(prev => [...prev, ...nextBatch.results]);
-          nextBatch.results.forEach(movie => displayedMovieIds.current.add(movie.id));
+
+    // Debounce the fetch
+    debouncedFetch.current = setTimeout(async () => {
+      try {
+        const cacheKey = `${category}_1`;
+        if (movieCache.data.has(cacheKey)) {
+          PerformanceLogger.log('Using cached category data', category);
+          const cachedData = movieCache.data.get(cacheKey)!;
+          setMovies(cachedData);
+          preloadNextCards(0);
+        } else {
+          PerformanceLogger.start('categoryFetch');
+          const response = await fetchMoviesByCategory(category, 1, { batchSize: BATCH_SIZE });
+          PerformanceLogger.end('categoryFetch');
+          
+          if (response?.results?.length) {
+            setMovies(response.results);
+            preloadNextCards(0);
+            movieCache.data.set(cacheKey, response.results);
+            movieCache.timestamp.set(cacheKey, Date.now());
+          }
         }
-      } else {
-        throw new Error('No results for category');
+      } catch (error) {
+        console.error('Error changing category:', error);
+        setSelectedCategory(previousCategory.current);
+      } finally {
+        setIsChangingCategory(false);
+        PerformanceLogger.end(`categoryChange_${category}`);
       }
-    } catch (error) {
-      console.error('Error changing category:', error);
-      // Revert to previous category on error
-      setSelectedCategory(previousCategory.current);
-    } finally {
-      setCurrentPage(prev => prev + 1);
-      setIsChangingCategory(false);
-    }
+    }, 300); // 300ms debounce
   };
 
   const renderBackgroundCard = (index: number) => {
@@ -388,6 +396,38 @@ const CineBrowseScreen: React.FC = () => {
     };
   };
 
+  // Optimize render performance
+  const renderCard = useCallback((movie: Movie, index: number) => {
+    if (!movie) return null;
+    const isNextCard = index === currentIndex + 1;
+    
+    return (
+      <Animated.View 
+        style={[
+          styles.cardContainer,
+          isNextCard && calculateNextCardStyle(index)
+        ]}
+      >
+        {/* Show preloaded background for current card */}
+        {preloadedCards[0] && (
+          <View style={styles.preloadedBackground}>
+            <Image
+              source={{ 
+                uri: `https://image.tmdb.org/t/p/w500${preloadedCards[0].poster_path}` 
+              }}
+              style={styles.blurredCard}
+              blurRadius={10}
+            />
+          </View>
+        )}
+        <FlipCard
+          movie={movie}
+          onSwipingStateChange={setSwipingEnabled}
+        />
+      </Animated.View>
+    );
+  }, [currentIndex, calculateNextCardStyle, preloadedCards]);
+
   // Update Swiper component render
   return (
     <View style={styles.mainContainer}>
@@ -402,35 +442,7 @@ const CineBrowseScreen: React.FC = () => {
         <View style={styles.container}>
           <Swiper
             cards={movies}
-            renderCard={(movie, index) => {
-              if (!movie) return null;
-              const isNextCard = index === currentIndex + 1;
-              
-              return (
-                <Animated.View 
-                  style={[
-                    styles.cardContainer,
-                    isNextCard && calculateNextCardStyle(index)
-                  ]}
-                >
-                  {isNextCard && (
-                    <View style={styles.nextCardOverlay}>
-                      <Image
-                        source={{ 
-                          uri: `https://image.tmdb.org/t/p/w500${movie.poster_path}` 
-                        }}
-                        style={styles.nextCardBackground}
-                        blurRadius={10}
-                      />
-                    </View>
-                  )}
-                  <FlipCard
-                    movie={movie}
-                    onSwipingStateChange={setSwipingEnabled}
-                  />
-                </Animated.View>
-              );
-            }}
+            renderCard={renderCard}
             onSwiping={(x: number) => {
               swipeAnimatedValue.setValue(x);
             }}
@@ -637,6 +649,13 @@ const styles = StyleSheet.create({
     height: '100%',
     position: 'absolute',
     opacity: 0.5,
+  },
+  preloadedBackground: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    opacity: 0.3,
+    backgroundColor: '#000',
   },
 });
 

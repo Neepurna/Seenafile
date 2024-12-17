@@ -10,11 +10,17 @@ import { StyleSheet } from 'react-native';
 import LoginScreen from './src/screens/LoginScreen';
 import SignUpScreen from './src/screens/SignUpScreen';
 import Tabs from './src/navigation/Tabs';
+import MovieGridScreen from './src/screens/MovieGridScreen';
 
 type RootStackParamList = {
   Login: undefined;
   SignUp: undefined;
   Tabs: undefined;
+  MovieGridScreen: {
+    folderId: string;
+    folderName: string;
+    folderColor: string;
+  };
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -45,6 +51,18 @@ export default function App() {
             name="Tabs" 
             component={Tabs}
             options={{ gestureEnabled: false }}
+          />
+          <Stack.Screen 
+            name="MovieGridScreen"
+            component={MovieGridScreen}
+            options={{
+              headerShown: true,
+              gestureEnabled: true,
+              headerStyle: {
+                backgroundColor: '#000',
+              },
+              headerTintColor: '#fff',
+            }}
           />
         </Stack.Navigator>
       </GestureHandlerRootView>

@@ -17,8 +17,9 @@ import CineFileScreen from '../screens/CineFileScreen';
 import CineGamesScreen from '../screens/CineGamesScreen';
 import CineFeedScreen from '../screens/CineFeedScreen';
 import MyWallScreen from '../screens/MyWallScreen';
+import MovieGridScreen from '../screens/MovieGridScreen';
 
-const Tab = createBottomTabNavigator();
+const Tab = createBottomTabNavigator<TabsStackParamList>();
 
 type TabsStackParamList = {
   CineBrowse: undefined;
@@ -31,6 +32,11 @@ type TabsStackParamList = {
     userId: string;
     username: string;
     matchScore: number;
+  };
+  MovieGridScreen: {
+    folderId: string;
+    folderName: string;
+    folderColor: string;
   };
 };
 
@@ -168,6 +174,26 @@ const Tabs: React.FC = () => {
               </TouchableOpacity>
             ),
             headerTitle: 'User Profile'
+          })}
+        />
+        <Tab.Screen 
+          name="MovieGridScreen" 
+          component={MovieGridScreen}
+          options={({ route }) => ({
+            tabBarButton: () => null, // Hide from tab bar
+            headerLeft: () => (
+              <TouchableOpacity 
+                onPress={() => navigation.goBack()}
+                style={{ marginLeft: 15 }}
+              >
+                <Ionicons name="arrow-back" size={24} color="#fff" />
+              </TouchableOpacity>
+            ),
+            headerTitle: route.params?.folderName ?? 'Movies',
+            headerStyle: {
+              backgroundColor: '#000',
+            },
+            headerTintColor: '#fff',
           })}
         />
       </Tab.Navigator>
