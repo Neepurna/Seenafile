@@ -69,23 +69,9 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-let app;
-let auth: Auth;
-let db;
-
-if (getApps().length === 0) {
-  app = initializeApp(firebaseConfig);
-  auth = initializeAuth(app, {
-    persistence: getReactNativePersistence(AsyncStorage)
-  });
-  db = getFirestore(app);
-} else {
-  app = getApp();
-  auth = getAuth(app);
-  db = getFirestore(app);
-}
-
-export { auth, db };
+const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
+export const db = getFirestore(app);
 
 const actionCodeSettings = {
   url: 'https://seenafile.firebaseapp.com/verify-email',  // Change this to your verified domain
@@ -618,6 +604,36 @@ export const getUserName = async (userId: string): Promise<string> => {
   } catch (error) {
     console.error('Error getting username:', error);
     return 'Movie Enthusiast';
+  }
+};
+
+// Add the new function to save reviews
+export const saveReviewToUserCollection = async (userId: string, reviewData: {
+  movieId: string;
+  movieTitle: string;
+  review: string;
+  rating: number;
+  poster_path?: string;
+  backdrop?: string;
+}) => {
+  if (!auth.currentUser) throw new Error('No authenticated user');
+
+  try {
+    const userRef = doc(db, 'users', userId);
+    const reviewsRef = collection(userRef, 'reviews');
+    
+    const newReview = {
+      ...reviewData,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      userId: auth.currentUser.uid
+    };
+
+    await addDoc(reviewsRef, newReview);
+    return true;
+  } catch (error) {
+    console.error('Error saving review:', error);
+    throw error;
   }
 };
 

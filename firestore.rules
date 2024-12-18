@@ -33,52 +33,61 @@ service cloud.firestore {
 
     // Users collection
     match /users/{userId} {
-      allow read: if isSignedIn();  // Allow any signed-in user to read user profiles
-      allow create, update: if isSignedIn() && isOwner(userId);
-      allow delete: if false; // Prevent deletion
-      
-      // User's private movie lists
+      // Simplified read permission for matching
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isOwner(userId);
+
+      // Movies subcollection - Allow reading for matching
       match /movies/{movieId} {
-        allow read: if isSignedIn();  // Allow any signed-in user to read movies
-        allow create: if isSignedIn() && isOwner(userId);
-        allow update: if isSignedIn() && isOwner(userId);
-        allow delete: if isSignedIn() && isOwner(userId);
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && isOwner(userId);
       }
 
-      // For critics reviews specifically
-      match /movies/{movieId} {
-        allow create: if isSignedIn() 
-          && isOwner(userId) 
-          && (
-            !exists(/databases/$(database)/documents/users/$(userId)/movies/$(movieId))
-            || 
-            (
-              request.resource.data.category == 'critics' 
-              && request.resource.data.userId == request.auth.uid
-            )
-          );
+      // User preferences subcollection - for matching algorithm
+      match /preferences/{prefId} {
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && isOwner(userId);
       }
-      
-      // User's private reviews
+
+      // Reviews subcollection
       match /reviews/{reviewId} {
-        allow read: if isSignedIn() && isOwner(userId);
-        allow create, update: if isSignedIn() && isOwner(userId) && isValidReview();
-        allow delete: if isSignedIn() && isOwner(userId);
+        allow read: if isSignedIn();
+        allow write: if isSignedIn() && isOwner(userId);
       }
+    }
+
+    // Dedicated matches collection
+    match /userMatches/{matchId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid in resource.data.participants
+      );
+      allow create: if isSignedIn() && (
+        request.resource.data.participants.hasAny([request.auth.uid])
+      );
+      allow update: if isSignedIn() && (
+        request.auth.uid in resource.data.participants
+      );
     }
 
     // Chats collection
     match /chats/{chatId} {
-      allow read, write: if isSignedIn() && (
-        request.auth.uid in resource.data.participants ||
-        (request.method == 'create' && 
-         request.resource.data.participants.hasAny([request.auth.uid]))
+      allow read: if isSignedIn() && (
+        request.auth.uid in resource.data.participants
+      );
+      allow create: if isSignedIn() && (
+        request.resource.data.keys().hasAll(['participants', 'createdAt']) &&
+        request.resource.data.participants.size() == 2 &&
+        request.resource.data.participants.hasAny([request.auth.uid])
+      );
+      allow update: if isSignedIn() && (
+        request.auth.uid in resource.data.participants &&
+        request.resource.data.participants == resource.data.participants
       );
       
       // Messages subcollection
       match /messages/{messageId} {
         allow read, create: if isSignedIn() && 
-          get(/databases/$(database)/documents/chats/$(chatId)).data.participants.hasAny([request.auth.uid]);
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
       }
     }
     

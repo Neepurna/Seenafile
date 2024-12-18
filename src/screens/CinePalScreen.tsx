@@ -44,44 +44,109 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
     
     setLoading(true);
     try {
-      const matchResults = await calculateMatchScore(auth.currentUser.uid);
-      console.log('Match results:', matchResults); // Debug log
+      // Fetch all users except current user
+      const usersRef = collection(db, 'users');
+      const usersQuery = query(
+        usersRef,
+        where('__name__', '!=', auth.currentUser.uid)
+      );
+      
+      const usersSnap = await getDocs(usersQuery);
+      
+      const matchPromises = usersSnap.docs.map(async (userDoc) => {
+        try {
+          const userData = userDoc.data();
+          const moviesRef = collection(userDoc.ref, 'movies');
+          const moviesSnap = await getDocs(moviesRef);
+          
+          if (!moviesSnap.empty) {
+            // Calculate match score with basic error handling
+            let matchScore;
+            try {
+              matchScore = await calculateMatchScore(auth.currentUser!.uid, userDoc.id);
+            } catch (error) {
+              console.warn(`Error calculating match for ${userDoc.id}:`, error);
+              return null;
+            }
+
+            return {
+              userId: userDoc.id,
+              username: userData.username || userData.displayName || 'Movie Enthusiast',
+              score: matchScore?.score || 0,
+              commonMovies: matchScore?.commonMovies || []
+            };
+          }
+          return null;
+        } catch (error) {
+          console.warn(`Error processing user ${userDoc.id}:`, error);
+          return null;
+        }
+      });
+
+      const matchResults = (await Promise.all(matchPromises))
+        .filter(match => match !== null)
+        .sort((a, b) => (b?.score || 0) - (a?.score || 0));
+
+      console.log('Match results:', matchResults);
       setMatches(matchResults);
       setError(null);
     } catch (error) {
       console.error('Error fetching matches:', error);
-      setError('Failed to load matches');
+      setError('Failed to load matches. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleUserConnect = useCallback(async (userId: string) => {
-    if (!auth.currentUser) return;
+    if (!auth.currentUser) {
+      Alert.alert('Error', 'You must be logged in to connect with users');
+      return;
+    }
     
     try {
+      // Create chat ID by sorting UIDs to ensure consistency
       const chatId = [auth.currentUser.uid, userId].sort().join('_');
       const chatRef = doc(db, 'chats', chatId);
       
-      // Initialize chat document
-      await setDoc(chatRef, {
-        participants: [auth.currentUser.uid, userId].sort(),
-        createdAt: new Date(),
-      }, { merge: true });
+      // Check if chat already exists
+      const chatDoc = await getDoc(chatRef);
+      
+      if (!chatDoc.exists()) {
+        // Initialize new chat document
+        await setDoc(chatRef, {
+          participants: [auth.currentUser.uid, userId].sort(),
+          createdAt: new Date(),
+          lastMessage: null,
+          lastMessageTime: null
+        });
+      }
+
+      // Get user details
+      const matchedUser = matches.find(match => match.userId === userId);
+      if (!matchedUser) {
+        throw new Error('User details not found');
+      }
 
       // Update connected users in local storage
       const updatedConnectedUsers = [...connectedUsers, userId];
       setConnectedUsers(updatedConnectedUsers);
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedConnectedUsers));
 
-      // Navigate to chat
-      navigation.navigate('MyWall', {
+      // Navigate to chat with proper parameters
+      navigation.navigate('Chat', {
+        chatId,
         userId,
-        username: matches.find(match => match.userId === userId)?.username,
+        username: matchedUser.username || 'Movie Enthusiast',
       });
+
     } catch (error) {
       console.error('Error connecting users:', error);
-      Alert.alert('Error', 'Failed to connect with user. Please try again.');
+      Alert.alert(
+        'Connection Error',
+        'Unable to establish chat connection. Please try again.',
+        [{ text: 'OK' }]
+      );
     }
   }, [matches, connectedUsers, navigation]);
 

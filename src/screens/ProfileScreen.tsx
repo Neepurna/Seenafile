@@ -31,8 +31,15 @@ const ProfileScreen: React.FC = () => {
   const [folderCounts, setFolderCounts] = useState<{ [key: string]: number }>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null); // Add error state
+  const [userReviews, setUserReviews] = useState<any[]>([]);
 
   useEffect(() => {
+    // Set navigation options to hide back button
+    navigation.setOptions({
+      headerLeft: () => null,
+      gestureEnabled: false
+    });
+
     if (!auth.currentUser) {
       navigation.navigate('Login');
       return;
@@ -41,6 +48,7 @@ const ProfileScreen: React.FC = () => {
     const userId = auth.currentUser.uid;
     const userRef = doc(db, 'users', userId);
     const moviesRef = collection(userRef, 'movies');
+    const reviewsRef = collection(userRef, 'reviews');
 
     // Fetch user profile
     const profileUnsubscribe = onSnapshot(userRef, (doc) => {
@@ -50,28 +58,48 @@ const ProfileScreen: React.FC = () => {
       setIsLoading(false);
     });
 
-    // Fetch movie counts
-    const moviesUnsubscribe = onSnapshot(moviesRef, (snapshot) => {
-      const counts: { [key: string]: number } = {
-        watched: 0,
-        most_watch: 0,
-        watch_later: 0,
-        critics: 0  // Updated from custom to critics
-      };
+    // Simplified query for movie counts
+    const moviesUnsubscribe = onSnapshot(
+      moviesRef,
+      {
+        next: (snapshot) => {
+          const counts = {
+            watched: 0,
+            most_watch: 0,
+            watch_later: 0,
+            critics: 0
+          };
 
-      snapshot.docs.forEach(doc => {
-        const category = doc.data().category;
-        if (category in counts) {
-          counts[category]++;
+          snapshot.docs.forEach(doc => {
+            const category = doc.data().category;
+            if (category && counts.hasOwnProperty(category)) {
+              counts[category]++;
+            }
+          });
+
+          console.log('Updated counts:', counts); // Debug log
+          setFolderCounts(counts);
+        },
+        error: (error) => {
+          console.error('Profile movies snapshot error:', error);
+          setError('Failed to load movie counts');
         }
-      });
+      }
+    );
 
-      setFolderCounts(counts);
+    // Fetch reviews if needed for critics folder
+    const reviewsUnsubscribe = onSnapshot(reviewsRef, (snapshot) => {
+      const reviewsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setUserReviews(reviewsData);
     });
 
     return () => {
       profileUnsubscribe();
       moviesUnsubscribe();
+      reviewsUnsubscribe();
     };
   }, [navigation]);
 

@@ -9,6 +9,7 @@ import {
   Dimensions,
   RefreshControl,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { auth, db } from '../firebase';
 import { doc, collection, query, where, getDocs, orderBy, limit, onSnapshot } from 'firebase/firestore';
@@ -21,6 +22,14 @@ const ITEMS_PER_PAGE = 20;
 
 const MovieGridScreen = ({ route, navigation }) => {
   const { folderId, folderName, folderColor, isCritics } = route.params;
+  
+  useEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => null, // Remove back button
+      gestureEnabled: false,  // Disable swipe back gesture
+    });
+  }, [navigation]);
+
   const [movies, setMovies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -29,35 +38,41 @@ const MovieGridScreen = ({ route, navigation }) => {
 
   useEffect(() => {
     if (!auth.currentUser) return;
+    setLoading(true);
     
     const userRef = doc(db, 'users', auth.currentUser.uid);
     const moviesRef = collection(userRef, 'movies');
     
     try {
+      // Simplified query without orderBy initially
       const q = query(
         moviesRef,
-        where('category', '==', folderId),
-        orderBy('createdAt', 'desc')
+        where('category', '==', folderId)
       );
 
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const movieData = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setMovies(movieData);
-        setLoading(false);
-      }, (error) => {
-        console.error('Error loading movies:', error);
-        setLoading(false);
+      const unsubscribe = onSnapshot(q, {
+        next: (snapshot) => {
+          const movieData = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          console.log(`Folder ${folderId} movies:`, movieData); // Debug log
+          setMovies(movieData);
+          setLoading(false);
+        },
+        error: (error) => {
+          console.error('MovieGrid snapshot error:', error);
+          setLoading(false);
+          Alert.alert('Error', 'Failed to load movies');
+        }
       });
 
       return () => unsubscribe();
     } catch (error) {
-      console.error('Query error:', error);
+      console.error('Query setup error:', error);
       setLoading(false);
     }
-  }, [folderId]);
+  }, [folderId, auth.currentUser]);
 
   const loadMovies = async (refreshing = false) => {
     if (!auth.currentUser || (!hasMore && !refreshing)) return;
@@ -139,18 +154,30 @@ const MovieGridScreen = ({ route, navigation }) => {
   );
 
   const renderContent = useCallback(({ item }) => {
+    if (!item) return null;
+
     if (isCritics) {
       return renderReviewCard({ item });
     }
+
+    // Use a static placeholder URL instead of local asset
+    const posterUrl = item.poster_path 
+      ? `https://image.tmdb.org/t/p/w200${item.poster_path}`
+      : 'https://via.placeholder.com/200x300/000000/ffffff?text=No+Image';
+
     return (
       <TouchableOpacity 
         style={styles.movieContainer}
         onPress={() => handleMoviePress(item)}
       >
         <Image
-          source={{ uri: `https://image.tmdb.org/t/p/w200${item.poster_path}` }}
+          source={{ uri: posterUrl }}
           style={styles.moviePoster}
+          // Remove defaultSource prop
         />
+        {!item.poster_path && (
+          <Text style={styles.movieTitle}>{item.title || 'Untitled'}</Text>
+        )}
       </TouchableOpacity>
     );
   }, [handleMoviePress, isCritics]);
