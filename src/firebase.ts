@@ -68,10 +68,10 @@ const firebaseConfig = {
   measurementId: "G-7QGRHQBSWX"
 };
 
-// Initialize Firebase with proper typing
+// Initialize Firebase
 let app;
 let auth: Auth;
-let db: Firestore;
+let db;
 
 if (getApps().length === 0) {
   app = initializeApp(firebaseConfig);

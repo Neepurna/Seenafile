@@ -1,14 +1,14 @@
 // src/screens/ProfileScreen.tsx
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Alert, FlatList, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Alert, FlatList, Dimensions, SafeAreaView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { auth, db, signOut } from '../firebase';
 import { doc, getDoc, collection, query, onSnapshot } from 'firebase/firestore';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-const { width } = Dimensions.get('window');
-const FOLDER_SIZE = width / 2 - 30;
+const { width, height } = Dimensions.get('window');
+const FOLDER_SIZE = width / 2 - 24; // Adjusted for better spacing
 
 interface FolderData {
   id: string;
@@ -22,7 +22,7 @@ const folders: FolderData[] = [
   { id: 'watched', name: 'Watched', color: '#4BFF4B', count: 0, icon: 'checkmark-circle' },
   { id: 'most_watch', name: 'Most Watched', color: '#FFD700', count: 0, icon: 'repeat' },
   { id: 'watch_later', name: 'Watch Later', color: '#00BFFF', count: 0, icon: 'time' },
-  { id: 'custom', name: 'Custom List', color: '#9C27B0', count: 0, icon: 'list' },
+  { id: 'critics', name: 'Critics', color: '#FF4081', count: 0, icon: 'star' }, // Updated folder
 ];
 
 const ProfileScreen: React.FC = () => {
@@ -56,7 +56,7 @@ const ProfileScreen: React.FC = () => {
         watched: 0,
         most_watch: 0,
         watch_later: 0,
-        custom: 0
+        critics: 0  // Updated from custom to critics
       };
 
       snapshot.docs.forEach(doc => {
@@ -101,17 +101,31 @@ const ProfileScreen: React.FC = () => {
 
   const renderFolder = ({ item: folder }: { item: FolderData }) => (
     <TouchableOpacity 
-      style={[styles.folderContainer, { borderColor: folder.color }]}
+      style={[
+        styles.folderContainer, 
+        { 
+          borderColor: folder.color,
+          // Special styling for critics folder
+          ...(folder.id === 'critics' && {
+            backgroundColor: 'rgba(255,64,129,0.1)',
+          })
+        }
+      ]}
       onPress={() => navigation.navigate('MovieGridScreen', { 
         folderId: folder.id,
         folderName: folder.name,
-        folderColor: folder.color
+        folderColor: folder.color,
+        isCritics: folder.id === 'critics' // Add this flag for MovieGridScreen
       })}
     >
-      <Ionicons name={folder.icon as any} size={40} color={folder.color} />
+      <Ionicons 
+        name={folder.icon as any} 
+        size={folder.id === 'critics' ? 45 : 40} 
+        color={folder.color} 
+      />
       <Text style={styles.folderName}>{folder.name}</Text>
       <Text style={[styles.folderCount, { color: folder.color }]}>
-        {folderCounts[folder.id] || 0} movies
+        {folderCounts[folder.id] || 0} {folder.id === 'critics' ? 'reviews' : 'movies'}
       </Text>
     </TouchableOpacity>
   );
@@ -133,7 +147,7 @@ const ProfileScreen: React.FC = () => {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <View style={styles.profileHeader}>
         <View style={styles.profileImageContainer}>
           <Image
@@ -146,21 +160,27 @@ const ProfileScreen: React.FC = () => {
         </View>
         <Text style={styles.userName}>{userProfile?.name || 'Loading...'}</Text>
         <Text style={styles.userHandle}>{userProfile?.email}</Text>
+        <Text style={styles.userBio}>
+          {userProfile?.bio || "No bio yet. Add something about yourself! 🎬"}
+        </Text>
       </View>
 
-      <FlatList
-        data={folders}
-        renderItem={renderFolder}
-        keyExtractor={item => item.id}
-        numColumns={2}
-        contentContainerStyle={styles.gridContainer}
-      />
+      <View style={styles.contentContainer}>
+        <FlatList
+          data={folders}
+          renderItem={renderFolder}
+          keyExtractor={item => item.id}
+          numColumns={2}
+          contentContainerStyle={styles.gridContainer}
+          showsVerticalScrollIndicator={false}
+        />
+      </View>
 
       <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
         <MaterialIcons name="logout" size={24} color="#FFF" />
         <Text style={styles.signOutText}>Sign Out</Text>
       </TouchableOpacity>
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -168,32 +188,24 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
-    paddingTop: 20,
-  },
-  closeButton: {
-    position: 'absolute',
-    top: 20,
-    right: 20,
-    zIndex: 1,
-    padding: 10,
   },
   profileHeader: {
     alignItems: 'center',
-    paddingVertical: 20,
-    marginTop: 40,
+    paddingVertical: height * 0.02,
+    paddingHorizontal: width * 0.05,
   },
   profileImageContainer: {
     position: 'relative',
-    marginBottom: 15,
+    marginBottom: height * 0.015,
     padding: 2,
     borderRadius: 52,
     borderWidth: 2,
     borderColor: '#FFF',
   },
   profileImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: width * 0.25,
+    height: width * 0.25,
+    borderRadius: width * 0.125,
   },
   editButton: {
     position: 'absolute',
@@ -204,57 +216,73 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   userName: {
-    fontSize: 20,
+    fontSize: width * 0.055,
     fontWeight: 'bold',
     color: '#FFF',
-    marginBottom: 8,
+    marginBottom: height * 0.008,
   },
   userHandle: {
-    fontSize: 16,
+    fontSize: width * 0.04,
     color: '#888',
+    marginBottom: height * 0.01,
   },
-  dashboard: {
-    flexDirection: 'row',
+  userBio: {
+    fontSize: width * 0.038,
+    color: '#FFF',
+    textAlign: 'center',
+    paddingHorizontal: width * 0.1,
+    marginBottom: height * 0.02,
+  },
+  contentContainer: {
+    flex: 1,
+    marginTop: height * 0.02,
+  },
+  gridContainer: {
+    padding: 12,
+  },
+  folderContainer: {
+    width: FOLDER_SIZE,
+    height: FOLDER_SIZE,
+    margin: 6,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 2,
+    padding: 15,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 30,
-    marginHorizontal: 30,
-    backgroundColor: '#111',
-    borderRadius: 15,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  separator: {
-    width: 1,
-    height: 40,
-    backgroundColor: '#333',
-  },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
+  folderName: {
     color: '#FFF',
-    marginBottom: 5,
+    fontSize: width * 0.04,
+    fontWeight: 'bold',
+    marginTop: 10,
+    textAlign: 'center',
   },
-  statLabel: {
-    fontSize: 14,
-    color: '#888',
+  folderCount: {
+    fontSize: width * 0.035,
+    marginTop: 5,
   },
   signOutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 'auto',
-    marginBottom: 40,
-    marginHorizontal: 30,
-    padding: 16,
+    marginHorizontal: width * 0.08,
+    marginBottom: height * 0.03,
+    padding: height * 0.02,
     backgroundColor: '#222',
     borderRadius: 12,
   },
   signOutText: {
     marginLeft: 10,
-    fontSize: 16,
+    fontSize: width * 0.04,
     color: '#FFF',
     fontWeight: '600',
   },
@@ -265,31 +293,6 @@ const styles = StyleSheet.create({
   errorText: {
     color: '#FFF',
     fontSize: 16,
-  },
-  gridContainer: {
-    padding: 15,
-  },
-  folderContainer: {
-    width: FOLDER_SIZE,
-    height: FOLDER_SIZE,
-    margin: 7.5,
-    borderRadius: 15,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 2,
-    padding: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  folderName: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginTop: 10,
-    textAlign: 'center',
-  },
-  folderCount: {
-    fontSize: 14,
-    marginTop: 5,
   },
 });
 

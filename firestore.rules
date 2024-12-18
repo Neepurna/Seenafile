@@ -11,10 +11,24 @@ service cloud.firestore {
     }
     
     function isValidReview() {
-      return request.resource.data.keys().hasAll(['movieId', 'movieTitle', 'rating', 'review']) 
-        && request.resource.data.rating is number
-        && request.resource.data.rating >= 1 
-        && request.resource.data.rating <= 5;
+      let data = request.resource.data;
+      return data.keys().hasAll([
+        'movieId', 
+        'movieTitle', 
+        'backdrop', 
+        'rating', 
+        'review', 
+        'createdAt',
+        'isPublic',
+        'likes',
+        'userId',
+        'username'
+      ]) 
+      && data.rating is number
+      && data.rating >= 1 
+      && data.rating <= 5
+      && data.likes is number
+      && data.isPublic is bool;
     }
 
     // Users collection
@@ -26,7 +40,23 @@ service cloud.firestore {
       // User's private movie lists
       match /movies/{movieId} {
         allow read: if isSignedIn();  // Allow any signed-in user to read movies
-        allow write: if isSignedIn() && isOwner(userId);
+        allow create: if isSignedIn() && isOwner(userId);
+        allow update: if isSignedIn() && isOwner(userId);
+        allow delete: if isSignedIn() && isOwner(userId);
+      }
+
+      // For critics reviews specifically
+      match /movies/{movieId} {
+        allow create: if isSignedIn() 
+          && isOwner(userId) 
+          && (
+            !exists(/databases/$(database)/documents/users/$(userId)/movies/$(movieId))
+            || 
+            (
+              request.resource.data.category == 'critics' 
+              && request.resource.data.userId == request.auth.uid
+            )
+          );
       }
       
       // User's private reviews

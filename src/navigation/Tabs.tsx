@@ -15,6 +15,7 @@ import CineGamesScreen from '../screens/CineGamesScreen';
 import CineFeedScreen from '../screens/CineFeedScreen';
 import MyWallScreen from '../screens/MyWallScreen';
 import MovieGridScreen from '../screens/MovieGridScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 
 const Tab = createBottomTabNavigator<TabsStackParamList>();
 
@@ -114,7 +115,7 @@ const Tabs: React.FC = () => {
               onPress={showProfile}
               style={{ marginRight: 15 }}
             >
-              <Ionicons name="person-circle-outline" size={30} color="#fff" />
+              <Ionicons name="settings-outline" size={24} color="#fff" />
             </TouchableOpacity>
           ),
           tabBarIcon: ({ color, size }) => {
@@ -211,7 +212,7 @@ const Tabs: React.FC = () => {
               },
             ]}
           >
-            <ProfileScreen onClose={hideProfile} />
+            <SettingsScreen onClose={hideProfile} />
           </Animated.View>
         </Animated.View>
       )}

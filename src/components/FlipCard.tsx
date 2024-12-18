@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Image,
@@ -13,7 +13,10 @@ import {
   ScrollView,
   ActivityIndicator,
   FlatList,
+  Alert,
 } from 'react-native';
+import { doc, collection, setDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, db } from '../firebase'; // Update this line to point to firebase.ts
 import MovieReview from './MovieReview';
 import { COLORS, DIMS, SPACING, getCardHeight } from '../theme';
 import { getImageUrl } from '../services/instance';
@@ -31,6 +34,7 @@ interface Movie {
   genres?: Array<{ id: number; name: string }>;
   category?: string; // Make this more flexible
   vote_count?: number;
+  media_type?: 'movie' | 'tv';  // Add this line
   cast?: {
     id: number;
     name: string;
@@ -205,7 +209,7 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
   const fetchMovieCredits = async (movieId: number) => {
     try {
       setIsLoadingCredits(true);
-      const endpoint = movie.media_type === 'tv' 
+      const endpoint = (movie.media_type === 'tv' || movie.category === 'tv') 
         ? `tv/${movieId}/credits` 
         : `movie/${movieId}/credits`;
 
@@ -453,52 +457,60 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
     </View>
   );
 
+  const handlePostReview = useCallback(async (reviewText: string, rating: number) => {
+    if (!auth.currentUser) {
+      Alert.alert('Error', 'You must be logged in to post a review');
+      return;
+    }
+
+    try {
+      const userRef = doc(db, 'users', auth.currentUser.uid);
+      const moviesRef = collection(userRef, 'movies');
+      const movieId = `${movie.id}_review`; // Create unique ID for review
+
+      const reviewData = {
+        backdrop: movie.backdrop_path || '',
+        createdAt: new Date().toLocaleString('en-US', {
+          timeZone: 'America/New_York',
+          timeZoneName: 'short'
+        }),
+        isPublic: true,
+        likes: 0,
+        movieId: movie.id,
+        movieTitle: movie.title,
+        rating: rating,
+        review: reviewText,
+        userId: auth.currentUser.uid,
+        username: auth.currentUser.displayName || 'Anonymous',
+        category: 'critics',
+        timestamp: serverTimestamp()
+      };
+
+      await setDoc(doc(moviesRef, movieId), reviewData);
+      performFlip();
+      Alert.alert('Success', 'Your review has been posted!');
+    } catch (error) {
+      console.error('Error posting review:', error);
+      Alert.alert('Error', 'Failed to post review. Please try again.');
+    }
+  }, [movie, performFlip]);
+
   return (
-    <TouchableWithoutFeedback 
-      onPress={handleDoubleTap}
-      delayPressIn={0}
-      delayPressOut={0}
-    >
+    <TouchableWithoutFeedback onPress={handleDoubleTap}>
       <View style={styles.container}>
-        {/* Front face */}
         <Animated.View 
-          style={[
-            styles.cardFace,
-            {
-              transform: [
-                { perspective: 2000 },
-                { rotateY: frontInterpolate }
-              ],
-              opacity: frontOpacity,
-              zIndex: isFlipped ? 0 : 1,
-            }
-          ]}
+          style={[styles.cardFace, { transform: [{ perspective: 2000 }, { rotateY: frontInterpolate }], opacity: frontOpacity, zIndex: isFlipped ? 0 : 1 }]}
         >
-          <TouchableWithoutFeedback onPress={handleDoubleTap}>
-            <View style={styles.frontFaceContainer}>
-              {renderFrontFace()}
-            </View>
-          </TouchableWithoutFeedback>
+          {renderFrontFace()}
         </Animated.View>
 
-        {/* Back face */}
         <Animated.View 
-          style={[
-            styles.cardFace,
-            styles.cardBack,
-            {
-              transform: [
-                { perspective: 2000 },
-                { rotateY: backInterpolate }
-              ],
-              opacity: backOpacity,
-              zIndex: isFlipped ? 1 : 0,
-            }
-          ]}
+          style={[styles.cardFace, styles.cardBack, { transform: [{ perspective: 2000 }, { rotateY: backInterpolate }], opacity: backOpacity, zIndex: isFlipped ? 1 : 0 }]}
         >
           <MovieReview 
             movie={movie} 
             onDoubleTap={handleDoubleTap}
+            onPostReview={handlePostReview}
           />
         </Animated.View>
       </View>
@@ -703,5 +715,6 @@ const styles = StyleSheet.create({
     color: '#e0e0e0', // Light gray text
   },
 });
+
 
 export default FlipCard;
