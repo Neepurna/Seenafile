@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Dimensions, ActivityIndicator, Alert } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { db, auth } from '../firebase';
-import { collection, query, orderBy, onSnapshot, getDocs, where, doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, getDocs, where, doc, getDoc, updateDoc, setDoc, limit } from 'firebase/firestore';
 import { calculateMatchScore } from '../utils/matchingUtils';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ChatList from '../components/ChatList';
@@ -25,8 +25,38 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
   useEffect(() => {
     if (!auth.currentUser) return;
     
-    loadStoredData();
-    fetchMatches();
+    let timeoutId: number;
+
+    const fetchData = async () => {
+      setLoading(true);
+      
+      try {
+        timeoutId = window.setTimeout(() => {
+          setLoading(false);
+          setError('Request timed out. Please try again.');
+        }, 15000);
+
+        await loadStoredData();
+        await fetchMatches();
+        
+        if (timeoutId) window.clearTimeout(timeoutId);
+      } catch (error) {
+        if (timeoutId) window.clearTimeout(timeoutId);
+        console.error('Error in CinePal data fetching:', error);
+        setError('Failed to load matches. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData().catch(error => {
+      console.error('Fetch error:', error);
+      setLoading(false);
+    });
+
+    return () => {
+      if (timeoutId) window.clearTimeout(timeoutId);
+    };
   }, []);
 
   const loadStoredData = async () => {
@@ -68,7 +98,8 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
       const usersRef = collection(db, 'users');
       const usersQuery = query(
         usersRef,
-        where('__name__', '!=', auth.currentUser.uid)
+        where('__name__', '!=', auth.currentUser.uid),
+        limit(20) // Limit to 20 users at a time
       );
       
       const usersSnap = await getDocs(usersQuery);
@@ -132,14 +163,15 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
         }
       });
 
-      const matchResults = (await Promise.all(matchPromises))
-        .filter(match => match !== null && match.score > 0)  // Only show matches with scores
-        .sort((a, b) => (b?.score || 0) - (a?.score || 0));
+      const matchResults = await Promise.race([
+        Promise.all(matchPromises),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Match calculation timed out')), 10000)
+        )
+      ]);
 
-      console.log('Final filtered matches:', matchResults);
-      setDebugInfo(prev => `${prev}\nProcessed matches: ${matchResults.length}`);
-      setMatches(matchResults);
-      setError(null);
+      setMatches(matchResults.filter(Boolean));
+      
     } catch (error) {
       const errorMessage = `Error fetching matches: ${error}`;
       console.error('fetchMatches error details:', error);
@@ -164,11 +196,12 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
         throw new Error('User details not found');
       }
 
-      // Navigate to UserProfileChat instead of MovieChat
+      // Update navigation options to preserve bottom tabs
       navigation.navigate('UserProfileChat', {
         userId,
         username: matchedUser.username || 'Movie Enthusiast',
         chatId,
+        preserveTabBar: true // Add this flag
       });
 
     } catch (error) {

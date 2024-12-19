@@ -14,7 +14,7 @@ import {
 import { auth, db } from '../firebase';
 import { doc, collection, query, where, getDocs, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
-
+import AsyncStorage from '@react-native-async-storage/async-storage';
 const { width } = Dimensions.get('window');
 const GRID_SIZE = width / 4 - 20;
 const REVIEW_CARD_WIDTH = width - 30; // Full width cards for reviews
@@ -25,8 +25,7 @@ const MovieGridScreen = ({ route, navigation }) => {
   
   useEffect(() => {
     navigation.setOptions({
-      headerLeft: () => null, // Remove back button
-      gestureEnabled: false,  // Disable swipe back gesture
+      // Remove the headerLeft and gestureEnabled options to allow default behavior
     });
   }, [navigation]);
 
@@ -38,70 +37,156 @@ const MovieGridScreen = ({ route, navigation }) => {
 
   useEffect(() => {
     if (!auth.currentUser) return;
-    setLoading(true);
     
-    const userRef = doc(db, 'users', auth.currentUser.uid);
-    const moviesRef = collection(userRef, 'movies');
-    
+    let timeoutId: number;
+    let unsubscribe: (() => void) | undefined;
+
+    const fetchData = async () => {
+      setLoading(true);
+      console.log('Fetching movies for folder:', folderId);
+      
+      try {
+        const userRef = doc(db, 'users', auth.currentUser.uid);
+        const moviesRef = collection(userRef, 'movies');
+        
+        // Log the query parameters
+        console.log('Query params:', {
+          userId: auth.currentUser.uid,
+          folderId,
+          collection: 'movies'
+        });
+
+        const q = query(
+          moviesRef,
+          where('category', '==', folderId)
+          // Remove orderBy temporarily to debug
+        );
+
+        unsubscribe = onSnapshot(q, {
+          next: (snapshot) => {
+            if (timeoutId) window.clearTimeout(timeoutId);
+            
+            console.log('Snapshot received:', {
+              empty: snapshot.empty,
+              size: snapshot.size,
+              docs: snapshot.docs.map(doc => ({
+                id: doc.id,
+                category: doc.data().category
+              }))
+            });
+
+            const movieData = snapshot.docs.map(doc => ({
+              id: doc.id,
+              ...doc.data()
+            }));
+            
+            if (movieData.length === 0) {
+              console.log('Debug - Query returned no results:', {
+                folderId,
+                userId: auth.currentUser?.uid
+              });
+            } else {
+              console.log(`Found ${movieData.length} movies in folder ${folderId}`);
+            }
+            
+            setMovies(movieData);
+            setLoading(false);
+            
+            // Cache the data
+            const cacheKey = `movies_${folderId}_${auth.currentUser?.uid}`;
+            AsyncStorage.setItem(cacheKey, JSON.stringify(movieData))
+              .catch(error => console.error('Caching error:', error));
+          },
+          error: (error) => {
+            console.error('Snapshot error:', error);
+            if (timeoutId) window.clearTimeout(timeoutId);
+            setLoading(false);
+            loadCachedMovies();
+          }
+        });
+      } catch (error) {
+        console.error('Query setup error:', error);
+        if (timeoutId) window.clearTimeout(timeoutId);
+        setLoading(false);
+        loadCachedMovies();
+      }
+    };
+
+    fetchData();
+
+    return () => {
+      if (timeoutId) window.clearTimeout(timeoutId);
+      if (unsubscribe) unsubscribe();
+    };
+  }, [folderId, auth.currentUser]);
+
+  // Add this new function to load cached movies
+  const loadCachedMovies = async () => {
     try {
-      // Simplified query without orderBy initially
+      const cacheKey = `movies_${folderId}_${auth.currentUser?.uid}`;
+      const cachedData = await AsyncStorage.getItem(cacheKey);
+      if (cachedData) {
+        setMovies(JSON.parse(cachedData));
+      }
+    } catch (error) {
+      console.error('Error loading cached movies:', error);
+    }
+  };
+
+  // Update the loadMovies function
+  const loadMovies = async (refreshing = false) => {
+    if (!auth.currentUser) return;
+
+    try {
+      setLoading(true);
+      console.log('LoadMovies - Starting fetch for folder:', folderId);
+
+      const userRef = doc(db, 'users', auth.currentUser.uid);
+      const moviesRef = collection(userRef, 'movies');
+      
+      // Verify the folder ID
+      console.log('LoadMovies - Query params:', {
+        userId: auth.currentUser.uid,
+        folderId,
+        path: `users/${auth.currentUser.uid}/movies`
+      });
+
       const q = query(
         moviesRef,
         where('category', '==', folderId)
       );
 
-      const unsubscribe = onSnapshot(q, {
-        next: (snapshot) => {
-          const movieData = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          }));
-          console.log(`Folder ${folderId} movies:`, movieData); // Debug log
-          setMovies(movieData);
-          setLoading(false);
-        },
-        error: (error) => {
-          console.error('MovieGrid snapshot error:', error);
-          setLoading(false);
-          Alert.alert('Error', 'Failed to load movies');
-        }
+      const snapshot = await getDocs(q);
+      
+      console.log('LoadMovies - Query results:', {
+        empty: snapshot.empty,
+        size: snapshot.size,
+        folderId
       });
 
-      return () => unsubscribe();
-    } catch (error) {
-      console.error('Query setup error:', error);
-      setLoading(false);
-    }
-  }, [folderId, auth.currentUser]);
+      const movieData = snapshot.docs.map(doc => {
+        const data = doc.data();
+        console.log('Movie data:', { id: doc.id, category: data.category });
+        return {
+          id: doc.id,
+          ...data
+        };
+      });
 
-  const loadMovies = async (refreshing = false) => {
-    if (!auth.currentUser || (!hasMore && !refreshing)) return;
-
-    try {
-      setLoading(true);
-      const userRef = doc(db, 'users', auth.currentUser.uid);
-      const moviesRef = collection(userRef, 'movies');
-      
-      const q = query(
-        moviesRef,
-        where('category', '==', folderId),
-        orderBy('createdAt', 'desc'),
-        limit(ITEMS_PER_PAGE * (refreshing ? 1 : page))
-      );
-
-      const snapshot = await getDocs(q);
-      const movieData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      if (movieData.length === 0) {
+        console.log('LoadMovies - No movies found. Verifying folder:', {
+          folderId,
+          userId: auth.currentUser.uid
+        });
+      }
 
       setMovies(movieData);
-      setHasMore(movieData.length === ITEMS_PER_PAGE * page);
-      setPage(prev => refreshing ? 1 : prev + 1);
-    } catch (error) {
-      console.error('Error loading movies:', error);
-    } finally {
       setLoading(false);
+      
+    } catch (error) {
+      console.error('LoadMovies - Error:', error);
+      setLoading(false);
+      await loadCachedMovies();
     }
   };
 
