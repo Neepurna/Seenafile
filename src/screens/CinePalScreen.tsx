@@ -76,20 +76,25 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
       
       const matchPromises = usersSnap.docs.map(async (userDoc) => {
         try {
-          // Get complete user data including profile fields
           const userData = userDoc.data();
           const userProfileDoc = await getDoc(doc(db, 'users', userDoc.id));
           const userProfile = userProfileDoc.data();
-          
-          console.log('Debug - User data:', {
-            userId: userDoc.id,
-            userData,
-            userProfile
-          });
-          
+
+          // More specific username extraction
+          let username = null;
+          if (userProfile) {
+            username = userProfile.displayName || userProfile.username || userProfile.name;
+          }
+          if (!username && userData) {
+            username = userData.displayName || userData.username || userData.name;
+          }
+          if (!username) {
+            username = userDoc.id.substring(0, 8); // Use part of user ID as fallback
+          }
+
           const moviesRef = collection(userDoc.ref, 'movies');
           const moviesSnap = await getDocs(moviesRef);
-          
+
           if (!moviesSnap.empty) {
             let matchScore;
             try {
@@ -100,22 +105,6 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
                 return null;
               }
 
-              // Use proper user data fields
-              const username = 
-                userProfile?.username || // First try username from profile
-                userProfile?.displayName || // Then displayName from profile
-                userData?.username || // Then username from user data
-                userData?.displayName || // Then displayName from user data
-                'Movie Enthusiast'; // Fallback
-
-              const debugDetails = `
-                User: ${username}
-                Movies: ${moviesSnap.size}
-                Common Movies: ${matchScore.commonMovies?.length || 0}
-                Score: ${matchScore.score}%
-              `;
-              console.log(debugDetails);
-
               return {
                 userId: userDoc.id,
                 username,
@@ -124,7 +113,12 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
                 score: matchScore.score,
                 commonMovies: matchScore.commonMovies,
                 moviesCount: moviesSnap.size,
-                debugDetails
+                debugDetails: `
+                  User: ${username}
+                  Movies: ${moviesSnap.size}
+                  Common Movies: ${matchScore.commonMovies?.length || 0}
+                  Score: ${matchScore.score}%
+                `
               };
             } catch (error) {
               console.error('Match calculation error:', error);
