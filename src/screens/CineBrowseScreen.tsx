@@ -50,11 +50,7 @@ type NavigationProp = StackNavigationProp<RootStackParamList, 'CineBrowse'>;
 const defaultCategories = [
   'All',
   'TV Shows',
-  'Animated',
-  'Japan',
-  'France'
-
-  
+  'Animated'
 ];
 
 // Add new caching mechanism

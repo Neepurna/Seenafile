@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -6,12 +6,10 @@ import {
   StyleSheet,
   TouchableOpacity,
   Platform,
-  Animated,
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { DIMS } from '../theme';  // Make sure this import is at the top
-import CountrySelector from './CountrySelector';
+import { DIMS } from '../theme';
 
 const { width } = Dimensions.get('window');
 
@@ -26,16 +24,6 @@ const FilterCard: React.FC<FilterCardProps> = ({
   onSelectCategory,
   categories
 }) => {
-  const [showCountrySelector, setShowCountrySelector] = useState(false);
-
-  const handleCategoryPress = (category: string) => {
-    if (category === 'Countries') {
-      setShowCountrySelector(true);
-    } else {
-      onSelectCategory(category);
-    }
-  };
-
   return (
     <View style={styles.mainContainer}>
       <ScrollView
@@ -50,7 +38,7 @@ const FilterCard: React.FC<FilterCardProps> = ({
               styles.categoryButton,
               selectedCategory === category && styles.selectedCategory
             ]}
-            onPress={() => handleCategoryPress(category)}
+            onPress={() => onSelectCategory(category)}
           >
             <Text style={[
               styles.categoryText,
@@ -61,15 +49,6 @@ const FilterCard: React.FC<FilterCardProps> = ({
           </TouchableOpacity>
         ))}
       </ScrollView>
-
-      <CountrySelector
-        isVisible={showCountrySelector}
-        onClose={() => setShowCountrySelector(false)}
-        onSelectCountry={(country) => {
-          onSelectCategory(country.english_name);
-          setShowCountrySelector(false);
-        }}
-      />
     </View>
   );
 };
