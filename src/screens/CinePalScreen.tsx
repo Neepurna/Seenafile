@@ -20,6 +20,7 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [connectedUsers, setConnectedUsers] = useState<string[]>([]);
+  const [debugInfo, setDebugInfo] = useState<string>('');
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -43,8 +44,27 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
     if (!auth.currentUser) return;
     
     setLoading(true);
+    setDebugInfo('Starting match calculation...');
+    
     try {
-      // Fetch all users except current user
+      // First, get current user's movies
+      const currentUserMoviesRef = collection(db, 'users', auth.currentUser.uid, 'movies');
+      const currentUserMoviesSnap = await getDocs(currentUserMoviesRef);
+      
+      console.log('Debug - Current user movies:', {
+        uid: auth.currentUser.uid,
+        movieCount: currentUserMoviesSnap.size,
+        movies: currentUserMoviesSnap.docs.map(doc => doc.id)
+      });
+      
+      setDebugInfo(`Current user has ${currentUserMoviesSnap.size} movies`);
+      
+      if (currentUserMoviesSnap.empty) {
+        setDebugInfo('You need to add some movies first!');
+        setMatches([]);
+        return;
+      }
+
       const usersRef = collection(db, 'users');
       const usersQuery = query(
         usersRef,
@@ -52,47 +72,85 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
       );
       
       const usersSnap = await getDocs(usersQuery);
+      console.log(`Found ${usersSnap.size} potential matches`);
       
       const matchPromises = usersSnap.docs.map(async (userDoc) => {
         try {
+          // Get complete user data including profile fields
           const userData = userDoc.data();
+          const userProfileDoc = await getDoc(doc(db, 'users', userDoc.id));
+          const userProfile = userProfileDoc.data();
+          
+          console.log('Debug - User data:', {
+            userId: userDoc.id,
+            userData,
+            userProfile
+          });
+          
           const moviesRef = collection(userDoc.ref, 'movies');
           const moviesSnap = await getDocs(moviesRef);
           
           if (!moviesSnap.empty) {
-            // Calculate match score with basic error handling
             let matchScore;
             try {
               matchScore = await calculateMatchScore(auth.currentUser!.uid, userDoc.id);
+              
+              if (!matchScore || typeof matchScore.score !== 'number') {
+                console.error('Invalid match score structure:', matchScore);
+                return null;
+              }
+
+              // Use proper user data fields
+              const username = 
+                userProfile?.username || // First try username from profile
+                userProfile?.displayName || // Then displayName from profile
+                userData?.username || // Then username from user data
+                userData?.displayName || // Then displayName from user data
+                'Movie Enthusiast'; // Fallback
+
+              const debugDetails = `
+                User: ${username}
+                Movies: ${moviesSnap.size}
+                Common Movies: ${matchScore.commonMovies?.length || 0}
+                Score: ${matchScore.score}%
+              `;
+              console.log(debugDetails);
+
+              return {
+                userId: userDoc.id,
+                username,
+                email: userProfile?.email || userData?.email,
+                photoURL: userProfile?.photoURL || userData?.photoURL,
+                score: matchScore.score,
+                commonMovies: matchScore.commonMovies,
+                moviesCount: moviesSnap.size,
+                debugDetails
+              };
             } catch (error) {
-              console.warn(`Error calculating match for ${userDoc.id}:`, error);
+              console.error('Match calculation error:', error);
               return null;
             }
-
-            return {
-              userId: userDoc.id,
-              username: userData.username || userData.displayName || 'Movie Enthusiast',
-              score: matchScore?.score || 0,
-              commonMovies: matchScore?.commonMovies || []
-            };
           }
           return null;
         } catch (error) {
-          console.warn(`Error processing user ${userDoc.id}:`, error);
+          console.error('User processing error:', error);
           return null;
         }
       });
 
       const matchResults = (await Promise.all(matchPromises))
-        .filter(match => match !== null)
+        .filter(match => match !== null && match.score > 0)  // Only show matches with scores
         .sort((a, b) => (b?.score || 0) - (a?.score || 0));
 
-      console.log('Match results:', matchResults);
+      console.log('Final filtered matches:', matchResults);
+      setDebugInfo(prev => `${prev}\nProcessed matches: ${matchResults.length}`);
       setMatches(matchResults);
       setError(null);
     } catch (error) {
-      console.error('Error fetching matches:', error);
-      setError('Failed to load matches. Please try again.');
+      const errorMessage = `Error fetching matches: ${error}`;
+      console.error('fetchMatches error details:', error);
+      setError(errorMessage);
+      setDebugInfo(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -105,50 +163,25 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
     }
     
     try {
-      // Create chat ID by sorting UIDs to ensure consistency
       const chatId = [auth.currentUser.uid, userId].sort().join('_');
-      const chatRef = doc(db, 'chats', chatId);
-      
-      // Check if chat already exists
-      const chatDoc = await getDoc(chatRef);
-      
-      if (!chatDoc.exists()) {
-        // Initialize new chat document
-        await setDoc(chatRef, {
-          participants: [auth.currentUser.uid, userId].sort(),
-          createdAt: new Date(),
-          lastMessage: null,
-          lastMessageTime: null
-        });
-      }
-
-      // Get user details
       const matchedUser = matches.find(match => match.userId === userId);
+      
       if (!matchedUser) {
         throw new Error('User details not found');
       }
 
-      // Update connected users in local storage
-      const updatedConnectedUsers = [...connectedUsers, userId];
-      setConnectedUsers(updatedConnectedUsers);
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedConnectedUsers));
-
-      // Navigate to chat with proper parameters
-      navigation.navigate('Chat', {
-        chatId,
+      // Navigate to UserProfileChat instead of MovieChat
+      navigation.navigate('UserProfileChat', {
         userId,
         username: matchedUser.username || 'Movie Enthusiast',
+        chatId,
       });
 
     } catch (error) {
       console.error('Error connecting users:', error);
-      Alert.alert(
-        'Connection Error',
-        'Unable to establish chat connection. Please try again.',
-        [{ text: 'OK' }]
-      );
+      Alert.alert('Error', 'Unable to connect with user');
     }
-  }, [matches, connectedUsers, navigation]);
+  }, [matches, navigation]);
 
   if (loading) {
     return (
@@ -172,6 +205,17 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollView}>
+        {__DEV__ && (
+          <View style={styles.debugContainer}>
+            <Text style={styles.debugText}>{debugInfo}</Text>
+            <TouchableOpacity 
+              style={styles.debugButton} 
+              onPress={() => fetchMatches()}
+            >
+              <Text style={styles.debugButtonText}>Refresh Matches</Text>
+            </TouchableOpacity>
+          </View>
+        )}
         <View style={styles.headerSection}>
           <Text style={styles.headerTitle}>Your Movie Matches</Text>
           <Text style={styles.headerSubtitle}>Connect with cinema enthusiasts who share your taste</Text>
@@ -347,6 +391,16 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 14,
     fontWeight: 'bold',
+  },
+  debugContainer: {
+    padding: 10,
+    backgroundColor: '#2A2A2A',
+    borderRadius: 8,
+    marginBottom: 16,  },  debugText: {    color: '#BB86FC',    fontSize: 12,    fontFamily: 'monospace',  },  debugButton: {    backgroundColor: '#BB86FC',    padding: 8,    borderRadius: 4,    marginTop: 8,
+  },
+  debugButtonText: {
+    color: '#000',
+    textAlign: 'center',
   },
 });
 

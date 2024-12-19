@@ -11,17 +11,9 @@ import LoginScreen from './src/screens/LoginScreen';
 import SignUpScreen from './src/screens/SignUpScreen';
 import Tabs from './src/navigation/Tabs';
 import MovieGridScreen from './src/screens/MovieGridScreen';
-
-type RootStackParamList = {
-  Login: undefined;
-  SignUp: undefined;
-  Tabs: undefined;
-  MovieGridScreen: {
-    folderId: string;
-    folderName: string;
-    folderColor: string;
-  };
-};
+import MovieChatScreen from './src/screens/MovieChatScreen';
+import UserProfileChatScreen from './src/screens/UserProfileChatScreen';
+import { RootStackParamList } from './src/types/navigation';
 
 const Stack = createStackNavigator<RootStackParamList>();
 
@@ -63,6 +55,31 @@ export default function App() {
               },
               headerTintColor: '#fff',
             }}
+          />
+          <Stack.Screen 
+            name="MovieChat"
+            component={MovieChatScreen}
+            options={{
+              headerShown: true,
+              gestureEnabled: true,
+              headerStyle: {
+                backgroundColor: '#000',
+              },
+              headerTintColor: '#fff',
+              headerTitle: ({ route }: any) => route.params?.username || 'Chat',
+            }}
+          />
+          <Stack.Screen 
+            name="UserProfileChat"
+            component={UserProfileChatScreen}
+            options={({ route }) => ({
+              headerShown: true,
+              headerTitle: route?.params?.username || 'Profile',
+              headerStyle: {
+                backgroundColor: '#000',
+              },
+              headerTintColor: '#fff',
+            })}
           />
         </Stack.Navigator>
       </GestureHandlerRootView>

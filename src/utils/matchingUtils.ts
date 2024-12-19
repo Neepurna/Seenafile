@@ -71,53 +71,57 @@ const calculateScore = (commonMovies: MovieMatch[]): number => {
   return Math.round(totalScore);
 };
 
-export const calculateMatchScore = async (userId: string): Promise<Match[]> => {
-  if (!userId) {
-    console.error('No userId provided');
-    return [];
-  }
-
+export const calculateMatchScore = async (currentUserId: string, otherUserId: string) => {
   try {
-    // Get current user's movies
-    const userMoviesRef = collection(db, 'users', userId, 'movies');
-    const userMoviesSnap = await getDocs(userMoviesRef);
-    const userMovies = userMoviesSnap.docs;
+    const currentUserMovies = await getDocs(collection(db, 'users', currentUserId, 'movies'));
+    const otherUserMovies = await getDocs(collection(db, 'users', otherUserId, 'movies'));
 
-    // Get all users
-    const usersRef = collection(db, 'users');
-    const usersSnap = await getDocs(usersRef);
-    const matches: Match[] = [];
-
-    // Process each potential match
-    for (const targetUserDoc of usersSnap.docs) {
-      if (targetUserDoc.id === userId) continue; // Skip self
-
-      try {
-        const targetUserData = targetUserDoc.data();
-        const targetMoviesRef = collection(db, 'users', targetUserDoc.id, 'movies');
-        const targetMoviesSnap = await getDocs(targetMoviesRef);
-        
-        const commonMovies = findCommonMovies(userMovies, targetMoviesSnap.docs);
-        const score = calculateScore(commonMovies);
-
-        if (score >= 20) { // Only include matches with 20% or higher
-          matches.push({
-            userId: targetUserDoc.id,
-            username: targetUserData.name || 'Movie Enthusiast',
-            score,
-            commonMovies
-          });
-        }
-      } catch (error) {
-        console.warn(`Skipping user ${targetUserDoc.id}:`, error);
-        continue;
-      }
+    if (currentUserMovies.empty || otherUserMovies.empty) {
+      return { score: 0, commonMovies: [] };
     }
 
-    return matches.sort((a, b) => b.score - a.score);
+    // Convert to arrays with proper movie data
+    const currentUserMovieList = currentUserMovies.docs.map(doc => ({
+      movieId: doc.data().movieId,
+      title: doc.data().title,
+      category: doc.data().category,
+      status: doc.data().status || 'watched'
+    }));
+
+    const otherUserMovieList = otherUserMovies.docs.map(doc => ({
+      movieId: doc.data().movieId,
+      title: doc.data().title,
+      category: doc.data().category,
+      status: doc.data().status || 'watched'
+    }));
+
+    // Find common movies based on movieId (not document id)
+    const commonMovies = currentUserMovieList.filter(currentMovie =>
+      otherUserMovieList.some(otherMovie => otherMovie.movieId === currentMovie.movieId)
+    );
+
+    // Calculate weighted score
+    let score = 0;
+    if (commonMovies.length > 0) {
+      // Base score: percentage of common movies relative to the smaller collection
+      const minMoviesCount = Math.min(currentUserMovieList.length, otherUserMovieList.length);
+      score = (commonMovies.length / minMoviesCount) * 100;
+      
+      // Add bonus for having more common movies
+      if (commonMovies.length > 10) score += 10;
+      if (commonMovies.length > 20) score += 10;
+      
+      // Cap the score at 100
+      score = Math.min(Math.round(score), 100);
+    }
+
+    return {
+      score,
+      commonMovies
+    };
   } catch (error) {
     console.error('Error in calculateMatchScore:', error);
-    return [];
+    throw error;
   }
 };
 
