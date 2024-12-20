@@ -12,7 +12,6 @@ import CineBrowseScreen from '../screens/CineBrowseScreen';
 import CinePalScreen from '../screens/CinePalScreen';
 import MovieChatScreen from '../screens/MovieChatScreen'; // Update this line
 import CineGamesScreen from '../screens/CineGamesScreen';
-import CineFeedScreen from '../screens/CineFeedScreen';
 import MyWallScreen from '../screens/MyWallScreen';
 import MovieGridScreen from '../screens/MovieGridScreen';
 import SettingsScreen from '../screens/SettingsScreen';
@@ -22,7 +21,6 @@ const Tab = createBottomTabNavigator<TabsStackParamList>();
 type TabsStackParamList = {
   CineBrowse: undefined;
   CinePal: undefined;
-  CineFeed: undefined;
   MovieChat: undefined;
   CineFile: undefined;
   CineGames: undefined;
@@ -125,8 +123,6 @@ const Tabs: React.FC = () => {
               iconName = 'film-outline'; // Updated icon name
             } else if (route.name === 'CinePal') {
               iconName = 'people-outline'; // Updated icon name
-            } else if (route.name === 'CineFeed') {
-              iconName = 'newspaper-outline';
             } else if (route.name === 'MovieChat') {  // Updated name
               iconName = 'chatbubbles-outline';  // Updated icon
             } else if (route.name === 'CineGames') {
@@ -154,7 +150,6 @@ const Tabs: React.FC = () => {
       >
         <Tab.Screen name="CineBrowse" component={CineBrowseScreen} />
         <Tab.Screen name="CinePal" component={CinePalScreen} />
-        <Tab.Screen name="CineFeed" component={CineFeedScreen} />
         <Tab.Screen name="MovieChat" component={MovieChatScreen} />
         <Tab.Screen name="CineGames" component={CineGamesScreen} />
         <Tab.Screen name="Profile" component={ProfileScreen} />
