@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, Image, TouchableOpacity, Alert, FlatList, Dimen
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { auth, db, signOut } from '../firebase';
-import { doc, getDoc, collection, query, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, collection, query, onSnapshot, getDocs } from 'firebase/firestore';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 const { width, height } = Dimensions.get('window');
@@ -58,34 +58,41 @@ const ProfileScreen: React.FC = () => {
       setIsLoading(false);
     });
 
-    // Simplified query for movie counts
-    const moviesUnsubscribe = onSnapshot(
-      moviesRef,
-      {
-        next: (snapshot) => {
-          const counts = {
-            watched: 0,
-            most_watch: 0,
-            watch_later: 0,
-            critics: 0
-          };
-
-          snapshot.docs.forEach(doc => {
-            const category = doc.data().category;
-            if (category && counts.hasOwnProperty(category)) {
-              counts[category]++;
-            }
-          });
-
-          console.log('Updated counts:', counts); // Debug log
-          setFolderCounts(counts);
-        },
-        error: (error) => {
-          console.error('Profile movies snapshot error:', error);
-          setError('Failed to load movie counts');
-        }
+    // Fetch user profile and movie counts
+    const fetchData = async () => {
+      if (!auth.currentUser) return;
+      
+      const userId = auth.currentUser.uid;
+      const userRef = doc(db, 'users', userId);
+      const moviesRef = collection(userRef, 'movies');
+  
+      try {
+        // Simple query for movies with category
+        const moviesSnap = await getDocs(moviesRef);
+        const counts = {
+          watched: 0,
+          most_watch: 0,
+          watch_later: 0,
+          critics: 0
+        };
+  
+        moviesSnap.docs.forEach(doc => {
+          const data = doc.data();
+          if (data.category && counts.hasOwnProperty(data.category)) {
+            counts[data.category]++;
+          }
+        });
+  
+        setFolderCounts(counts);
+        setIsLoading(false);
+      } catch (error) {
+        console.error('Error fetching counts:', error);
+        setError('Failed to load data');
+        setIsLoading(false);
       }
-    );
+    };
+  
+    fetchData();
 
     // Fetch reviews if needed for critics folder
     const reviewsUnsubscribe = onSnapshot(reviewsRef, (snapshot) => {
@@ -98,7 +105,6 @@ const ProfileScreen: React.FC = () => {
 
     return () => {
       profileUnsubscribe();
-      moviesUnsubscribe();
       reviewsUnsubscribe();
     };
   }, [navigation]);

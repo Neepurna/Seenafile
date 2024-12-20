@@ -2,120 +2,76 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // Helper functions
-    function isSignedIn() { 
-      return request.auth != null; 
+    function isSignedIn() {
+      return request.auth != null;
     }
     
-    function isOwner(userId) { 
-      return request.auth.uid == userId; 
+    function isOwner(userId) {
+      return request.auth.uid == userId;
     }
-    
-    function isValidReview() {
+
+    function hasRequiredReviewFields() {
       let data = request.resource.data;
       return data.keys().hasAll([
-        'movieId', 
-        'movieTitle', 
-        'backdrop', 
-        'rating', 
-        'review', 
+        'movieId',
+        'movieTitle',
+        'rating',
+        'review',
         'createdAt',
-        'isPublic',
-        'likes',
-        'userId',
-        'username'
-      ]) 
-      && data.rating is number
-      && data.rating >= 1 
-      && data.rating <= 5
-      && data.likes is number
-      && data.isPublic is bool;
+        'category'
+      ]);
     }
 
-    // Users collection
+    // Global movies/reviews collection
+    match /movies/{movieId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() 
+        && request.resource.data.userId == request.auth.uid 
+        && hasRequiredReviewFields();
+      allow update: if isSignedIn() 
+        && resource.data.userId == request.auth.uid;
+      allow delete: if isSignedIn() 
+        && resource.data.userId == request.auth.uid;
+    }
+    
+    // User specific data
     match /users/{userId} {
-      // Simplified read permission for matching
       allow read: if isSignedIn();
       allow write: if isSignedIn() && isOwner(userId);
-
-      // Movies subcollection - Allow reading for matching
+      
+      // User's movies collection (includes reviews)
       match /movies/{movieId} {
-        allow read: if isSignedIn();
-        allow write: if isSignedIn() && isOwner(userId);
+        allow read: if isSignedIn(); // Allow all signed-in users to read
+        allow create: if isSignedIn() 
+          && isOwner(userId) 
+          && hasRequiredReviewFields();
+        allow update, delete: if isSignedIn() && isOwner(userId);
       }
 
-      // User preferences subcollection - for matching algorithm
-      match /preferences/{prefId} {
-        allow read: if isSignedIn();
-        allow write: if isSignedIn() && isOwner(userId);
-      }
-
-      // Reviews subcollection
+      // User's reviews subcollection
       match /reviews/{reviewId} {
         allow read: if isSignedIn();
         allow write: if isSignedIn() && isOwner(userId);
       }
-    }
 
-    // Dedicated matches collection
-    match /userMatches/{matchId} {
-      allow read: if isSignedIn() && (
-        request.auth.uid in resource.data.participants
-      );
-      allow create: if isSignedIn() && (
-        request.resource.data.participants.hasAny([request.auth.uid])
-      );
-      allow update: if isSignedIn() && (
-        request.auth.uid in resource.data.participants
-      );
-    }
-
-    // Chats collection
-    match /chats/{chatId} {
-      allow read: if isSignedIn() && (
-        request.auth.uid in resource.data.participants
-      );
-      allow create: if isSignedIn() && (
-        request.resource.data.keys().hasAll(['participants', 'createdAt']) &&
-        request.resource.data.participants.size() == 2 &&
-        request.resource.data.participants.hasAny([request.auth.uid])
-      );
-      allow update: if isSignedIn() && (
-        request.auth.uid in resource.data.participants &&
-        request.resource.data.participants == resource.data.participants
-      );
-      
-      // Messages subcollection
-      match /messages/{messageId} {
-        allow read, create: if isSignedIn() && 
-          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+      // User's shared reviews
+      match /sharedReviews/{reviewId} {
+        allow read: if isSignedIn();
+        allow create, update: if isSignedIn() 
+          && isOwner(userId) 
+          && hasRequiredReviewFields();
+        allow delete: if isSignedIn() && isOwner(userId);
       }
     }
-    
-    // Public reviews
+
+    // Shared reviews collection
     match /sharedReviews/{reviewId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid && isValidReview();
-      allow update, delete: if false;
-    }
-    
-    // Matches collection
-    match /matches/{matchId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && (
-        request.resource.data.userId == request.auth.uid
-      );
-      allow update: if isSignedIn() && (
-        resource.data.userId == request.auth.uid ||
-        resource.data.targetId == request.auth.uid
-      );
-      allow delete: if false;
-    }
-    
-    // Helper function for potential matches
-    function isPotentialMatch(userId) {
-      // Adjust this function based on your app's logic for potential matches
-      // For simplicity, we'll assume any authenticated user can be a potential match
-      return isSignedIn();
+      allow create: if isSignedIn() 
+        && request.resource.data.userId == request.auth.uid 
+        && hasRequiredReviewFields();
+      allow update, delete: if isSignedIn() 
+        && resource.data.userId == request.auth.uid;
     }
   }
 }

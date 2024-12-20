@@ -49,8 +49,9 @@ const UserProfileChatScreen: React.FC<UserProfileChatScreenProps> = ({ route, na
 
   const fetchMovieCounts = async () => {
     try {
-      const moviesRef = collection(db, 'users', userId, 'movies');
-      const moviesSnap = await getDocs(moviesRef);
+      const userRef = doc(db, 'users', userId);
+      const moviesRef = collection(userRef, 'movies');
+      const snapshot = await getDocs(moviesRef);
       
       const counts = {
         watched: 0,
@@ -59,8 +60,9 @@ const UserProfileChatScreen: React.FC<UserProfileChatScreenProps> = ({ route, na
         critics: 0
       };
 
-      moviesSnap.docs.forEach(doc => {
-        const category = doc.data().category;
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        const category = data.category;
         if (category && counts.hasOwnProperty(category)) {
           counts[category]++;
         }
@@ -74,35 +76,49 @@ const UserProfileChatScreen: React.FC<UserProfileChatScreenProps> = ({ route, na
     }
   };
 
-  const renderFolder = ({ item: folder }: { item: FolderData }) => (
-    <TouchableOpacity 
-      style={[
-        styles.folderContainer, 
-        { 
-          borderColor: folder.color,
-          ...(folder.id === 'critics' && {
-            backgroundColor: 'rgba(255,64,129,0.1)',
-          })
-        }
-      ]}
-      onPress={() => navigation.navigate('MovieGridScreen', { 
-        folderId: folder.id,
-        folderName: folder.name,
-        folderColor: folder.color,
-        userId: userId // Pass the userId for fetching correct user's movies
-      })}
-    >
-      <Ionicons 
-        name={folder.icon as any} 
-        size={folder.id === 'critics' ? 45 : 40} 
-        color={folder.color} 
-      />
-      <Text style={styles.folderName}>{folder.name}</Text>
-      <Text style={[styles.folderCount, { color: folder.color }]}>
-        {folderCounts[folder.id] || 0} {folder.id === 'critics' ? 'reviews' : 'movies'}
-      </Text>
-    </TouchableOpacity>
-  );
+  const renderFolder = ({ item: folder }: { item: FolderData }) => {
+    const count = folderCounts[folder.id] || 0;
+    const isDisabled = count === 0;
+  
+    return (
+      <TouchableOpacity 
+        style={[
+          styles.folderContainer,
+          { 
+            borderColor: isDisabled ? '#666' : folder.color,
+            backgroundColor: isDisabled 
+              ? 'rgba(102,102,102,0.1)'
+              : folder.id === 'critics'
+                ? 'rgba(255,64,129,0.1)'
+                : 'rgba(255,255,255,0.05)',
+            opacity: isDisabled ? 0.5 : 1
+          }
+        ]}
+        onPress={() => {
+          if (!isDisabled) {
+            navigation.navigate('MovieGridScreen', { 
+              folderId: folder.id,
+              folderName: folder.name,
+              folderColor: folder.color,
+              userId: userId,
+              isCritics: folder.id === 'critics'
+            });
+          }
+        }}
+        disabled={isDisabled}
+      >
+        <Ionicons 
+          name={folder.icon as any} 
+          size={folder.id === 'critics' ? 45 : 40} 
+          color={folder.color} 
+        />
+        <Text style={styles.folderName}>{folder.name}</Text>
+        <Text style={[styles.folderCount, { color: folder.color }]}>
+          {folderCounts[folder.id] || 0} {folder.id === 'critics' ? 'reviews' : 'movies'}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>

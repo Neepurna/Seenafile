@@ -2,7 +2,7 @@
   "indexes": [
     {
       "collectionGroup": "movies",
-      "queryScope": "Collection",
+      "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "category", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
