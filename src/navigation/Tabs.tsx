@@ -179,14 +179,6 @@ const Tabs: React.FC = () => {
           component={MovieGridScreen}
           options={({ route }) => ({
             tabBarButton: () => null, // Hide from tab bar
-            headerLeft: () => (
-              <TouchableOpacity 
-                onPress={() => navigation.goBack()}
-                style={{ marginLeft: 15 }}
-              >
-                <Ionicons name="arrow-back" size={24} color="#fff" />
-              </TouchableOpacity>
-            ),
             headerTitle: route.params?.folderName ?? 'Movies',
             headerStyle: {
               backgroundColor: '#000',

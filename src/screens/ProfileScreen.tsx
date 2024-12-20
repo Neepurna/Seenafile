@@ -34,12 +34,6 @@ const ProfileScreen: React.FC = () => {
   const [userReviews, setUserReviews] = useState<any[]>([]);
 
   useEffect(() => {
-    // Set navigation options to hide back button
-    navigation.setOptions({
-      headerLeft: () => null,
-      gestureEnabled: false
-    });
-
     if (!auth.currentUser) {
       navigation.navigate('Login');
       return;
