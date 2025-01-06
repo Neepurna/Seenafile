@@ -26,7 +26,7 @@ import { auth, db } from '../firebase';
 import { collection, doc, setDoc, getDoc } from 'firebase/firestore';
 import FilterCard from '../components/FilterCard';
 import { DIMS, getCardHeight } from '../theme';
-import { fetchMoviesByCategory } from '../services/tmdb';
+import { fetchMoviesByCategory, searchMoviesAndShows } from '../services/tmdb';
 import PerformanceLogger from '../utils/performanceLogger';
 
 const { width, height } = Dimensions.get('window');
@@ -106,6 +106,8 @@ const CineBrowseScreen: React.FC = () => {
   const [searchResults, setSearchResults] = useState<Movie[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const searchInputRef = useRef<TextInput>(null);
+  const [isSearchGridView, setIsSearchGridView] = useState(true);
+  const [selectedSearchMovie, setSelectedSearchMovie] = useState<Movie | null>(null);
 
   useEffect(() => {
     fetchMoreMovies();
@@ -364,18 +366,17 @@ const CineBrowseScreen: React.FC = () => {
       }
       setIsSearching(true);
       try {
-        const response = await fetch(
-          `https://api.themoviedb.org/3/search/multi?api_key=${'YOUR_API_KEY'}&query=${encodeURIComponent(
-            searchQuery
-          )}`
-        );
-        const data = await response.json();
-        const filteredResults = data.results.filter(
-          (item: any) => item.media_type !== 'person' && item.poster_path
-        );
-        setSearchResults(filteredResults);
+        const response = await searchMoviesAndShows(searchQuery);
+        if (response?.results?.length) {
+          setSearchResults(response.results);
+          setIsSearchGridView(true);
+          setSelectedSearchMovie(null);
+        } else {
+          setSearchResults([]);
+        }
       } catch (error) {
         console.error('Search error:', error);
+        setSearchResults([]);
       } finally {
         setIsSearching(false);
       }
@@ -383,6 +384,31 @@ const CineBrowseScreen: React.FC = () => {
     const debounceTimeout = setTimeout(searchMovies, 500);
     return () => clearTimeout(debounceTimeout);
   }, [searchQuery]);
+
+  const handlePressSearchResult = (movie: Movie) => {
+    setSelectedSearchMovie(movie);
+    setIsSearchGridView(false);
+  };
+
+  const renderSearchGrid = () => (
+    <View style={styles.searchGridContainer}>
+      {searchResults.map((item) => (
+        <TouchableOpacity
+          key={item.id}
+          style={styles.searchGridItem}
+          onPress={() => handlePressSearchResult(item)}
+        >
+          {item.poster_path && (
+            <Image
+              source={{ uri: `https://image.tmdb.org/t/p/w500${item.poster_path}` }}
+              style={styles.searchGridImage}
+            />
+          )}
+          <Text style={styles.searchGridText}>{item.title || item.name}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
 
   return (
     <View style={styles.mainContainer}>
@@ -394,127 +420,278 @@ const CineBrowseScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
+      {/* Search Bar now at top */}
+      <View style={styles.topSearchSection}>
+        <TouchableOpacity
+          activeOpacity={1}
+          style={styles.searchWrapper}
+          onPress={() => searchInputRef.current?.focus()}
+        >
+          <TextInput
+            ref={searchInputRef}
+            style={styles.searchInput}
+            placeholder="Search movies & TV shows..."
+            placeholderTextColor="#666"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+          />
+          {searchQuery ? (
+            <TouchableOpacity 
+              onPress={() => setSearchQuery('')}
+              style={styles.clearButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="close-circle" size={20} color="#666" />
+            </TouchableOpacity>
+          ) : (
+            <Ionicons name="search" size={20} color="#666" />
+          )}
+        </TouchableOpacity>
+      </View>
+
       {/* Main Content */}
       <View style={styles.contentContainer}>
-        {/* Movie Cards Section */}
-        <View style={styles.cardsWrapper}>
-          <Swiper
-            cards={searchQuery ? searchResults : movies}
-            renderCard={renderCard}
-            onSwiping={(x: number) => {
-              swipeAnimatedValue.setValue(x);
-            }}
-            onSwipeStart={() => {
-              swipeAnimatedValue.setValue(0);
-            }}
-            onSwipeEnd={() => {
-              Animated.timing(swipeAnimatedValue, {
-                toValue: 0,
-                duration: 300,
-                useNativeDriver: true,
-              }).start();
-            }}
-            infinite={false}
-            backgroundColor="transparent"
-            cardVerticalMargin={0}
-            cardHorizontalMargin={0}
-            stackSize={3}
-            stackScale={10}
-            stackSeparation={14}
-            overlayOpacityHorizontalThreshold={width / 8}
-            overlayOpacityVerticalThreshold={SCREEN_HEIGHT / 8}
-            inputRotationRange={[-width / 2, 0, width / 2]}
-            outputRotationRange={['-10deg', '0deg', '10deg']}
-            onSwipedAll={() => {
-              fetchMoreMovies();
-              setCurrentIndex(0);
-            }}
-            onSwipedTop={handleSwipedTop}
-            onSwipedBottom={handleSwipedBottom}
-            onSwipedRight={handleSwipedRight}
-            onSwipedLeft={handleSwipedLeft}
-            onSwiped={handleSwiped}
-            cardIndex={currentIndex}
-            verticalSwipe={swipingEnabled}
-            horizontalSwipe={swipingEnabled}
-            disableTopSwipe={!swipingEnabled}
-            disableBottomSwipe={!swipingEnabled}
-            disableLeftSwipe={!swipingEnabled}
-            disableRightSwipe={!swipingEnabled}
-            verticalThreshold={SCREEN_HEIGHT / 6}
-            horizontalThreshold={width / 6}
-            useViewOverflow={false}
-            preventSwiping={['up', 'down', 'left', 'right']}
-            swipeBackCard={false}
-            overlayLabels={
-              swipingEnabled
-                ? {
-                    left: {
-                      element: (
-                        <View style={[styles.overlayWrapper, { borderColor: '#FF4B4B' }]}>
-                          <View>
-                            <Ionicons name="close-circle" size={40} color="#FF4B4B" />
+        {searchQuery && searchResults.length > 0 && isSearchGridView ? (
+          renderSearchGrid()
+        ) : selectedSearchMovie && !isSearchGridView ? (
+          <View style={styles.cardsWrapper}>
+            <Swiper
+              cards={[selectedSearchMovie]}
+              renderCard={renderCard}
+              onSwiping={(x: number) => {
+                swipeAnimatedValue.setValue(x);
+              }}
+              onSwipeStart={() => {
+                swipeAnimatedValue.setValue(0);
+              }}
+              onSwipeEnd={() => {
+                Animated.timing(swipeAnimatedValue, {
+                  toValue: 0,
+                  duration: 300,
+                  useNativeDriver: true,
+                }).start();
+              }}
+              infinite={false}
+              backgroundColor="transparent"
+              cardVerticalMargin={0}
+              cardHorizontalMargin={0}
+              stackSize={3}
+              stackScale={10}
+              stackSeparation={14}
+              overlayOpacityHorizontalThreshold={width / 8}
+              overlayOpacityVerticalThreshold={SCREEN_HEIGHT / 8}
+              inputRotationRange={[-width / 2, 0, width / 2]}
+              outputRotationRange={['-10deg', '0deg', '10deg']}
+              onSwipedAll={() => {
+                fetchMoreMovies();
+                setCurrentIndex(0);
+              }}
+              onSwipedTop={handleSwipedTop}
+              onSwipedBottom={handleSwipedBottom}
+              onSwipedRight={handleSwipedRight}
+              onSwipedLeft={handleSwipedLeft}
+              onSwiped={handleSwiped}
+              cardIndex={currentIndex}
+              verticalSwipe={swipingEnabled}
+              horizontalSwipe={swipingEnabled}
+              disableTopSwipe={!swipingEnabled}
+              disableBottomSwipe={!swipingEnabled}
+              disableLeftSwipe={!swipingEnabled}
+              disableRightSwipe={!swipingEnabled}
+              verticalThreshold={SCREEN_HEIGHT / 6}
+              horizontalThreshold={width / 6}
+              useViewOverflow={false}
+              preventSwiping={['up', 'down', 'left', 'right']}
+              swipeBackCard={false}
+              overlayLabels={
+                swipingEnabled
+                  ? {
+                      left: {
+                        element: (
+                          <View style={[styles.overlayWrapper, { borderColor: '#FF4B4B' }]}>
+                            <View>
+                              <Ionicons name="close-circle" size={40} color="#FF4B4B" />
+                            </View>
+                            <View>
+                              <Text style={[styles.overlayText, { color: '#FF4B4B' }]}>
+                                Not Watched
+                              </Text>
+                            </View>
                           </View>
-                          <View>
-                            <Text style={[styles.overlayText, { color: '#FF4B4B' }]}>
-                              Not Watched
-                            </Text>
+                        ),
+                      },
+                      right: {
+                        element: (
+                          <View style={[styles.overlayWrapper, { borderColor: '#4BFF4B' }]}>
+                            <View>
+                              <Ionicons name="checkmark-circle" size={40} color="#4BFF4B" />
+                            </View>
+                            <View>
+                              <Text style={[styles.overlayText, { color: '#4BFF4B' }]}>
+                                Watched
+                              </Text>
+                            </View>
                           </View>
-                        </View>
-                      ),
-                    },
-                    right: {
-                      element: (
-                        <View style={[styles.overlayWrapper, { borderColor: '#4BFF4B' }]}>
-                          <View>
-                            <Ionicons name="checkmark-circle" size={40} color="#4BFF4B" />
+                        ),
+                      },
+                      top: {
+                        element: (
+                          <View style={[styles.overlayWrapper, { borderColor: '#FFD700' }]}>
+                            <View>
+                              <Ionicons name="repeat" size={40} color="#FFD700" />
+                            </View>
+                            <View>
+                              <Text style={[styles.overlayText, { color: '#FFD700' }]}>
+                                Most Watch
+                              </Text>
+                            </View>
                           </View>
-                          <View>
-                            <Text style={[styles.overlayText, { color: '#4BFF4B' }]}>
-                              Watched
-                            </Text>
+                        ),
+                      },
+                      bottom: {
+                        element: (
+                          <View style={[styles.overlayWrapper, { borderColor: '#00BFFF' }]}>
+                            <View>
+                              <Ionicons name="time" size={40} color="#00BFFF" />
+                            </View>
+                            <View>
+                              <Text style={[styles.overlayText, { color: '#00BFFF' }]}>
+                                Watch Later
+                              </Text>
+                            </View>
                           </View>
-                        </View>
-                      ),
-                    },
-                    top: {
-                      element: (
-                        <View style={[styles.overlayWrapper, { borderColor: '#FFD700' }]}>
-                          <View>
-                            <Ionicons name="repeat" size={40} color="#FFD700" />
+                        ),
+                      },
+                    }
+                  : undefined
+              }
+              swipeAnimationDuration={swipingEnabled ? 350 : 0}
+              animateCardOpacity={true}
+              containerStyle={styles.swiperContainer}
+              cardStyle={styles.cardStyle}
+            />
+          </View>
+        ) : (
+          // ...existing swiper logic for non-search scenario...
+          <View style={styles.cardsWrapper}>
+            <Swiper
+              cards={movies}
+              renderCard={renderCard}
+              onSwiping={(x: number) => {
+                swipeAnimatedValue.setValue(x);
+              }}
+              onSwipeStart={() => {
+                swipeAnimatedValue.setValue(0);
+              }}
+              onSwipeEnd={() => {
+                Animated.timing(swipeAnimatedValue, {
+                  toValue: 0,
+                  duration: 300,
+                  useNativeDriver: true,
+                }).start();
+              }}
+              infinite={false}
+              backgroundColor="transparent"
+              cardVerticalMargin={0}
+              cardHorizontalMargin={0}
+              stackSize={3}
+              stackScale={10}
+              stackSeparation={14}
+              overlayOpacityHorizontalThreshold={width / 8}
+              overlayOpacityVerticalThreshold={SCREEN_HEIGHT / 8}
+              inputRotationRange={[-width / 2, 0, width / 2]}
+              outputRotationRange={['-10deg', '0deg', '10deg']}
+              onSwipedAll={() => {
+                fetchMoreMovies();
+                setCurrentIndex(0);
+              }}
+              onSwipedTop={handleSwipedTop}
+              onSwipedBottom={handleSwipedBottom}
+              onSwipedRight={handleSwipedRight}
+              onSwipedLeft={handleSwipedLeft}
+              onSwiped={handleSwiped}
+              cardIndex={currentIndex}
+              verticalSwipe={swipingEnabled}
+              horizontalSwipe={swipingEnabled}
+              disableTopSwipe={!swipingEnabled}
+              disableBottomSwipe={!swipingEnabled}
+              disableLeftSwipe={!swipingEnabled}
+              disableRightSwipe={!swipingEnabled}
+              verticalThreshold={SCREEN_HEIGHT / 6}
+              horizontalThreshold={width / 6}
+              useViewOverflow={false}
+              preventSwiping={['up', 'down', 'left', 'right']}
+              swipeBackCard={false}
+              overlayLabels={
+                swipingEnabled
+                  ? {
+                      left: {
+                        element: (
+                          <View style={[styles.overlayWrapper, { borderColor: '#FF4B4B' }]}>
+                            <View>
+                              <Ionicons name="close-circle" size={40} color="#FF4B4B" />
+                            </View>
+                            <View>
+                              <Text style={[styles.overlayText, { color: '#FF4B4B' }]}>
+                                Not Watched
+                              </Text>
+                            </View>
                           </View>
-                          <View>
-                            <Text style={[styles.overlayText, { color: '#FFD700' }]}>
-                              Most Watch
-                            </Text>
+                        ),
+                      },
+                      right: {
+                        element: (
+                          <View style={[styles.overlayWrapper, { borderColor: '#4BFF4B' }]}>
+                            <View>
+                              <Ionicons name="checkmark-circle" size={40} color="#4BFF4B" />
+                            </View>
+                            <View>
+                              <Text style={[styles.overlayText, { color: '#4BFF4B' }]}>
+                                Watched
+                              </Text>
+                            </View>
                           </View>
-                        </View>
-                      ),
-                    },
-                    bottom: {
-                      element: (
-                        <View style={[styles.overlayWrapper, { borderColor: '#00BFFF' }]}>
-                          <View>
-                            <Ionicons name="time" size={40} color="#00BFFF" />
+                        ),
+                      },
+                      top: {
+                        element: (
+                          <View style={[styles.overlayWrapper, { borderColor: '#FFD700' }]}>
+                            <View>
+                              <Ionicons name="repeat" size={40} color="#FFD700" />
+                            </View>
+                            <View>
+                              <Text style={[styles.overlayText, { color: '#FFD700' }]}>
+                                Most Watch
+                              </Text>
+                            </View>
                           </View>
-                          <View>
-                            <Text style={[styles.overlayText, { color: '#00BFFF' }]}>
-                              Watch Later
-                            </Text>
+                        ),
+                      },
+                      bottom: {
+                        element: (
+                          <View style={[styles.overlayWrapper, { borderColor: '#00BFFF' }]}>
+                            <View>
+                              <Ionicons name="time" size={40} color="#00BFFF" />
+                            </View>
+                            <View>
+                              <Text style={[styles.overlayText, { color: '#00BFFF' }]}>
+                                Watch Later
+                              </Text>
+                            </View>
                           </View>
-                        </View>
-                      ),
-                    },
-                  }
-                : undefined
-            }
-            swipeAnimationDuration={swipingEnabled ? 350 : 0}
-            animateCardOpacity={true}
-            containerStyle={styles.swiperContainer}
-            cardStyle={styles.cardStyle}
-          />
-        </View>
-
+                        ),
+                      },
+                    }
+                  : undefined
+              }
+              swipeAnimationDuration={swipingEnabled ? 350 : 0}
+              animateCardOpacity={true}
+              containerStyle={styles.swiperContainer}
+              cardStyle={styles.cardStyle}
+            />
+          </View>
+        )}
         {/* Fixed Bottom Controls */}
         <View style={styles.bottomControls}>
           {/* Categories */}
@@ -525,36 +702,6 @@ const CineBrowseScreen: React.FC = () => {
               categories={defaultCategories}
               containerStyle={styles.filterCardCustom}
             />
-          </View>
-
-          {/* Search Bar */}
-          <View style={styles.searchSection}>
-            <TouchableOpacity
-              activeOpacity={1}
-              style={styles.searchWrapper}
-              onPress={() => searchInputRef.current?.focus()}
-            >
-              <TextInput
-                ref={searchInputRef}
-                style={styles.searchInput}
-                placeholder="Search movies & TV shows..."
-                placeholderTextColor="#666"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                returnKeyType="search"
-              />
-              {searchQuery ? (
-                <TouchableOpacity 
-                  onPress={() => setSearchQuery('')}
-                  style={styles.clearButton}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <Ionicons name="close-circle" size={20} color="#666" />
-                </TouchableOpacity>
-              ) : (
-                <Ionicons name="search" size={20} color="#666" />
-              )}
-            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -727,6 +874,34 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 3,
+  },
+  topSearchSection: {
+    paddingHorizontal: 15,
+    paddingTop: 8,
+    backgroundColor: '#000',
+    // additional styling as needed
+  },
+  searchGridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    padding: 10,
+  },
+  searchGridItem: {
+    width: (width - 60) / 3,
+    marginBottom: 15,
+    alignItems: 'center',
+  },
+  searchGridImage: {
+    width: '100%',
+    aspectRatio: 0.7,
+    borderRadius: 6,
+  },
+  searchGridText: {
+    color: '#fff',
+    marginTop: 5,
+    textAlign: 'center',
+    fontSize: 12,
   },
 });
 
