@@ -173,9 +173,9 @@ const CineBrowseScreen: React.FC = () => {
         throw new Error('No results returned');
       }
 
-      const newMovies = response.results.filter(
-        (m: Movie) => !displayedMovieIds.current.has(m.id)
-      );
+      const newMovies = response.results
+        .filter((m: Movie) => !displayedMovieIds.current.has(m.id))
+        .sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0));
 
       movieCache.data.set(cacheKey, newMovies);
       movieCache.timestamp.set(cacheKey, now);
@@ -183,6 +183,7 @@ const CineBrowseScreen: React.FC = () => {
       appendMovies(newMovies);
       setBackgroundCards((prev) => [...prev, ...newMovies.slice(0, 3)]);
       newMovies.forEach((movie: Movie) => displayedMovieIds.current.add(movie.id));
+      setCurrentPage((prev) => prev + 1);
     } catch (error) {
       console.error('Error fetching more movies:', error);
       handleFetchError(error as Error);
@@ -271,8 +272,9 @@ const CineBrowseScreen: React.FC = () => {
     setIsChangingCategory(true);
     previousCategory.current = selectedCategory;
     setSelectedCategory(category);
+    setCurrentPage(1);
+    setBackgroundCards([]);
     setMovies([]);
-    setCurrentIndex(0);
     displayedMovieIds.current.clear();
 
     debouncedFetch.current = setTimeout(async () => {
@@ -362,13 +364,19 @@ const CineBrowseScreen: React.FC = () => {
     const searchMovies = async () => {
       if (!searchQuery.trim()) {
         setSearchResults([]);
+        setIsSearchGridView(false);
+        setSelectedSearchMovie(null);
+        fetchMoreMovies();
         return;
       }
       setIsSearching(true);
       try {
         const response = await searchMoviesAndShows(searchQuery);
         if (response?.results?.length) {
-          setSearchResults(response.results);
+          const sortedResults = response.results.sort(
+            (a, b) => (b.popularity ?? 0) - (a.popularity ?? 0)
+          );
+          setSearchResults(sortedResults);
           setIsSearchGridView(true);
           setSelectedSearchMovie(null);
         } else {
@@ -484,6 +492,10 @@ const CineBrowseScreen: React.FC = () => {
               inputRotationRange={[-width / 2, 0, width / 2]}
               outputRotationRange={['-10deg', '0deg', '10deg']}
               onSwipedAll={() => {
+                setSearchQuery('');
+                setSearchResults([]);
+                setIsSearchGridView(false);
+                setSelectedSearchMovie(null);
                 fetchMoreMovies();
                 setCurrentIndex(0);
               }}
