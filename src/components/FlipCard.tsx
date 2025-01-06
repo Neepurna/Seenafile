@@ -520,24 +520,22 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
 
 const styles = StyleSheet.create({
   container: {
-    width: DIMS.width,
-    height: CARD_HEIGHT,
+    width: '100%',
+    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    margin: 0,
-    padding: 0,
   },
   cardFace: {
-    width: DIMS.width,
-    height: CARD_HEIGHT,
+    width: '100%',
+    height: '100%',
     position: 'absolute',
+    backfaceVisibility: 'hidden',
+    borderRadius: 15,
     overflow: 'hidden',
-    backgroundColor: COLORS.surface,
-    left: 0,
-    top: 0,
   },
   cardBack: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#000',
+    transform: [{ rotateY: '180deg' }],
   },
   frontFaceContainer: {
     flex: 1,

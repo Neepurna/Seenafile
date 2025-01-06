@@ -1,5 +1,5 @@
 // ...existing imports...
-import { auth, db } from '../firebase';
+import { auth, db } from './src/firebase';
 import { collection, addDoc, doc, serverTimestamp } from 'firebase/firestore';
 
 interface ReviewData {

@@ -22,6 +22,10 @@ service cloud.firestore {
       ]);
     }
 
+    function isChatParticipant(chatData) {
+      return request.auth.uid in chatData.participants;
+    }
+
     // Global movies/reviews collection
     match /movies/{movieId} {
       allow read: if isSignedIn();
@@ -62,6 +66,15 @@ service cloud.firestore {
           && hasRequiredReviewFields();
         allow delete: if isSignedIn() && isOwner(userId);
       }
+
+      // User's chats collection for quick access
+      match /users/{userId}/chats/{chatId} {
+        allow read: if isSignedIn() && isOwner(userId);
+        allow write: if isSignedIn() 
+          && isOwner(userId)
+          && exists(/databases/$(database)/documents/chats/$(chatId))
+          && isChatParticipant(get(/databases/$(database)/documents/chats/$(chatId)).data);
+      }
     }
 
     // Shared reviews collection
@@ -72,6 +85,40 @@ service cloud.firestore {
         && hasRequiredReviewFields();
       allow update, delete: if isSignedIn() 
         && resource.data.userId == request.auth.uid;
+    }
+
+    // Chat specific rules
+    match /chats/{chatId} {
+      // Allow read/write if user is signed in (temporarily relaxed for debugging)
+      allow read: if isSignedIn();
+      
+      // Messages subcollection rules
+      match /messages/{messageId} {
+        // Allow read for all authenticated users (temporarily relaxed for debugging)
+        allow read: if isSignedIn();
+        
+        allow create: if isSignedIn() 
+          && request.resource.data.senderId == request.auth.uid
+          && request.resource.data.keys().hasAll(['senderId', 'text', 'timestamp', 'read']);
+        
+        allow update: if isSignedIn() 
+          && (
+            resource.data.senderId == request.auth.uid ||
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+          );
+      }
+
+      // Relaxed create rule for debugging
+      allow create: if isSignedIn() 
+        && request.resource.data.keys().hasAll(['participants', 'lastMessage', 'lastMessageTimestamp']);
+
+      // Relaxed update rule for debugging
+      allow update: if isSignedIn();
+    }
+
+    // Add this new rule for user-specific chat data
+    match /users/{userId}/chats/{chatId} {
+      allow read, write: if isSignedIn() && (request.auth.uid == userId);
     }
   }
 }

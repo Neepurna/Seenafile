@@ -1,17 +1,20 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { 
+////////////////////////////////////////////////////////////////////////////////
+// Tabs.tsx
+////////////////////////////////////////////////////////////////////////////////
+import React, { useState, useRef } from 'react';
+import {
   PanResponder,
-  StyleSheet
+  StyleSheet,
+  Dimensions,
+  TouchableOpacity,
+  Text,
+  Animated,
 } from 'react-native';
-import { Modal, Animated, Dimensions } from 'react-native';
-import ProfileScreen from '../screens/ProfileScreen';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import { TouchableOpacity, Text } from 'react-native';
+import ProfileScreen from '../screens/ProfileScreen';
 import CineBrowseScreen from '../screens/CineBrowseScreen';
 import CinePalScreen from '../screens/CinePalScreen';
-import MovieChatScreen from '../screens/MovieChatScreen'; // Update this line
-import CineGamesScreen from '../screens/CineGamesScreen';
 import MyWallScreen from '../screens/MyWallScreen';
 import MovieGridScreen from '../screens/MovieGridScreen';
 import SettingsScreen from '../screens/SettingsScreen';
@@ -21,9 +24,7 @@ const Tab = createBottomTabNavigator<TabsStackParamList>();
 type TabsStackParamList = {
   CineBrowse: undefined;
   CinePal: undefined;
-  MovieChat: undefined;
-  CineFile: undefined;
-  CineGames: undefined;
+  Profile: undefined;
   MyWall: {
     userId: string;
     username: string;
@@ -36,7 +37,7 @@ type TabsStackParamList = {
   };
 };
 
-const TAB_BAR_HEIGHT = 100; // Increased by 2% from 66 to 67
+const TAB_BAR_HEIGHT = 100; // Custom tab bar height
 
 const Tabs: React.FC = () => {
   const [isProfileVisible, setIsProfileVisible] = useState(false);
@@ -100,84 +101,72 @@ const Tabs: React.FC = () => {
     <>
       <Tab.Navigator<TabsStackParamList>
         screenOptions={({ route, navigation }) => ({
-          headerShown: true, // Show header for all screens
+          // Hide the header only on CineBrowse screen
+          headerShown: route.name !== 'CineBrowse',
           tabBarShowLabel: false,
-          headerTitle: 'SeenaFile',
+          headerTitle: '',
           headerTitleStyle: {
             fontSize: 24,
             fontWeight: 'bold',
             color: '#fff',
           },
           headerRight: () => (
-            <TouchableOpacity 
-              onPress={showProfile}
-              style={{ marginRight: 15 }}
-            >
+            <TouchableOpacity onPress={showProfile} style={{ marginRight: 15 }}>
               <Ionicons name="settings-outline" size={24} color="#fff" />
             </TouchableOpacity>
           ),
           tabBarIcon: ({ color, size }) => {
             let iconName: string;
-
             if (route.name === 'CineBrowse') {
-              iconName = 'film-outline'; // Updated icon name
+              iconName = 'film-outline';
             } else if (route.name === 'CinePal') {
-              iconName = 'people-outline'; // Updated icon name
-            } else if (route.name === 'MovieChat') {  // Updated name
-              iconName = 'chatbubbles-outline';  // Updated icon
-            } else if (route.name === 'CineGames') {
-              iconName = 'game-controller-outline';
+              iconName = 'people-outline';
             } else if (route.name === 'Profile') {
               iconName = 'person-circle-outline';
             }
-
-            return <Ionicons name={iconName} size={size} color={color} />;
+            return <Ionicons name={iconName as any} size={size} color={color} />;
           },
           tabBarStyle: {
             height: TAB_BAR_HEIGHT,
             backgroundColor: '#000',
-            paddingBottom: 10, // Add some padding for better touch targets
+            paddingBottom: 10,
           },
           tabBarItemStyle: {
             padding: 5,
           },
           headerStyle: {
-            backgroundColor: '#000', // Make header black for other screens
-            height: 100, // Increased header height
+            backgroundColor: '#000',
+            height: 100,
           },
-          headerTintColor: '#fff', // Make header text white for other screens
+          headerTintColor: '#fff',
         })}
       >
         <Tab.Screen name="CineBrowse" component={CineBrowseScreen} />
         <Tab.Screen name="CinePal" component={CinePalScreen} />
-        <Tab.Screen name="MovieChat" component={MovieChatScreen} />
-        <Tab.Screen name="CineGames" component={CineGamesScreen} />
         <Tab.Screen name="Profile" component={ProfileScreen} />
-        <Tab.Screen 
-          name="MyWall" 
+        <Tab.Screen
+          name="MyWall"
           component={MyWallScreen}
           options={({ navigation }) => ({
-            tabBarButton: () => null,  // This hides just this screen's tab button
+            tabBarButton: () => null,
             headerLeft: () => (
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={() => navigation.goBack()}
                 style={{ marginLeft: 15 }}
               >
                 <Ionicons name="arrow-back" size={24} color="#fff" />
               </TouchableOpacity>
             ),
-            headerTitle: 'User Profile'
+            headerTitle: 'User Profile',
           })}
         />
-        <Tab.Screen 
-          name="MovieGridScreen" 
+        <Tab.Screen
+          name="MovieGridScreen"
           component={MovieGridScreen}
           options={({ route }) => ({
-            tabBarButton: () => null, // Hide from tab bar
+            tabBarButton: () => null,
             headerTitle: route.params?.folderName ?? 'Movies',
-            headerStyle: {
-              backgroundColor: '#000',
-            },
+            headerStyle: { backgroundColor: '#000' },
             headerTintColor: '#fff',
           })}
         />
@@ -194,9 +183,7 @@ const Tabs: React.FC = () => {
             {...panResponder.panHandlers}
             style={[
               styles.profilePanel,
-              {
-                transform: [{ translateX: slideAnim }],
-              },
+              { transform: [{ translateX: slideAnim }] },
             ]}
           >
             <SettingsScreen onClose={hideProfile} />
@@ -223,14 +210,10 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#000',
     shadowColor: '#000',
-    shadowOffset: {
-      width: -2,
-      height: 0,
-    },
+    shadowOffset: { width: -2, height: 0 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
   },
 });
-
 export default Tabs;

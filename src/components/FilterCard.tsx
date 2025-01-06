@@ -17,19 +17,21 @@ interface FilterCardProps {
   selectedCategory: string;
   onSelectCategory: (category: string) => void;
   categories: string[];
+  containerStyle?: StyleProp<ViewStyle>; // Add this prop
 }
 
 const FilterCard: React.FC<FilterCardProps> = ({
   selectedCategory,
   onSelectCategory,
-  categories
+  categories,
+  containerStyle // Add this prop
 }) => {
   return (
-    <View style={styles.mainContainer}>
+    <View style={[styles.container, containerStyle]}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.container}
+        contentContainerStyle={styles.categoriesContainer}
       >
         {categories.map((category) => (
           <TouchableOpacity
@@ -61,31 +63,35 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   container: {
-    paddingHorizontal: 15,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 20,
+    padding: 5,
+    marginBottom: 5, // Add margin to separate from search bar
+  },
+  categoriesContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    paddingHorizontal: 5,
   },
   categoryButton: {
     paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    marginHorizontal: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    minWidth: 80,
-    alignItems: 'center',
+    paddingVertical: 5,
+    borderRadius: 15,
+    marginHorizontal: 5,
+    height: 30, // Make buttons shorter
+    backgroundColor: 'rgba(255, 255, 255, 0.1)', // Add background color
   },
   selectedCategory: {
     backgroundColor: '#fff',
   },
   categoryText: {
     color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 13, // Slightly smaller text
+    fontWeight: '500', // Make text more visible
   },
   selectedCategoryText: {
     color: '#000',
+    fontWeight: 'bold',
   },
   filterContainer: {
     flexDirection: 'row',
