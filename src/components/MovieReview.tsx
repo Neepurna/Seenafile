@@ -79,44 +79,64 @@ const MovieReview: React.FC<MovieReviewProps> = ({
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.reviewHeader}>
-        <Text style={styles.title}>Write a Review</Text>
-        <Text style={styles.movieTitle}>{movie.title}</Text>
-      </View>
-      
-      <TextInput
-        style={styles.reviewInput}
-        multiline
-        placeholder="Share your thoughts..."
-        placeholderTextColor="#666"
-        value={review}
-        onChangeText={setReview}
-      />
-
-      <View style={styles.ratingContainer}>
-        {renderStars()}
-      </View>
-
-      <View style={styles.reviewActions}>
-        <TouchableOpacity
-          style={[styles.button, isSubmitting && styles.buttonDisabled]}
-          onPress={handlePost}
-          disabled={isSubmitting}
+    <KeyboardAvoidingView 
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 150 : 0}
+      style={styles.container}
+    >
+      <View style={styles.innerContainer}>
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.buttonText}>{isSubmitting ? 'Posting...' : 'Post Review'}</Text>
-        </TouchableOpacity>
+          <View style={styles.reviewHeader}>
+            <Text style={styles.title}>Write a Review</Text>
+            <Text style={styles.movieTitle}>{movie.title}</Text>
+          </View>
+          
+          <TextInput
+            style={styles.reviewInput}
+            multiline
+            placeholder="Share your thoughts..."
+            placeholderTextColor="#666"
+            value={review}
+            onChangeText={setReview}
+          />
+
+          <View style={styles.ratingContainer}>
+            {renderStars()}
+          </View>
+        </ScrollView>
+
+        <View style={styles.reviewActions}>
+          <TouchableOpacity
+            style={[styles.button, isSubmitting && styles.buttonDisabled]}
+            onPress={handlePost}
+            disabled={isSubmitting}
+          >
+            <Text style={styles.buttonText}>
+              {isSubmitting ? 'Posting...' : 'Post Review'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 15,
-    justifyContent: 'space-between',
     backgroundColor: '#000',
+  },
+  innerContainer: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  scrollContent: {
+    padding: 15,
+    flexGrow: 0,
   },
   reviewHeader: {
     marginBottom: 15,
@@ -135,17 +155,23 @@ const styles = StyleSheet.create({
   reviewInput: {
     color: '#fff',
     fontSize: 16,
-    height: CARD_HEIGHT * 0.4,
+    height: CARD_HEIGHT * 0.2, // Further reduced height
     textAlignVertical: 'top',
     marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#333',
+    borderRadius: 8,
+    padding: 10,
   },
   ratingContainer: {
     marginBottom: 15,
   },
   reviewActions: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 'auto',
+    padding: 15,
+    paddingBottom: Platform.OS === 'ios' ? 25 : 15,
+    borderTopWidth: 1,
+    borderTopColor: '#333',
+    backgroundColor: '#000',
   },
   starsContainer: {
     flexDirection: 'row',
@@ -173,7 +199,6 @@ const styles = StyleSheet.create({
     padding: 15,
     borderRadius: 25,
     width: '100%',
-    marginBottom: 20,
   },
   buttonText: {
     color: '#FFF',
