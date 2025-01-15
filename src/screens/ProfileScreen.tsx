@@ -20,9 +20,9 @@ interface FolderData {
 
 const folders: FolderData[] = [
   { id: 'watched', name: 'Watched', color: '#4BFF4B', count: 0, icon: 'checkmark-circle' },
-  { id: 'most_watch', name: 'Most Watched', color: '#FFD700', count: 0, icon: 'repeat' },
+  { id: 'most_watched', name: 'Most Watched', color: '#FFD700', count: 0, icon: 'repeat' }, // Updated id from 'most_watch' to 'most_watched'
   { id: 'watch_later', name: 'Watch Later', color: '#00BFFF', count: 0, icon: 'time' },
-  { id: 'critics', name: 'Critics', color: '#FF4081', count: 0, icon: 'star' }, // Updated folder
+  { id: 'critics', name: 'Critics', color: '#FF4081', count: 0, icon: 'star' },
 ];
 
 const ProfileScreen: React.FC = () => {
@@ -61,19 +61,23 @@ const ProfileScreen: React.FC = () => {
       const moviesRef = collection(userRef, 'movies');
   
       try {
-        // Simple query for movies with category
         const moviesSnap = await getDocs(moviesRef);
         const counts = {
           watched: 0,
-          most_watch: 0,
+          most_watched: 0,
           watch_later: 0,
           critics: 0
         };
   
         moviesSnap.docs.forEach(doc => {
           const data = doc.data();
-          if (data.category && counts.hasOwnProperty(data.category)) {
-            counts[data.category]++;
+          if (data.category) {
+            // Handle both old and new category names
+            if (data.category === 'most_watch' || data.category === 'most_watched') {
+              counts.most_watched++;
+            } else if (counts.hasOwnProperty(data.category)) {
+              counts[data.category]++;
+            }
           }
         });
   
