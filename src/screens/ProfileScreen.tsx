@@ -18,11 +18,12 @@ interface FolderData {
   icon: string;
 }
 
+// Update the folders array with correct icon
 const folders: FolderData[] = [
   { id: 'watched', name: 'Watched', color: '#4BFF4B', count: 0, icon: 'checkmark-circle' },
-  { id: 'most_watched', name: 'Most Watched', color: '#FFD700', count: 0, icon: 'repeat' }, // Updated id from 'most_watch' to 'most_watched'
+  { id: 'most_watch', name: 'Most Watched', color: '#FFD700', count: 0, icon: 'repeat' },
   { id: 'watch_later', name: 'Watch Later', color: '#00BFFF', count: 0, icon: 'time' },
-  { id: 'critics', name: 'Critics', color: '#FF4081', count: 0, icon: 'star' },
+  { id: 'critics', name: 'Critics', color: '#FF4081', count: 0, icon: 'star' }, // Changed icon to 'star'
 ];
 
 const ProfileScreen: React.FC = () => {
@@ -52,45 +53,35 @@ const ProfileScreen: React.FC = () => {
       setIsLoading(false);
     });
 
-    // Fetch user profile and movie counts
-    const fetchData = async () => {
-      if (!auth.currentUser) return;
-      
-      const userId = auth.currentUser.uid;
-      const userRef = doc(db, 'users', userId);
-      const moviesRef = collection(userRef, 'movies');
-  
+    // Replace fetchData with live snapshot listener
+    const moviesUnsubscribe = onSnapshot(moviesRef, (snapshot) => {
       try {
-        const moviesSnap = await getDocs(moviesRef);
         const counts = {
           watched: 0,
-          most_watched: 0,
+          most_watch: 0,
           watch_later: 0,
           critics: 0
         };
-  
-        moviesSnap.docs.forEach(doc => {
+
+        snapshot.docs.forEach(doc => {
           const data = doc.data();
           if (data.category) {
-            // Handle both old and new category names
-            if (data.category === 'most_watch' || data.category === 'most_watched') {
-              counts.most_watched++;
+            if (data.category === 'most_watched') {
+              counts.most_watch++;
             } else if (counts.hasOwnProperty(data.category)) {
               counts[data.category]++;
             }
           }
         });
-  
+
         setFolderCounts(counts);
         setIsLoading(false);
       } catch (error) {
-        console.error('Error fetching counts:', error);
+        console.error('Error processing movies:', error);
         setError('Failed to load data');
         setIsLoading(false);
       }
-    };
-  
-    fetchData();
+    });
 
     // Fetch reviews if needed for critics folder
     const reviewsUnsubscribe = onSnapshot(reviewsRef, (snapshot) => {
@@ -103,6 +94,7 @@ const ProfileScreen: React.FC = () => {
 
     return () => {
       profileUnsubscribe();
+      moviesUnsubscribe();
       reviewsUnsubscribe();
     };
   }, [navigation]);
@@ -131,6 +123,7 @@ const ProfileScreen: React.FC = () => {
     );
   };
 
+  // Update the folder press handler in renderFolder
   const renderFolder = ({ item: folder }: { item: FolderData }) => (
     <TouchableOpacity 
       style={[
@@ -144,7 +137,7 @@ const ProfileScreen: React.FC = () => {
         }
       ]}
       onPress={() => navigation.navigate('MovieGridScreen', { 
-        folderId: folder.id,
+        folderId: folder.id === 'most_watch' ? 'most_watch' : folder.id, // Ensure consistent ID
         folderName: folder.name,
         folderColor: folder.color,
         isCritics: folder.id === 'critics' // Add this flag for MovieGridScreen
