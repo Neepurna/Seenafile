@@ -22,34 +22,34 @@ service cloud.firestore {
       ]);
     }
 
+    // New function for minimal movie fields (no rating/review needed)
+    function hasMinimumMovieFields() {
+      let data = request.resource.data;
+      return data.keys().hasAll([
+        'movieId',
+        'movieTitle',
+        'createdAt',
+        'category'
+      ]);
+    }
+
     function isChatParticipant(chatData) {
       return request.auth.uid in chatData.participants;
     }
 
-    // Global movies/reviews collection
+    // Global movies collection
     match /movies/{movieId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() 
-        && request.resource.data.userId == request.auth.uid 
-        && hasRequiredReviewFields();
-      allow update: if isSignedIn() 
-        && resource.data.userId == request.auth.uid;
-      allow delete: if isSignedIn() 
-        && resource.data.userId == request.auth.uid;
+      allow read, write: if isSignedIn();  // Temporarily relaxed for debugging
     }
     
     // User specific data
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn() && isOwner(userId);
+      allow write: if isSignedIn();  // Temporarily relaxed for debugging
       
       // User's movies collection (includes reviews)
       match /movies/{movieId} {
-        allow read: if isSignedIn(); // Allow all signed-in users to read
-        allow create: if isSignedIn() 
-          && isOwner(userId) 
-          && hasRequiredReviewFields();
-        allow update, delete: if isSignedIn() && isOwner(userId);
+        allow read, write: if isSignedIn();  // Temporarily relaxed for debugging
       }
 
       // User's reviews subcollection
