@@ -79,88 +79,73 @@ const MovieReview: React.FC<MovieReviewProps> = ({
   );
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <ScrollView style={styles.scrollView}>
-        <View style={styles.content}>
-          <Image
-            source={{ uri: `https://image.tmdb.org/t/p/w500${movie.poster_path}` }}
-            style={styles.posterImage}
-          />
-          
-          <Text style={styles.movieTitle}>{movie.title}</Text>
-          
-          <Text style={styles.ratingLabel}>Your Rating</Text>
-          {renderStars()}
-          
-          <Text style={styles.reviewLabel}>Your Review</Text>
-          <TextInput
-            style={styles.reviewInput}
-            multiline
-            placeholder="Write your review here..."
-            placeholderTextColor="#666"
-            value={review}
-            onChangeText={setReview}
-          />
+    <View style={styles.container}>
+      <View style={styles.reviewHeader}>
+        <Text style={styles.title}>Write a Review</Text>
+        <Text style={styles.movieTitle}>{movie.title}</Text>
+      </View>
+      
+      <TextInput
+        style={styles.reviewInput}
+        multiline
+        placeholder="Share your thoughts..."
+        placeholderTextColor="#666"
+        value={review}
+        onChangeText={setReview}
+      />
 
-          <TouchableOpacity
-            style={[styles.postButton, isSubmitting && styles.postButtonDisabled]}
-            onPress={handlePost}
-            disabled={isSubmitting}
-          >
-            <Ionicons name="paper-plane" size={24} color="#FFF" />
-            <Text style={styles.postButtonText}>
-              {isSubmitting ? 'Posting...' : 'Post Review'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <View style={styles.ratingContainer}>
+        {renderStars()}
+      </View>
+
+      <View style={styles.reviewActions}>
+        <TouchableOpacity
+          style={[styles.button, isSubmitting && styles.buttonDisabled]}
+          onPress={handlePost}
+          disabled={isSubmitting}
+        >
+          <Text style={styles.buttonText}>{isSubmitting ? 'Posting...' : 'Post Review'}</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
-    width: '100%',
-    height: '100%',
-  },
-  reviewCard: {
-    flex: 1,
-    backgroundColor: '#1a1a1a',
-    borderRadius: 15,
     padding: 15,
-    width: '100%',
-    height: '100%',
+    justifyContent: 'space-between',
+    backgroundColor: '#000',
   },
-  scrollView: {
-    flex: 1,
+  reviewHeader: {
+    marginBottom: 15,
   },
-  content: {
-    padding: 20,
-    alignItems: 'center',
-  },
-  posterImage: {
-    width: width * 0.5,
-    height: height * 0.3,
-    borderRadius: 10,
-    marginBottom: 20,
-  },
-  movieTitle: {
+  title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#FFF',
-    marginBottom: 20,
-    textAlign: 'center',
+    color: '#fff',
+    marginBottom: 5,
   },
-  ratingLabel: {
+  movieTitle: {
     fontSize: 18,
-    color: '#FFF',
-    marginBottom: 10,
-    alignSelf: 'flex-start',
+    color: '#ccc',
+    marginBottom: 15,
+  },
+  reviewInput: {
+    color: '#fff',
+    fontSize: 16,
+    height: CARD_HEIGHT * 0.4,
+    textAlignVertical: 'top',
+    marginBottom: 15,
+  },
+  ratingContainer: {
+    marginBottom: 15,
+  },
+  reviewActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 'auto',
   },
   starsContainer: {
     flexDirection: 'row',
@@ -180,23 +165,7 @@ const styles = StyleSheet.create({
   starFilled: {
     color: '#FFD700',
   },
-  reviewLabel: {
-    fontSize: 18,
-    color: '#FFF',
-    marginBottom: 10,
-    alignSelf: 'flex-start',
-  },
-  reviewInput: {
-    backgroundColor: '#1A1A1A',
-    borderRadius: 10,
-    padding: 15,
-    color: '#FFF',
-    width: '100%',
-    minHeight: 150,
-    marginBottom: 20,
-    textAlignVertical: 'top',
-  },
-  postButton: {
+  button: {
     backgroundColor: '#FF4081',
     flexDirection: 'row',
     alignItems: 'center',
@@ -206,13 +175,13 @@ const styles = StyleSheet.create({
     width: '100%',
     marginBottom: 20,
   },
-  postButtonText: {
+  buttonText: {
     color: '#FFF',
     fontSize: 18,
     fontWeight: 'bold',
     marginLeft: 10,
   },
-  postButtonDisabled: {
+  buttonDisabled: {
     opacity: 0.5,
   },
 });

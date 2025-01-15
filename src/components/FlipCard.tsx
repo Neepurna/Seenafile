@@ -62,7 +62,32 @@ interface Review {
 }
 
 interface FlipCardProps {
-  movie: Movie;
+  movie: {
+    id: number;
+    title?: string;  // Make title optional
+    name?: string;   // Add name as optional for TV shows
+    poster_path: string | null;
+    vote_average: number;
+    overview: string;
+    release_date: string;
+    runtime?: number;
+    genres?: Array<{ id: number; name: string }>;
+    category?: string; // Make this more flexible
+    vote_count?: number;
+    media_type?: 'movie' | 'tv';  // Match the type from api.ts
+    cast?: {
+      id: number;
+      name: string;
+      character: string;
+      profile_path: string | null;
+    }[];
+    crew?: {
+      id: number;
+      name: string;
+      job: string;
+      department: string;
+    }[];
+  };
   onSwipingStateChange: (enabled: boolean) => void;
 }
 

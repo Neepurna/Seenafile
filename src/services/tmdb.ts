@@ -1,6 +1,7 @@
 // src/services/tmdb.ts
 
 import axiosInstance from './instance';
+import { Movie, MovieApiResponse } from './api';
 
 const TMDB_API_KEY = '559819d48b95a2e3440df0504dea30fd'; // Replace with your TMDB API key
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
@@ -459,9 +460,9 @@ export const fetchAvailableCountries = async (): Promise<CountryConfig[]> => {
 // Update the movie fetching function to be more centralized
 export const fetchMoviesByCategory = async (
   category: string,
-  page: number = 1,
-  options: { batchSize?: number; language?: string; region?: string } = {}
-) => {
+  page: number,
+  options: { batchSize: number }
+): Promise<MovieApiResponse> => {
   const { batchSize = 20, ...restOptions } = options;
   
   return requestQueue.add(async () => {

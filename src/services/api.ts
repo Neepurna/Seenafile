@@ -5,10 +5,13 @@ export interface Genre {
 
 export interface Movie {
   id: number;
-  title: string;
+  title: string;        // Make title required
+  name?: string;        // Keep name optional
+  displayTitle?: string; // Add a computed property that will always have a value
+  media_type?: 'movie' | 'tv'; // Update this line to remove string from union type
   overview: string;
   poster_path: string | null;
-  backdrop_path: string;
+  backdrop_path?: string;  // Add this line
   release_date: string;
   runtime: number;
   vote_average: number;
@@ -22,6 +25,13 @@ export interface Movie {
 export interface MovieResponse {
   page: number;
   results: Movie[];
+  total_pages: number;
+  total_results: number;
+}
+
+export interface MovieApiResponse {
+  results: Movie[];
+  page: number;
   total_pages: number;
   total_results: number;
 }
@@ -40,6 +50,13 @@ export interface CrewMember {
   job: string;
   department: string;
 }
+
+// Add a utility function to ensure we always have a title
+export const normalizeMovie = (movie: Movie): Movie => ({
+  ...movie,
+  title: movie.title || movie.name || 'Untitled',
+  displayTitle: movie.title || movie.name || 'Untitled'
+});
 
 // Add this new function for movie searches
 export const searchMovies = async (query: string): Promise<Movie[]> => {
