@@ -25,6 +25,8 @@ export const SPACING = {
 };
 
 export const DIMS = {
+  cardWidth: Dimensions.get('window').width * 0.9,
+  margin: 16,
   width,
   height,
   headerHeight: Platform.OS === 'ios' ? 100 : 100,
@@ -38,9 +40,11 @@ const getScreenHeight = () => {
   return DIMS.height - DIMS.tabBarHeight - DIMS.headerHeight - DIMS.statusBarHeight;
 };
 
-const getCardHeight = () => {
-  const screenHeight = getScreenHeight();
-  return screenHeight - DIMS.filterHeight; // Remove any additional padding
+export const getCardHeight = () => {
+  const { height } = Dimensions.get('window');
+  const TAB_BAR_HEIGHT = 100;
+  const AVAILABLE_HEIGHT = height - TAB_BAR_HEIGHT;
+  return AVAILABLE_HEIGHT * 0.8; // Return 80% of available height
 };
 
 const getCardWidth = () => {

@@ -30,10 +30,7 @@ import PerformanceLogger from '../utils/performanceLogger';
 
 const { width, height } = Dimensions.get('window');
 const TAB_BAR_HEIGHT = 100;
-const HEADER_HEIGHT = Platform.OS === 'ios' ? 100 : 100;
-const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 44 : 0;
-const SEARCH_BAR_HEIGHT = 70; // Add this constant
-const SCREEN_HEIGHT = height - TAB_BAR_HEIGHT - HEADER_HEIGHT - STATUS_BAR_HEIGHT - SEARCH_BAR_HEIGHT;
+const SCREEN_HEIGHT = height - TAB_BAR_HEIGHT;
 
 const NEXT_CARD_SCALE = 1; // Changed to 1 for perfect overlap
 const NEXT_CARD_OPACITY = 1; // Changed to 1 for perfect overlap
@@ -106,13 +103,6 @@ const CineBrowseScreen: React.FC = () => {
       keyboardWillHide.remove();
     };
   }, []);
-
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<Movie[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const searchInputRef = useRef<TextInput>(null);
-  const [isSearchGridView, setIsSearchGridView] = useState(true);
-  const [selectedSearchMovie, setSelectedSearchMovie] = useState<Movie | null>(null);
 
   const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
 
@@ -340,64 +330,6 @@ const CineBrowseScreen: React.FC = () => {
     [currentIndex, calculateNextCardStyle]
   );
 
-  useEffect(() => {
-    const searchMovies = async () => {
-      if (!searchQuery.trim()) {
-        setSearchResults([]); 
-        setIsSearchGridView(false);
-        setSelectedSearchMovie(null);
-        fetchMoreMovies();
-        return;
-      }
-      setIsSearching(true);
-      try {
-        const response = await searchMoviesAndShows(searchQuery);
-        if (response?.results?.length) {
-          const sortedResults = response.results.sort(
-            (a, b) => (b.popularity ?? 0) - (a.popularity ?? 0)
-          );
-          setSearchResults(sortedResults);
-          setIsSearchGridView(true);
-          setSelectedSearchMovie(null);
-        } else {
-          setSearchResults([]);
-        }
-      } catch (error) {
-        console.error('Search error:', error);
-        setSearchResults([]);
-      } finally {
-        setIsSearching(false);
-      }
-    };
-    const debounceTimeout = setTimeout(searchMovies, 500);
-    return () => clearTimeout(debounceTimeout);
-  }, [searchQuery]);
-
-  const handlePressSearchResult = (movie: Movie) => {
-    setSelectedSearchMovie(movie);
-    setIsSearchGridView(false);
-  };
-
-  const renderSearchGrid = () => (
-    <View style={styles.searchGridContainer}>
-      {searchResults.map((item) => (
-        <TouchableOpacity
-          key={item.id}
-          style={styles.searchGridItem}
-          onPress={() => handlePressSearchResult(item)}
-        >
-          {item.poster_path && (
-            <Image
-              source={{ uri: `https://image.tmdb.org/t/p/w500${item.poster_path}` }}
-              style={styles.searchGridImage}
-            />
-          )}
-          <Text style={styles.searchGridText}>{item.title || item.name}</Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-
   const renderBackground = () => {
     const imagePath = backgroundImage || movies[currentIndex]?.poster_path;
     if (!imagePath) return null;
@@ -463,44 +395,6 @@ const CineBrowseScreen: React.FC = () => {
 
       {/* Content Layer */}
       <View style={styles.contentLayer}>
-        {/* Header Section */}
-        <View style={styles.headerContainer}>
-          <Text style={styles.headerTitle}>SeenaFile</Text>
-          <TouchableOpacity style={styles.headerButton}>
-            <Ionicons name="settings-outline" size={24} color="#fff" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Search Bar now at top */}
-        <View style={styles.topSearchSection}>
-          <TouchableOpacity
-            activeOpacity={1}
-            style={styles.searchWrapper}
-            onPress={() => searchInputRef.current?.focus()}
-          >
-            <TextInput
-              ref={searchInputRef}
-              style={styles.searchInput}
-              placeholder="Search movies & TV shows..."
-              placeholderTextColor="#666"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              returnKeyType="search"
-            />
-            {searchQuery ? (
-              <TouchableOpacity 
-                onPress={() => setSearchQuery('')}
-                style={styles.clearButton}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Ionicons name="close-circle" size={20} color="#666" />
-              </TouchableOpacity>
-            ) : (
-              <Ionicons name="search" size={20} color="#666" />
-            )}
-          </TouchableOpacity>
-        </View>
-
         {/* Main Content */}
         <View style={styles.contentContainer}>
           {isFetching && movies.length === 0 ? (
@@ -512,119 +406,7 @@ const CineBrowseScreen: React.FC = () => {
             <View style={styles.loaderContainer}>
               <Text style={styles.loaderText}>No movies found</Text>
             </View>
-          ) : searchQuery && searchResults.length > 0 && isSearchGridView ? (
-            renderSearchGrid()
-          ) : selectedSearchMovie && !isSearchGridView ? (
-            <View style={styles.cardsWrapper}>
-              <Swiper
-                {...swiperConfig}
-                cards={[selectedSearchMovie]}
-                renderCard={renderCard}
-                onSwiping={(x: number) => swiperConfig.onSwiping(x)}
-                onSwipeStart={(cardIndex) => swiperConfig.onSwipeStart(cardIndex)}
-                onSwipeEnd={() => swiperConfig.onSwipeEnd()}
-                infinite={false}
-                cardVerticalMargin={0}
-                cardHorizontalMargin={0}
-                overlayOpacityHorizontalThreshold={width / 8}
-                overlayOpacityVerticalThreshold={SCREEN_HEIGHT / 8}
-                inputRotationRange={[-width / 2, 0, width / 2]}
-                outputRotationRange={['-10deg', '0deg', '10deg']}
-                onSwipedAll={() => {
-                  setSearchQuery('');
-                  setSearchResults([]);
-                  setIsSearchGridView(false);
-                  setSelectedSearchMovie(null);
-                  fetchMoreMovies();
-                  setCurrentIndex(0);
-                }}
-                onSwipedTop={handleSwipedTop}
-                onSwipedBottom={handleSwipedBottom}
-                onSwipedRight={handleSwipedRight}
-                onSwipedLeft={handleSwipedLeft}
-                onSwiped={handleSwiped}
-                cardIndex={currentIndex}
-                verticalSwipe={swipingEnabled}
-                horizontalSwipe={swipingEnabled}
-                disableTopSwipe={!swipingEnabled}
-                disableBottomSwipe={!swipingEnabled}
-                disableLeftSwipe={!swipingEnabled}
-                disableRightSwipe={!swipingEnabled}
-                verticalThreshold={SCREEN_HEIGHT / 6}
-                horizontalThreshold={width / 6}
-                useViewOverflow={false}
-                preventSwiping={['up', 'down', 'left', 'right']}
-                swipeBackCard={false}
-                overlayLabels={
-                  swipingEnabled
-                    ? {
-                        left: {
-                          element: (
-                            <View style={[styles.overlayWrapper, { borderColor: '#FF4B4B' }]}>
-                              <View>
-                                <Ionicons name="close-circle" size={40} color="#FF4B4B" />
-                              </View>
-                              <View>
-                                <Text style={[styles.overlayText, { color: '#FF4B4B' }]}>
-                                  Not Watched
-                                </Text>
-                              </View>
-                            </View>
-                          ),
-                        },
-                        right: {
-                          element: (
-                            <View style={[styles.overlayWrapper, { borderColor: '#4BFF4B' }]}>
-                              <View>
-                                <Ionicons name="checkmark-circle" size={40} color="#4BFF4B" />
-                              </View>
-                              <View>
-                                <Text style={[styles.overlayText, { color: '#4BFF4B' }]}>
-                                  Watched
-                                </Text>
-                              </View>
-                            </View>
-                          ),
-                        },
-                        top: {
-                          element: (
-                            <View style={[styles.overlayWrapper, { borderColor: '#FFD700' }]}>
-                              <View>
-                                <Ionicons name="repeat" size={40} color="#FFD700" />
-                              </View>
-                              <View>
-                                <Text style={[styles.overlayText, { color: '#FFD700' }]}>
-                                  Most Watch
-                                </Text>
-                              </View>
-                            </View>
-                          ),
-                        },
-                        bottom: {
-                          element: (
-                            <View style={[styles.overlayWrapper, { borderColor: '#00BFFF' }]}>
-                              <View>
-                                <Ionicons name="time" size={40} color="#00BFFF" />
-                              </View>
-                              <View>
-                                <Text style={[styles.overlayText, { color: '#00BFFF' }]}>
-                                  Watch Later
-                                </Text>
-                              </View>
-                            </View>
-                          ),
-                        },
-                      }
-                    : undefined
-                }
-                swipeAnimationDuration={swipingEnabled ? 350 : 0}
-                animateCardOpacity={true}
-                containerStyle={styles.swiperContainer}
-                cardStyle={styles.cardStyle}
-              />
-            </View>
           ) : (
-            // ...existing swiper logic for non-search scenario...
             <View style={styles.cardsWrapper}>
               <Swiper
                 {...swiperConfig}
@@ -725,8 +507,17 @@ const CineBrowseScreen: React.FC = () => {
                 }
                 swipeAnimationDuration={swipingEnabled ? 350 : 0}
                 animateCardOpacity={true}
-                containerStyle={styles.swiperContainer}
-                cardStyle={styles.cardStyle}
+                containerStyle={{
+                  flex: 1,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '100%',
+                }}
+                cardStyle={{
+                  width: DIMS.cardWidth,
+                  height: getCardHeight(),
+                  alignSelf: 'center',
+                }}
               />
             </View>
           )}
@@ -766,55 +557,16 @@ const styles = StyleSheet.create({
     flex: 1,
     zIndex: 2,
   },
-  headerContainer: {
-    paddingTop: STATUS_BAR_HEIGHT,
-    paddingHorizontal: 16,
-    height: HEADER_HEIGHT,
-    backgroundColor: '#000',
-    borderBottomWidth: 1,
-    borderBottomColor: '#222',
-    zIndex: 3,
-  },
-  topSearchSection: {
-    position: 'absolute',
-    top: HEADER_HEIGHT,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: 'rgba(0,0,0,0.95)',
-    zIndex: 3,
-    borderBottomWidth: 1,
-    borderBottomColor: '#222',
-  },
-  searchWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1a1a1a',
-    borderRadius: 25,
-    paddingHorizontal: 16,
-    height: 46,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  searchInput: {
-    flex: 1,
-    color: '#fff',
-    fontSize: 16,
-    marginLeft: 8,
-  },
   contentContainer: {
     flex: 1,
-    paddingTop: SEARCH_BAR_HEIGHT + 20, // Update this line
-    marginBottom: TAB_BAR_HEIGHT, // Add bottom margin to avoid overlap
+    paddingTop: 0,
+    marginBottom: TAB_BAR_HEIGHT,
   },
   cardsWrapper: {
     flex: 1,
     justifyContent: 'center', // Center cards vertically
-    marginTop: -20, // Adjust if needed to center perfectly
+    marginTop: 100,
+    marginLeft: 20, // Adjust if needed to center perfectly
   },
   searchSection: {
     paddingHorizontal: 15,
