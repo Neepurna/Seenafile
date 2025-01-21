@@ -15,7 +15,13 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 
 const { width, height } = Dimensions.get('window');
-const CARD_HEIGHT = height * 0.75;
+const HEADER_HEIGHT = Platform.OS === 'ios' ? 100 : 100;
+const TAB_BAR_HEIGHT = 100;
+const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 44 : 0;
+const SEARCH_BAR_HEIGHT = 70;
+const AVAILABLE_HEIGHT = height - HEADER_HEIGHT - TAB_BAR_HEIGHT - STATUS_BAR_HEIGHT - SEARCH_BAR_HEIGHT;
+const CARD_WIDTH = width - 32;
+const CARD_HEIGHT = AVAILABLE_HEIGHT * 0.9;
 
 interface MovieReviewProps {
   movie: {
@@ -81,7 +87,7 @@ const MovieReview: React.FC<MovieReviewProps> = ({
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 150 : 0}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
       style={styles.container}
     >
       <View style={styles.innerContainer}>
@@ -89,12 +95,17 @@ const MovieReview: React.FC<MovieReviewProps> = ({
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          bounces={false}
         >
           <View style={styles.reviewHeader}>
             <Text style={styles.title}>Write a Review</Text>
-            <Text style={styles.movieTitle}>{movie.title}</Text>
+            <Text style={styles.movieTitle} numberOfLines={2}>{movie.title}</Text>
           </View>
           
+          <View style={styles.ratingContainer}>
+            {renderStars()}
+          </View>
+
           <TextInput
             style={styles.reviewInput}
             multiline
@@ -102,11 +113,8 @@ const MovieReview: React.FC<MovieReviewProps> = ({
             placeholderTextColor="#666"
             value={review}
             onChangeText={setReview}
+            maxLength={500}
           />
-
-          <View style={styles.ratingContainer}>
-            {renderStars()}
-          </View>
         </ScrollView>
 
         <View style={styles.reviewActions}>
@@ -127,7 +135,8 @@ const MovieReview: React.FC<MovieReviewProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    width: CARD_WIDTH,
+    height: CARD_HEIGHT,
     backgroundColor: '#1a1a1a',
     borderRadius: 20,
     overflow: 'hidden',
@@ -137,54 +146,52 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   scrollContent: {
-    padding: 15,
-    flexGrow: 0,
+    padding: 20,
   },
   reviewHeader: {
-    marginBottom: 15,
+    marginBottom: 20,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 5,
+    marginBottom: 8,
   },
   movieTitle: {
-    fontSize: 18,
+    fontSize: 20,
     color: '#ccc',
     marginBottom: 15,
   },
   reviewInput: {
     color: '#fff',
     fontSize: 16,
-    height: CARD_HEIGHT * 0.2, // Further reduced height
+    height: CARD_HEIGHT * 0.25, // Adjust text input height
     textAlignVertical: 'top',
     backgroundColor: '#2a2a2a',
     borderRadius: 12,
     padding: 16,
-    marginBottom: 16,
+    marginTop: 20,
   },
   ratingContainer: {
-    marginBottom: 15,
+    alignItems: 'center',
   },
   reviewActions: {
-    padding: 15,
-    paddingBottom: Platform.OS === 'ios' ? 25 : 15,
+    padding: 20,
+    paddingBottom: Platform.OS === 'ios' ? 30 : 20,
     borderTopWidth: 1,
     borderTopColor: '#333',
-    backgroundColor: '#000',
+    backgroundColor: '#1a1a1a',
   },
   starsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginBottom: 20,
   },
   starButton: {
-    padding: 5, // Add padding for better touch target
+    padding: 5,
   },
   star: {
-    fontSize: 40, // Increased size for better visibility
-    marginHorizontal: 8, // Increased spacing between stars
+    fontSize: 40,
+    marginHorizontal: 8,
   },
   starEmpty: {
     color: '#444',
@@ -195,17 +202,17 @@ const styles = StyleSheet.create({
   button: {
     backgroundColor: '#fff',
     borderRadius: 25,
-    paddingVertical: 14,
+    paddingVertical: 16,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 5,
   },
   buttonText: {
     color: '#000',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
   },
   buttonDisabled: {

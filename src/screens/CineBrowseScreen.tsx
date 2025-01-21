@@ -737,11 +737,13 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flex: 1,
-    marginTop: 70, // Height of search bar
+    marginTop: SEARCH_BAR_HEIGHT,
+    marginBottom: TAB_BAR_HEIGHT, // Add bottom margin to avoid overlap
   },
   cardsWrapper: {
     flex: 1,
-    marginBottom: 130, // increased to avoid overlapping
+    justifyContent: 'center', // Center cards vertically
+    marginTop: -20, // Adjust if needed to center perfectly
   },
   searchSection: {
     paddingHorizontal: 15,
@@ -810,6 +812,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     overflow: 'hidden',
     backgroundColor: '#000',
+    alignSelf: 'center', // Center horizontally
   },
   blurredCard: {
     position: 'absolute',
@@ -888,6 +891,9 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginTop: 10,
     fontSize: 16,
+  },
+  swiperContainer: {
+    backgroundColor: 'transparent',
   },
 });
 

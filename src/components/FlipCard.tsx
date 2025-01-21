@@ -109,10 +109,10 @@ const { width, height } = Dimensions.get('window');
 const HEADER_HEIGHT = Platform.OS === 'ios' ? 100 : 100; // Match header height from Tabs.tsx
 const TAB_BAR_HEIGHT = 100; // Match tab bar height from Tabs.tsx
 const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 44 : 0;
-const SCREEN_HEIGHT = height - TAB_BAR_HEIGHT - HEADER_HEIGHT - STATUS_BAR_HEIGHT;
-const FILTER_HEIGHT = 70; // Height of FilterCard component
-const DETAILS_HEIGHT = 100; // Fixed height for details section
-const CARD_HEIGHT = SCREEN_HEIGHT - FILTER_HEIGHT; // Removed the -20 padding
+const SEARCH_BAR_HEIGHT = 70;
+const AVAILABLE_HEIGHT = height - HEADER_HEIGHT - TAB_BAR_HEIGHT - STATUS_BAR_HEIGHT - SEARCH_BAR_HEIGHT;
+const CARD_WIDTH = width; // Remove the padding/margin
+const CARD_HEIGHT = AVAILABLE_HEIGHT * 0.9; // Use 90% of available height
 
 const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
   const {
@@ -545,18 +545,18 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
 
 const styles = StyleSheet.create({
   container: {
-    width: '100%',
-    height: '100%',
+    width: CARD_WIDTH,
+    height: CARD_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#000',
+    backgroundColor: 'transparent',
   },
   cardFace: {
-    width: DIMS.width - 32,
-    height: DIMS.height * 0.75,
+    width: CARD_WIDTH,
+    height: CARD_HEIGHT,
     position: 'absolute',
     backfaceVisibility: 'hidden',
-    borderRadius: 20,
+    borderRadius: 0, // Remove border radius for full-width look
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -580,18 +580,18 @@ const styles = StyleSheet.create({
   },
   infoButton: {
     position: 'absolute',
-    bottom: 10,
-    right: 10,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    bottom: 20,
+    right: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 2,
   },
   infoIcon: {
-    fontSize: 20,
+    fontSize: 28,
     color: '#FFFFFF',
     fontWeight: 'bold',
   },
