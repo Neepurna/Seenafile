@@ -35,8 +35,8 @@ const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 44 : 0;
 const SEARCH_BAR_HEIGHT = 70; // Add this constant
 const SCREEN_HEIGHT = height - TAB_BAR_HEIGHT - HEADER_HEIGHT - STATUS_BAR_HEIGHT - SEARCH_BAR_HEIGHT;
 
-const NEXT_CARD_SCALE = 0.96; // Changed from 0.92 to 0.96 for subtler scaling
-const NEXT_CARD_OPACITY = 0.8; // Changed from 0.5 to 0.8 for better visibility
+const NEXT_CARD_SCALE = 1; // Changed to 1 for perfect overlap
+const NEXT_CARD_OPACITY = 1; // Changed to 1 for perfect overlap
 const TRANSITION_DURATION = 150; // Shorter animation duration for snappier feel
 
 const movieCache = {
@@ -290,44 +290,30 @@ const CineBrowseScreen: React.FC = () => {
   );
 
   const handleSwipeStart = useCallback((cardIndex: number) => {
+    // Instantly update background with current card's image
     const currentMovie = movies[cardIndex];
-    const nextMovie = movies[cardIndex + 1];
-    
-    if (nextMovie?.poster_path) {
-      Image.prefetch(`https://image.tmdb.org/t/p/w500${nextMovie.poster_path}`);
+    if (currentMovie?.poster_path) {
+      setBackgroundImage(`https://image.tmdb.org/t/p/w500${currentMovie.poster_path}`);
     }
-
-    // Reset animation value
-    swipeAnimatedValue.setValue(0);
   }, [movies]);
 
   const calculateNextCardStyle = (index: number) => {
     if (index !== currentIndex + 1) return {};
     
+    // Only apply transformations when actually swiping
     const scale = swipeAnimatedValue.interpolate({
-      inputRange: [-width/2, -width/4, 0, width/4, width/2],
-      outputRange: [1, NEXT_CARD_SCALE, NEXT_CARD_SCALE, NEXT_CARD_SCALE, 1],
-      extrapolate: 'clamp',
-    });
-
-    const opacity = swipeAnimatedValue.interpolate({
-      inputRange: [-width/2, -width/4, 0, width/4, width/2],
-      outputRange: [1, NEXT_CARD_OPACITY, NEXT_CARD_OPACITY, NEXT_CARD_OPACITY, 1],
-      extrapolate: 'clamp',
-    });
-
-    const translateY = swipeAnimatedValue.interpolate({
-      inputRange: [-width/2, 0, width/2],
-      outputRange: [0, 15, 0],
+      inputRange: [-width, 0, width],
+      outputRange: [1, 1, 1], // Keep scale constant
       extrapolate: 'clamp',
     });
 
     return {
-      transform: [
-        { scale },
-        { translateY }
-      ],
-      opacity,
+      transform: [{ scale }],
+      position: 'absolute', // Add this to ensure perfect overlap
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
     };
   };
 
@@ -357,7 +343,7 @@ const CineBrowseScreen: React.FC = () => {
   useEffect(() => {
     const searchMovies = async () => {
       if (!searchQuery.trim()) {
-        setSearchResults([]);
+        setSearchResults([]); 
         setIsSearchGridView(false);
         setSelectedSearchMovie(null);
         fetchMoreMovies();
@@ -440,11 +426,11 @@ const CineBrowseScreen: React.FC = () => {
   };
 
   const swiperConfig = {
-    stackSize: 3, // Increased from 2 to 3
-    stackScale: 0.98, // More subtle scale difference
-    stackSeparation: 14, // Adjusted for better visual spacing
+    stackSize: 2, // Reduced to 2 since we only need current and next
+    stackScale: 1, // No scaling
+    stackSeparation: 0, // No separation
     animateOverlayLabelsOpacity: true,
-    animateCardOpacity: true,
+    animateCardOpacity: false, // Disable card opacity animation
     backgroundColor: 'transparent',
     cardHorizontalMargin: 0,
     cardVerticalMargin: 0,
@@ -891,21 +877,19 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   cardWrapper: {
-    paddingHorizontal: 16,
     width: '100%',
     height: '100%',
     position: 'relative',
-    overflow: 'visible', // Changed from 'hidden' to 'visible'
+    overflow: 'hidden', // Changed to hidden to prevent any overflow
   },
   cardContainer: {
     width: '100%',
-    height: getCardHeight(), // Make sure this matches your card dimensions
-    position: 'relative',
+    height: '100%',
+    position: 'absolute', // Changed to absolute
     borderRadius: 10,
     overflow: 'hidden',
     backgroundColor: 'transparent',
-    alignSelf: 'center',
-    zIndex: 1,
+    // Remove alignSelf and other positioning properties
   },
   preloadedBackground: {
     position: 'absolute',
