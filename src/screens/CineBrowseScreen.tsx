@@ -24,7 +24,6 @@ import FlipCard from '../components/FlipCard';
 import { Movie } from '../services/api';
 import { auth, db } from '../firebase';
 import { collection, doc, setDoc, getDoc } from 'firebase/firestore';
-import FilterCard from '../components/FilterCard';
 import { DIMS, getCardHeight } from '../theme';
 import { fetchMoviesByCategory, searchMoviesAndShows } from '../services/tmdb';
 import PerformanceLogger from '../utils/performanceLogger';
@@ -37,8 +36,6 @@ const SCREEN_HEIGHT = height - TAB_BAR_HEIGHT - HEADER_HEIGHT - STATUS_BAR_HEIGH
 
 const NEXT_CARD_SCALE = 0.92;
 const NEXT_CARD_OPACITY = 0.5;
-
-const defaultCategories = ['All', 'TV Shows', 'Animated'];
 
 const movieCache = {
   data: new Map<string, Movie[]>(),
@@ -59,15 +56,12 @@ const CineBrowseScreen: React.FC = () => {
   const [swipingEnabled, setSwipingEnabled] = useState(true);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [isFetching, setIsFetching] = useState<boolean>(false);
-  const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [currentPage, setCurrentPage] = useState(1);
   const [backgroundCards, setBackgroundCards] = useState<Movie[]>([]);
   const displayedMovieIds = useRef<Set<number>>(new Set());
   const [errorCount, setErrorCount] = useState(0);
   const MAX_ERROR_ATTEMPTS = 3;
 
-  const [isChangingCategory, setIsChangingCategory] = useState(false);
-  const previousCategory = useRef<string>('');
   const swipeAnimatedValue = useRef(new Animated.Value(0)).current;
   const debouncedFetch = useRef<any>(null);
 
@@ -115,8 +109,15 @@ const CineBrowseScreen: React.FC = () => {
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
-      handleRefresh();
+      console.log('Screen focused, resetting state...');
+      setCurrentIndex(0);
+      setMovies([]);
+      displayedMovieIds.current.clear();
+      movieCache.data.clear();
+      movieCache.timestamp.clear();
+      fetchMoreMovies();
     });
+
     return unsubscribe;
   }, [navigation]);
 
@@ -128,11 +129,16 @@ const CineBrowseScreen: React.FC = () => {
   };
 
   const appendMovies = useCallback((newMovies: Movie[]) => {
-    if (!Array.isArray(newMovies) || newMovies.length === 0) return;
+    if (!Array.isArray(newMovies) || newMovies.length === 0) {
+      console.log('No new movies to append');
+      return;
+    }
+    
     setMovies((prevMovies) => {
       const uniqueNewMovies = newMovies.filter(
         (movie) => !prevMovies.some((existing) => existing.id === movie.id)
       );
+      console.log('Appending unique movies:', uniqueNewMovies.length);
       return [...prevMovies, ...uniqueNewMovies];
     });
   }, []);
@@ -145,29 +151,33 @@ const CineBrowseScreen: React.FC = () => {
   const fetchMoreMovies = async () => {
     if (isFetching || errorCount >= MAX_ERROR_ATTEMPTS) return;
 
+    console.log('Fetching movies...', { currentPage, isFetching });
     PerformanceLogger.start('fetchMoreMovies');
+    
     try {
       setIsFetching(true);
-      const cacheKey = `${selectedCategory}_${currentPage}`;
+      const cacheKey = `page_${currentPage}`;
       const now = Date.now();
 
       if (
         movieCache.data.has(cacheKey) &&
         now - movieCache.timestamp.get(cacheKey)! < movieCache.CACHE_DURATION
       ) {
-        PerformanceLogger.log('Using cached data for', cacheKey);
+        console.log('Using cached data for', cacheKey);
         const cachedData = movieCache.data.get(cacheKey)!;
         appendMovies(cachedData);
         setIsFetching(false);
-        PerformanceLogger.end('fetchMoreMovies');
         return;
       }
 
-      PerformanceLogger.start('API_request');
-      const response = await fetchMoviesByCategory(selectedCategory, currentPage, {
+      const response = await fetchMoviesByCategory(currentPage, {
         batchSize: BATCH_SIZE,
       });
-      PerformanceLogger.end('API_request');
+
+      console.log('API response received:', { 
+        resultsCount: response?.results?.length,
+        currentMoviesCount: movies.length 
+      });
 
       if (!response?.results?.length) {
         throw new Error('No results returned');
@@ -177,6 +187,8 @@ const CineBrowseScreen: React.FC = () => {
         .filter((m: Movie) => !displayedMovieIds.current.has(m.id))
         .sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0));
 
+      console.log('Processed new movies:', newMovies.length);
+
       movieCache.data.set(cacheKey, newMovies);
       movieCache.timestamp.set(cacheKey, now);
 
@@ -184,6 +196,7 @@ const CineBrowseScreen: React.FC = () => {
       setBackgroundCards((prev) => [...prev, ...newMovies.slice(0, 3)]);
       newMovies.forEach((movie: Movie) => displayedMovieIds.current.add(movie.id));
       setCurrentPage((prev) => prev + 1);
+
     } catch (error) {
       console.error('Error fetching more movies:', error);
       handleFetchError(error as Error);
@@ -263,51 +276,6 @@ const CineBrowseScreen: React.FC = () => {
     [movies.length, fetchMoreMovies, preloadNextCards]
   );
 
-  const handleCategorySelect = (category: string) => {
-    if (category === selectedCategory || isChangingCategory) return;
-    PerformanceLogger.start(`categoryChange_${category}`);
-    if (debouncedFetch.current) {
-      clearTimeout(debouncedFetch.current);
-    }
-    setIsChangingCategory(true);
-    previousCategory.current = selectedCategory;
-    setSelectedCategory(category);
-    setCurrentPage(1);
-    setBackgroundCards([]);
-    setMovies([]);
-    displayedMovieIds.current.clear();
-
-    debouncedFetch.current = setTimeout(async () => {
-      try {
-        const cacheKey = `${category}_1`;
-        if (movieCache.data.has(cacheKey)) {
-          PerformanceLogger.log('Using cached category data', category);
-          const cachedData = movieCache.data.get(cacheKey)!;
-          setMovies(cachedData);
-          preloadNextCards(0);
-        } else {
-          PerformanceLogger.start('categoryFetch');
-          const response = await fetchMoviesByCategory(category, 1, {
-            batchSize: BATCH_SIZE,
-          });
-          PerformanceLogger.end('categoryFetch');
-          if (response?.results?.length) {
-            setMovies(response.results);
-            preloadNextCards(0);
-            movieCache.data.set(cacheKey, response.results);
-            movieCache.timestamp.set(cacheKey, Date.now());
-          }
-        }
-      } catch (error) {
-        console.error('Error changing category:', error);
-        setSelectedCategory(previousCategory.current);
-      } finally {
-        setIsChangingCategory(false);
-        PerformanceLogger.end(`categoryChange_${category}`);
-      }
-    }, 300);
-  };
-
   const calculateNextCardStyle = (index: number) => {
     if (index !== currentIndex + 1) return {};
     const scale = swipeAnimatedValue.interpolate({
@@ -333,7 +301,11 @@ const CineBrowseScreen: React.FC = () => {
 
   const renderCard = useCallback(
     (movie: Movie, index: number) => {
-      if (!movie) return null;
+      if (!movie) {
+        console.log('No movie data for card:', index);
+        return null;
+      }
+
       const isNextCard = index === currentIndex + 1;
       return (
         <Animated.View
@@ -460,7 +432,16 @@ const CineBrowseScreen: React.FC = () => {
 
       {/* Main Content */}
       <View style={styles.contentContainer}>
-        {searchQuery && searchResults.length > 0 && isSearchGridView ? (
+        {isFetching && movies.length === 0 ? (
+          <View style={styles.loaderContainer}>
+            <ActivityIndicator size="large" color="#fff" />
+            <Text style={styles.loaderText}>Loading movies...</Text>
+          </View>
+        ) : movies.length === 0 ? (
+          <View style={styles.loaderContainer}>
+            <Text style={styles.loaderText}>No movies found</Text>
+          </View>
+        ) : searchQuery && searchResults.length > 0 && isSearchGridView ? (
           renderSearchGrid()
         ) : selectedSearchMovie && !isSearchGridView ? (
           <View style={styles.cardsWrapper}>
@@ -704,18 +685,6 @@ const CineBrowseScreen: React.FC = () => {
             />
           </View>
         )}
-        {/* Fixed Bottom Controls */}
-        <View style={styles.bottomControls}>
-          {/* Categories */}
-          <View style={styles.categoriesSection}>
-            <FilterCard
-              selectedCategory={selectedCategory}
-              onSelectCategory={handleCategorySelect}
-              categories={defaultCategories}
-              containerStyle={styles.filterCardCustom}
-            />
-          </View>
-        </View>
       </View>
     </View>
   );
@@ -727,48 +696,52 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   headerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 15,
+    paddingTop: STATUS_BAR_HEIGHT,
+    paddingHorizontal: 16,
     height: HEADER_HEIGHT,
     backgroundColor: '#000',
     borderBottomWidth: 1,
     borderBottomColor: '#222',
-    paddingTop: Platform.OS === 'ios' ? STATUS_BAR_HEIGHT : 0,
+    zIndex: 2,
   },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
+  topSearchSection: {
+    position: 'absolute',
+    top: HEADER_HEIGHT,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(0,0,0,0.95)',
+    zIndex: 1,
+    borderBottomWidth: 1,
+    borderBottomColor: '#222',
+  },
+  searchWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a1a1a',
+    borderRadius: 25,
+    paddingHorizontal: 16,
+    height: 46,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  searchInput: {
+    flex: 1,
     color: '#fff',
-  },
-  headerButton: {
-    padding: 10,
+    fontSize: 16,
+    marginLeft: 8,
   },
   contentContainer: {
     flex: 1,
-    position: 'relative',
+    marginTop: 70, // Height of search bar
   },
   cardsWrapper: {
     flex: 1,
     marginBottom: 130, // increased to avoid overlapping
-  },
-  bottomControls: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#000',
-    paddingBottom: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#222',
-    zIndex: 999, // ensure it's above the cards
-    elevation: 5, // extra elevation on Android
-  },
-  categoriesSection: {
-    paddingHorizontal: 15,
-    paddingTop: 10,
-    marginBottom: 8,
   },
   searchSection: {
     paddingHorizontal: 15,
@@ -798,15 +771,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: Platform.OS === 'ios' ? 50 : 30,
-  },
-  categoriesContainer: {
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    marginBottom: 10,
-  },
-  filterCardCustom: {
-    height: 40,
-    backgroundColor: 'rgba(26, 26, 26, 0.8)',
   },
   searchContainer: {
     paddingHorizontal: 15,
@@ -914,6 +878,16 @@ const styles = StyleSheet.create({
     marginTop: 5,
     textAlign: 'center',
     fontSize: 12,
+  },
+  loaderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loaderText: {
+    color: '#fff',
+    marginTop: 10,
+    fontSize: 16,
   },
 });
 

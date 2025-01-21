@@ -459,88 +459,24 @@ export const fetchAvailableCountries = async (): Promise<CountryConfig[]> => {
 
 // Update the movie fetching function to be more centralized
 export const fetchMoviesByCategory = async (
-  category: string,
   page: number,
   options: { batchSize: number }
-): Promise<MovieApiResponse> => {
-  const { batchSize = 20, ...restOptions } = options;
-  
-  return requestQueue.add(async () => {
-    try {
-      const randomPage = Math.floor(Math.random() * 20) + 1;
-      const actualPage = page > 1 ? page : randomPage;
-      
-      const baseParams = {
-        api_key: TMDB_API_KEY,
-        page: actualPage.toString(),
-        language: 'en-US',
-        'vote_count.gte': '100',
-        ...restOptions
-      };
+) => {
+  try {
+    const response = await fetch(
+      `${TMDB_BASE_URL}/trending/movie/week?api_key=${TMDB_API_KEY}&page=${page}`
+    );
 
-      let endpoint = `${TMDB_BASE_URL}/discover/movie`;
-      let additionalParams = {};
-
-      if (category in FEATURED_COUNTRIES) {
-        const countryConfig = FEATURED_COUNTRIES[category];
-        additionalParams = {
-          with_original_language: countryConfig.language,
-          region: countryConfig.iso,
-          sort_by: 'vote_count.desc',
-          'vote_count.gte': '200',
-          'vote_average.gte': '6.5'
-        };
-      } else {
-        switch (category.toLowerCase()) {
-          case 'documentaries':
-            additionalParams = {
-              with_genres: '99',
-              'vote_count.gte': '500',
-              'vote_average.gte': '7'
-            };
-            break;
-          case 'animated':
-            additionalParams = {
-              with_genres: '16',
-              'vote_count.gte': '300'
-            };
-            break;
-          case 'tv shows':
-            endpoint = `${TMDB_BASE_URL}/discover/tv`;
-            additionalParams = {
-              'vote_count.gte': '200',
-              sort_by: 'popularity.desc'
-            };
-            break;
-          case 'all':
-          default:
-            endpoint = `${TMDB_BASE_URL}/movie/popular`;
-            break;
-        }
-      }
-
-      const params = new URLSearchParams({
-        ...baseParams,
-        ...additionalParams
-      });
-
-      const response = await fetch(`${endpoint}?${params}`);
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-
-      const data = await response.json();
-      if (!data.results) throw new Error('Invalid response format');
-
-      data.results = data.results
-        .slice(0, batchSize)
-        .filter(item => item.poster_path && item.vote_count >= 100 && item.vote_average >= 6)
-        .map(normalizeMediaItem);
-
-      return data;
-    } catch (error) {
-      console.error(`Error fetching ${category} content:`, error);
-      return { results: [] };
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
-  });
+
+    const data = await response.json();
+    return processAndNormalizeResults(data);
+  } catch (error) {
+    console.error('Error fetching movies:', error);
+    throw error;
+  }
 };
 
 // Add this helper function for processing results

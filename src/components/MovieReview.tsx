@@ -128,7 +128,9 @@ const MovieReview: React.FC<MovieReviewProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: '#1a1a1a',
+    borderRadius: 20,
+    overflow: 'hidden',
   },
   innerContainer: {
     flex: 1,
@@ -157,11 +159,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     height: CARD_HEIGHT * 0.2, // Further reduced height
     textAlignVertical: 'top',
-    marginBottom: 15,
-    borderWidth: 1,
-    borderColor: '#333',
-    borderRadius: 8,
-    padding: 10,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
   },
   ratingContainer: {
     marginBottom: 15,
@@ -192,19 +193,20 @@ const styles = StyleSheet.create({
     color: '#FFD700',
   },
   button: {
-    backgroundColor: '#FF4081',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 15,
+    backgroundColor: '#fff',
     borderRadius: 25,
-    width: '100%',
+    paddingVertical: 14,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
   },
   buttonText: {
-    color: '#FFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginLeft: 10,
+    color: '#000',
+    fontSize: 16,
+    fontWeight: '600',
   },
   buttonDisabled: {
     opacity: 0.5,

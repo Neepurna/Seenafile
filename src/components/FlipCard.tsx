@@ -549,14 +549,20 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#000',
   },
   cardFace: {
-    width: '100%',
-    height: '100%',
+    width: DIMS.width - 32,
+    height: DIMS.height * 0.75,
     position: 'absolute',
     backfaceVisibility: 'hidden',
-    borderRadius: 15,
+    borderRadius: 20,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   cardBack: {
     backgroundColor: '#000',
@@ -565,6 +571,7 @@ const styles = StyleSheet.create({
   frontFaceContainer: {
     flex: 1,
     position: 'relative',
+    backgroundColor: '#1a1a1a',
   },
   poster: {
     width: '100%',

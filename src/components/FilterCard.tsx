@@ -65,8 +65,12 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: '#1a1a1a',
     borderRadius: 20,
-    padding: 5,
-    marginBottom: 5, // Add margin to separate from search bar
+    padding: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
   },
   categoriesContainer: {
     flexDirection: 'row',
@@ -74,24 +78,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
   },
   categoryButton: {
-    paddingHorizontal: 15,
-    paddingVertical: 5,
-    borderRadius: 15,
-    marginHorizontal: 5,
-    height: 30, // Make buttons shorter
-    backgroundColor: 'rgba(255, 255, 255, 0.1)', // Add background color
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginHorizontal: 6,
+    backgroundColor: '#2a2a2a',
+    borderWidth: 1,
+    borderColor: '#333',
   },
   selectedCategory: {
     backgroundColor: '#fff',
+    borderColor: '#fff',
   },
   categoryText: {
     color: '#fff',
-    fontSize: 13, // Slightly smaller text
-    fontWeight: '500', // Make text more visible
+    fontSize: 14,
+    fontWeight: '500',
   },
   selectedCategoryText: {
     color: '#000',
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
   filterContainer: {
     flexDirection: 'row',
