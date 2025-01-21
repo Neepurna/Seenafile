@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, TouchableOpacity, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import FilterCard from './FilterCard'; // Assuming you have a FilterCard component
 
 const defaultCategories = ["All", "Action", "Comedy", "Drama"];
@@ -8,10 +9,29 @@ const defaultCategories = ["All", "Action", "Comedy", "Drama"];
 const CineBrowseScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<TextInput>(null);
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>("All"); // Set default to "All"
+  const [movies, setMovies] = useState([]);
+
+  const loadMovies = async (category: string) => {
+    // Implement your movie fetching logic here
+    // This is just a placeholder - replace with your actual API call
+    try {
+      // const response = await fetchMovies(category);
+      // setMovies(response);
+    } catch (error) {
+      console.error('Error loading movies:', error);
+    }
+  };
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadMovies(selectedCategory);
+    }, [selectedCategory])
+  );
 
   const handleCategorySelect = (category: string) => {
     setSelectedCategory(category);
+    loadMovies(category);
   };
 
   return (
@@ -56,6 +76,7 @@ const CineBrowseScreen: React.FC = () => {
 
       {/* Main Content */}
       <View className="flex-1 relative">
+        {/* Add your movie cards rendering logic here using the movies state */}
         {/* ...existing conditional rendering logic... */}
       </View>
 
