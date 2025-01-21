@@ -13,13 +13,13 @@ import {
   Dimensions
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from '@react-native-community/blur';
+import { getImageUrl } from '../services/instance';
 
 const { width, height } = Dimensions.get('window');
-const HEADER_HEIGHT = Platform.OS === 'ios' ? 100 : 100;
-const TAB_BAR_HEIGHT = 100;
 const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 44 : 0;
 const SEARCH_BAR_HEIGHT = 70;
-const AVAILABLE_HEIGHT = height - HEADER_HEIGHT - TAB_BAR_HEIGHT - STATUS_BAR_HEIGHT - SEARCH_BAR_HEIGHT;
+const AVAILABLE_HEIGHT = height - STATUS_BAR_HEIGHT - SEARCH_BAR_HEIGHT;
 const CARD_WIDTH = width - 32;
 const CARD_HEIGHT = AVAILABLE_HEIGHT * 0.9;
 
@@ -90,6 +90,14 @@ const MovieReview: React.FC<MovieReviewProps> = ({
       keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
       style={styles.container}
     >
+      {/* Background Image with Blur */}
+      <Image
+        source={{ uri: `https://image.tmdb.org/t/p/w500${movie.poster_path}` }}
+        style={styles.backgroundImage}
+        blurRadius={25}
+      />
+      <View style={styles.overlay} />
+
       <View style={styles.innerContainer}>
         <ScrollView 
           contentContainerStyle={styles.scrollContent}
@@ -106,15 +114,20 @@ const MovieReview: React.FC<MovieReviewProps> = ({
             {renderStars()}
           </View>
 
-          <TextInput
-            style={styles.reviewInput}
-            multiline
-            placeholder="Share your thoughts..."
-            placeholderTextColor="#666"
-            value={review}
-            onChangeText={setReview}
-            maxLength={500}
-          />
+          <View style={styles.reviewInputContainer}>
+            <TextInput
+              style={styles.reviewInput}
+              multiline
+              placeholder="Share your thoughts about the movie..."
+              placeholderTextColor="rgba(255,255,255,0.5)"
+              value={review}
+              onChangeText={setReview}
+              maxLength={500}
+            />
+            <Text style={styles.characterCount}>
+              {review.length}/500
+            </Text>
+          </View>
         </ScrollView>
 
         <View style={styles.reviewActions}>
@@ -137,50 +150,68 @@ const styles = StyleSheet.create({
   container: {
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
-    backgroundColor: '#1a1a1a',
     borderRadius: 20,
     overflow: 'hidden',
+  },
+  backgroundImage: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.7)',
   },
   innerContainer: {
     flex: 1,
     justifyContent: 'space-between',
+    padding: 20,
   },
   scrollContent: {
-    padding: 20,
+    flexGrow: 1,
   },
   reviewHeader: {
     marginBottom: 20,
+    alignItems: 'center',
   },
   title: {
     fontSize: 28,
-    fontWeight: 'bold',
+    fontWeight: '800',
     color: '#fff',
     marginBottom: 8,
+    textAlign: 'center',
   },
   movieTitle: {
     fontSize: 20,
-    color: '#ccc',
+    color: 'rgba(255,255,255,0.8)',
     marginBottom: 15,
+    textAlign: 'center',
+  },
+  reviewInputContainer: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 15,
+    padding: 2,
+    marginTop: 20,
   },
   reviewInput: {
     color: '#fff',
     fontSize: 16,
-    height: CARD_HEIGHT * 0.25, // Adjust text input height
+    height: CARD_HEIGHT * 0.25,
     textAlignVertical: 'top',
-    backgroundColor: '#2a2a2a',
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 20,
+    padding: 15,
+  },
+  characterCount: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 12,
+    textAlign: 'right',
+    padding: 8,
   },
   ratingContainer: {
     alignItems: 'center',
-  },
-  reviewActions: {
-    padding: 20,
-    paddingBottom: Platform.OS === 'ios' ? 30 : 20,
-    borderTopWidth: 1,
-    borderTopColor: '#333',
-    backgroundColor: '#1a1a1a',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    padding: 15,
+    borderRadius: 15,
   },
   starsContainer: {
     flexDirection: 'row',
@@ -194,10 +225,13 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
   },
   starEmpty: {
-    color: '#444',
+    color: 'rgba(255,255,255,0.3)',
   },
   starFilled: {
     color: '#FFD700',
+  },
+  reviewActions: {
+    marginTop: 20,
   },
   button: {
     backgroundColor: '#fff',

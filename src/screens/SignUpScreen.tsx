@@ -23,25 +23,29 @@ const SignUpScreen = ({ navigation }) => {
   };
 
   const handleSignUp = async () => {
-    if (!formData.name || !formData.email || !formData.password) {
-      Alert.alert('Error', 'Please fill in all required fields');
-      return;
+    try {
+      if (!formData.name || !formData.email || !formData.password) {
+        Alert.alert('Error', 'Please fill in all required fields');
+        return;
+      }
+
+      setIsLoading(true);
+      const { error, message } = await createUserWithProfile(formData);
+      setIsLoading(false);
+
+      if (error) {
+        Alert.alert('Error', error);
+        return;
+      }
+
+      Alert.alert(
+        'Email Verification Required',
+        'A verification email has been sent to your email address. Please verify your email before logging in.',
+        [{ text: 'OK', onPress: () => navigation.replace('Main') }]
+      );
+    } catch (error) {
+      Alert.alert('Error', error.message);
     }
-
-    setIsLoading(true);
-    const { error, message } = await createUserWithProfile(formData);
-    setIsLoading(false);
-
-    if (error) {
-      Alert.alert('Error', error);
-      return;
-    }
-
-    Alert.alert(
-      'Email Verification Required',
-      'A verification email has been sent to your email address. Please verify your email before logging in.',
-      [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
-    );
   };
 
   return (

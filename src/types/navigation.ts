@@ -1,22 +1,16 @@
 export type RootStackParamList = {
   Login: undefined;
   SignUp: undefined;
-  Tabs: undefined;
-  MovieGridScreen: {
-    folderId: string;
-    folderName: string;
-    folderColor: string;
-  };
+  Main: undefined;  // Changed from Tabs to Main
   MovieChat: {
-    chatId: string;
-    userId: string;
+    movieId: string;
     username: string;
   };
   UserProfileChat: {
     userId: string;
     username: string;
-    chatId: string;
   };
+  // ...other routes...
 };
 
 export type UserProfileChatScreenProps = {

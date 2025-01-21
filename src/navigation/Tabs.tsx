@@ -7,10 +7,9 @@ import {
   StyleSheet,
   Dimensions,
   TouchableOpacity,
-  Text,
   Animated,
 } from 'react-native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import ProfileScreen from '../screens/ProfileScreen';
 import CineBrowseScreen from '../screens/CineBrowseScreen';
@@ -19,7 +18,7 @@ import MyWallScreen from '../screens/MyWallScreen';
 import MovieGridScreen from '../screens/MovieGridScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 
-const Tab = createBottomTabNavigator<TabsStackParamList>();
+const Stack = createStackNavigator<TabsStackParamList>();
 
 type TabsStackParamList = {
   CineBrowse: undefined;
@@ -36,8 +35,6 @@ type TabsStackParamList = {
     folderColor: string;
   };
 };
-
-const TAB_BAR_HEIGHT = 100; // Custom tab bar height
 
 const Tabs: React.FC = () => {
   const [isProfileVisible, setIsProfileVisible] = useState(false);
@@ -99,12 +96,17 @@ const Tabs: React.FC = () => {
 
   return (
     <>
-      <Tab.Navigator
-        screenOptions={({ route, navigation }) => ({
-          // Hide the header only on CineBrowse screen
-          headerShown: route.name !== 'CineBrowse',
-          tabBarShowLabel: false,
-          headerTitle: '',
+      <Stack.Navigator
+        screenOptions={({ navigation }) => ({
+          headerStyle: {
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            height: 100,
+            elevation: 4,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.25,
+            shadowRadius: 3.84,
+          },
           headerTitleStyle: {
             fontSize: 24,
             fontWeight: 'bold',
@@ -115,75 +117,44 @@ const Tabs: React.FC = () => {
               <Ionicons name="settings-outline" size={24} color="#fff" />
             </TouchableOpacity>
           ),
-          tabBarIcon: ({ color, size }) => {
-            let iconName: string;
-            if (route.name === 'CineBrowse') {
-              iconName = 'film-outline';
-            } else if (route.name === 'CinePal') {
-              iconName = 'people-outline';
-            } else if (route.name === 'Profile') {
-              iconName = 'person-circle-outline';
-            }
-            return <Ionicons name={iconName as any} size={size} color={color} />;
-          },
-          tabBarStyle: {
-            height: TAB_BAR_HEIGHT,
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-            paddingBottom: 10,
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            elevation: 4,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: -2 },
-            shadowOpacity: 0.25,
-            shadowRadius: 3.84,
-            borderTopColor: 'rgba(255, 255, 255, 0.1)',
-            zIndex: 1000,
-          },
-          headerStyle: {
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-            height: 100,
-            elevation: 4,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.25,
-            shadowRadius: 3.84,
-            zIndex: 1000,
-          },
         })}
       >
-        <Tab.Screen name="CineBrowse" component={CineBrowseScreen} />
-        <Tab.Screen name="CinePal" component={CinePalScreen} />
-        <Tab.Screen name="Profile" component={ProfileScreen} />
-        <Tab.Screen
+        <Stack.Screen 
+          name="CineBrowse" 
+          component={CineBrowseScreen}
+          options={{ headerTitle: '' }}
+        />
+        <Stack.Screen 
+          name="CinePal" 
+          component={CinePalScreen} 
+        />
+        <Stack.Screen 
+          name="Profile" 
+          component={ProfileScreen} 
+        />
+        <Stack.Screen
           name="MyWall"
           component={MyWallScreen}
-          options={({ navigation }) => ({
-            tabBarButton: () => null,
-            headerLeft: () => (
+          options={{
+            headerTitle: 'User Profile',
+            headerLeft: ({ onPress }) => (
               <TouchableOpacity
-                onPress={() => navigation.goBack()}
+                onPress={onPress}
                 style={{ marginLeft: 15 }}
               >
                 <Ionicons name="arrow-back" size={24} color="#fff" />
               </TouchableOpacity>
             ),
-            headerTitle: 'User Profile',
-          })}
+          }}
         />
-        <Tab.Screen
+        <Stack.Screen
           name="MovieGridScreen"
           component={MovieGridScreen}
           options={({ route }) => ({
-            tabBarButton: () => null,
             headerTitle: route.params?.folderName ?? 'Movies',
-            headerStyle: { backgroundColor: '#000' },
-            headerTintColor: '#fff',
           })}
         />
-      </Tab.Navigator>
+      </Stack.Navigator>
 
       {isProfileVisible && (
         <Animated.View style={[styles.overlay, { opacity: backdropAnim, zIndex: 2000 }]}>

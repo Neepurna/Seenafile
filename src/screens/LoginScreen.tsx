@@ -57,7 +57,7 @@ const LoginScreen = ({ navigation }) => {
       return;
     }
 
-    navigation.replace('Tabs');
+    navigation.replace('Main');
   };
 
   const handleSignUp = async () => {
