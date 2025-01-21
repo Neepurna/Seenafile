@@ -109,9 +109,10 @@ const { width, height } = Dimensions.get('window');
 const HEADER_HEIGHT = Platform.OS === 'ios' ? 100 : 100; // Match header height from Tabs.tsx
 const TAB_BAR_HEIGHT = 100; // Match tab bar height from Tabs.tsx
 const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 44 : 0;
-const SEARCH_BAR_HEIGHT = 70;
+const SEARCH_BAR_HEIGHT = 70; // Add this constant
 const AVAILABLE_HEIGHT = height - HEADER_HEIGHT - TAB_BAR_HEIGHT - STATUS_BAR_HEIGHT - SEARCH_BAR_HEIGHT;
-const CARD_WIDTH = width; // Remove the padding/margin
+const CARD_PADDING = 16;
+const CARD_WIDTH = width - (CARD_PADDING * 2);
 const CARD_HEIGHT = AVAILABLE_HEIGHT * 0.9; // Use 90% of available height
 
 const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
@@ -137,6 +138,17 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
   const isAnimating = useRef(false);
   const [posterUrl, setPosterUrl] = useState<string>('https://via.placeholder.com/500x750?text=Loading...');
   const [imageError, setImageError] = useState<boolean>(false);
+
+  // Add fade-in animation for new cards
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, [movie.id]); // Reset animation when movie changes
 
   useEffect(() => {
     onSwipingStateChange(!isFlipped);
@@ -171,6 +183,16 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
 
     loadImage();
     return () => { mounted = false; };
+  }, [movie?.poster_path]);
+
+  // Add instant load for images
+  useEffect(() => {
+    if (movie?.poster_path) {
+      const url = `https://image.tmdb.org/t/p/w500${movie.poster_path}`;
+      Image.prefetch(url).then(() => {
+        setPosterUrl(url);
+      });
+    }
   }, [movie?.poster_path]);
 
   const handleDoubleTap = () => {
@@ -520,11 +542,24 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
     }
   }, [movie, performFlip]);
 
+  // Add animation timing configuration
+  const cardAnimConfig = {
+    duration: 200,
+    useNativeDriver: true,
+  };
+
   return (
     <TouchableWithoutFeedback onPress={handleDoubleTap}>
-      <View style={styles.container}>
+      <Animated.View style={styles.container}>
         <Animated.View 
-          style={[styles.cardFace, { transform: [{ perspective: 2000 }, { rotateY: frontInterpolate }], opacity: frontOpacity, zIndex: isFlipped ? 0 : 1 }]}
+          style={[
+            styles.cardFace,
+            {
+              transform: [{ perspective: 2000 }, { rotateY: frontInterpolate }],
+              opacity: frontOpacity,
+              zIndex: isFlipped ? 0 : 1,
+            }
+          ]}
         >
           {renderFrontFace()}
         </Animated.View>
@@ -538,7 +573,7 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
             onPostReview={handlePostReview}
           />
         </Animated.View>
-      </View>
+      </Animated.View>
     </TouchableWithoutFeedback>
   );
 };
@@ -550,19 +585,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent',
+    transform: [{ perspective: 2000 }],
   },
   cardFace: {
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
     position: 'absolute',
     backfaceVisibility: 'hidden',
-    borderRadius: 0, // Remove border radius for full-width look
+    borderRadius: 10,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   cardBack: {
     backgroundColor: '#000',

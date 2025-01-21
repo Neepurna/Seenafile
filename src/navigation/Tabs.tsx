@@ -99,7 +99,7 @@ const Tabs: React.FC = () => {
 
   return (
     <>
-      <Tab.Navigator<TabsStackParamList>
+      <Tab.Navigator
         screenOptions={({ route, navigation }) => ({
           // Hide the header only on CineBrowse screen
           headerShown: route.name !== 'CineBrowse',
@@ -128,17 +128,30 @@ const Tabs: React.FC = () => {
           },
           tabBarStyle: {
             height: TAB_BAR_HEIGHT,
-            backgroundColor: '#000',
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
             paddingBottom: 10,
-          },
-          tabBarItemStyle: {
-            padding: 5,
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            elevation: 4,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: -2 },
+            shadowOpacity: 0.25,
+            shadowRadius: 3.84,
+            borderTopColor: 'rgba(255, 255, 255, 0.1)',
+            zIndex: 1000,
           },
           headerStyle: {
-            backgroundColor: '#000',
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
             height: 100,
+            elevation: 4,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.25,
+            shadowRadius: 3.84,
+            zIndex: 1000,
           },
-          headerTintColor: '#fff',
         })}
       >
         <Tab.Screen name="CineBrowse" component={CineBrowseScreen} />
@@ -173,7 +186,7 @@ const Tabs: React.FC = () => {
       </Tab.Navigator>
 
       {isProfileVisible && (
-        <Animated.View style={[styles.overlay, { opacity: backdropAnim }]}>
+        <Animated.View style={[styles.overlay, { opacity: backdropAnim, zIndex: 2000 }]}>
           <TouchableOpacity
             style={styles.backdrop}
             activeOpacity={1}
@@ -197,7 +210,7 @@ const Tabs: React.FC = () => {
 const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    zIndex: 1000,
+    zIndex: 2000,
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
