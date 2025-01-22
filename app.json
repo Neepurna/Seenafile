@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "tinder-for-cinephile",
-    "slug": "tinder-for-cinephile",
+    "name": "SeenaFile",
+    "slug": "SeenaFile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
