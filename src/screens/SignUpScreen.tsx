@@ -1,24 +1,68 @@
 // src/screens/SignUpScreen.tsx
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, SafeAreaView, ScrollView, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { createUserWithProfile } from '../firebase';
 
 const SignUpScreen = ({ navigation }) => {
   const [formData, setFormData] = useState({
     name: '',
-    dob: new Date(),
+    dob: '',
     email: '',
     password: '',
-    gender: 'not_specified', // Add this
+    gender: 'not_specified',
   });
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [dobPlaceholder, setDobPlaceholder] = useState('DD/MM/YYYY');
 
-  const handleDateChange = (event, selectedDate) => {
-    setShowDatePicker(false);
-    if (selectedDate) {
-      setFormData(prev => ({ ...prev, dob: selectedDate }));
+  const validateDate = (text: string) => {
+    text = text.replace(/[^\d/]/g, '');
+    
+    if (text.length < formData.dob.length) {
+      setDobPlaceholder('DD/MM/YYYY');
+      setFormData(prev => ({ ...prev, dob: text }));
+      return;
+    }
+
+    if (text.length === 2) {
+      const day = parseInt(text);
+      if (day < 1 || day > 31) {
+        Alert.alert('Invalid Day', 'Please enter a day between 1 and 31');
+        return;
+      }
+      text += '/';
+      setDobPlaceholder('MM/YYYY');
+    }
+    
+    if (text.length === 5) {
+      const month = parseInt(text.split('/')[1]);
+      if (month < 1 || month > 12) {
+        Alert.alert('Invalid Month', 'Please enter a month between 01 and 12');
+        return;
+      }
+      text += '/';
+      setDobPlaceholder('YYYY');
+    }
+
+    if (text.length > 10) return;
+    
+    setFormData(prev => ({ ...prev, dob: text }));
+
+    if (text.length === 10) {
+      const [day, month, year] = text.split('/');
+      const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      const now = new Date();
+      const minDate = new Date();
+      minDate.setFullYear(now.getFullYear() - 13);
+
+      const isValidDate = date.getDate() === parseInt(day) && 
+                         date.getMonth() === parseInt(month) - 1 && 
+                         date.getFullYear() === parseInt(year);
+      
+      if (!isValidDate || date > now || date > minDate) {
+        Alert.alert('Invalid Date', 'Please enter a valid date of birth. You must be at least 13 years old.');
+        setFormData(prev => ({ ...prev, dob: '' }));
+        setDobPlaceholder('DD/MM/YYYY');
+      }
     }
   };
 
@@ -80,24 +124,15 @@ const SignUpScreen = ({ navigation }) => {
                   enablesReturnKeyAutomatically
                 />
 
-                <TouchableOpacity 
-                  style={styles.input} 
-                  onPress={() => setShowDatePicker(true)}
-                >
-                  <Text style={[styles.inputText, !formData.dob && styles.placeholder]}>
-                    {formData.dob.toLocaleDateString()}
-                  </Text>
-                </TouchableOpacity>
-
-                {showDatePicker && (
-                  <DateTimePicker
-                    value={formData.dob}
-                    mode="date"
-                    display="default"
-                    onChange={handleDateChange}
-                    maximumDate={new Date()}
-                  />
-                )}
+                <TextInput
+                  style={[styles.input, Platform.OS === 'android' && styles.androidInput]}
+                  placeholder={dobPlaceholder}
+                  value={formData.dob}
+                  onChangeText={validateDate}
+                  keyboardType="numeric"
+                  maxLength={10}
+                  placeholderTextColor="#999"
+                />
 
                 <TextInput
                   style={[styles.input, Platform.OS === 'android' && styles.androidInput]}
