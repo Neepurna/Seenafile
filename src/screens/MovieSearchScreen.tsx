@@ -1,5 +1,5 @@
-import React, { useEffect, useState, memo, useCallback } from 'react';
-import { View, StyleSheet, TextInput, Image, Dimensions, ActivityIndicator, Text, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useEffect, useState, memo, useCallback, useRef } from 'react';
+import { View, StyleSheet, TextInput, Image, Dimensions, ActivityIndicator, Text, ScrollView, KeyboardAvoidingView, Platform, Animated, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Movie } from '../services/api';
 import { fetchRandomMovies, fetchTrendingMovies } from '../services/helper';
@@ -25,9 +25,40 @@ const MovieSearchScreen: React.FC = () => {
   const [movies, setMovies] = useState<Movie[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const searchBarAnimation = useRef(new Animated.Value(0)).current;
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const searchInputRef = useRef<TextInput>(null);
+  const slideAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     initializeMovies();
+    Animated.timing(searchBarAnimation, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+
+    const keyboardWillShow = Keyboard.addListener('keyboardWillShow', (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+    const keyboardWillHide = Keyboard.addListener('keyboardWillHide', () => {
+      setKeyboardHeight(0);
+    });
+
+    // Animate in and focus search
+    Animated.spring(slideAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      tension: 50,
+      friction: 7
+    }).start(() => {
+      searchInputRef.current?.focus();
+    });
+
+    return () => {
+      keyboardWillShow.remove();
+      keyboardWillHide.remove();
+    };
   }, []);
 
   const initializeMovies = async () => {
@@ -88,9 +119,43 @@ const MovieSearchScreen: React.FC = () => {
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        style={styles.container}
       >
+        <Animated.View 
+          style={[
+            styles.searchContainer,
+            {
+              transform: [
+                {
+                  translateY: searchBarAnimation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [20, 0],
+                  }),
+                },
+                {
+                  translateX: slideAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [width, 0],
+                  })
+                }
+              ],
+              opacity: searchBarAnimation,
+            },
+          ]}
+        >
+          <View style={styles.searchBar}>
+            <TextInput
+              ref={searchInputRef}
+              style={styles.searchInput}
+              value={searchQuery}
+              onChangeText={handleSearch}
+              placeholder="Search movies..."
+              placeholderTextColor="#666"
+              autoFocus={true}
+            />
+          </View>
+        </Animated.View>
+
         <ScrollView 
           style={styles.moviesContainer}
           contentContainerStyle={styles.moviesContent}
@@ -111,16 +176,6 @@ const MovieSearchScreen: React.FC = () => {
             </View>
           )}
         </ScrollView>
-
-        <View style={styles.searchContainer}>
-          <TextInput
-            style={styles.searchInput}
-            value={searchQuery}
-            onChangeText={handleSearch}
-            placeholder="Search movies..."
-            placeholderTextColor="#666"
-          />
-        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -146,8 +201,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   searchContainer: {
-    padding: 16,
-    paddingBottom: Platform.OS === 'ios' ? 30 : 16,
+    flex: 1,
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+  },
+  searchBar: {
+    margin: 15,
+    paddingHorizontal: 15,
+    height: 45,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   searchInput: {
     backgroundColor: '#333',

@@ -13,27 +13,15 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import ProfileScreen from '../screens/ProfileScreen';
 import CineBrowseScreen from '../screens/CineBrowseScreen';
-import CinePalScreen from '../screens/CinePalScreen';
-import MyWallScreen from '../screens/MyWallScreen';
-import MovieGridScreen from '../screens/MovieGridScreen';
+import ChatScreen from '../screens/ChatScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 
 const Stack = createStackNavigator<TabsStackParamList>();
 
 type TabsStackParamList = {
   CineBrowse: undefined;
-  CinePal: undefined;
+  Chat: undefined;
   Profile: undefined;
-  MyWall: {
-    userId: string;
-    username: string;
-    matchScore: number;
-  };
-  MovieGridScreen: {
-    folderId: string;
-    folderName: string;
-    folderColor: string;
-  };
 };
 
 const Tabs: React.FC = () => {
@@ -112,11 +100,6 @@ const Tabs: React.FC = () => {
             fontWeight: 'bold',
             color: '#fff',
           },
-          headerRight: () => (
-            <TouchableOpacity onPress={showProfile} style={{ marginRight: 15 }}>
-              <Ionicons name="settings-outline" size={24} color="#fff" />
-            </TouchableOpacity>
-          ),
         })}
       >
         <Stack.Screen 
@@ -124,36 +107,8 @@ const Tabs: React.FC = () => {
           component={CineBrowseScreen}
           options={{ headerTitle: '' }}
         />
-        <Stack.Screen 
-          name="CinePal" 
-          component={CinePalScreen} 
-        />
-        <Stack.Screen 
-          name="Profile" 
-          component={ProfileScreen} 
-        />
-        <Stack.Screen
-          name="MyWall"
-          component={MyWallScreen}
-          options={{
-            headerTitle: 'User Profile',
-            headerLeft: ({ onPress }) => (
-              <TouchableOpacity
-                onPress={onPress}
-                style={{ marginLeft: 15 }}
-              >
-                <Ionicons name="arrow-back" size={24} color="#fff" />
-              </TouchableOpacity>
-            ),
-          }}
-        />
-        <Stack.Screen
-          name="MovieGridScreen"
-          component={MovieGridScreen}
-          options={({ route }) => ({
-            headerTitle: route.params?.folderName ?? 'Movies',
-          })}
-        />
+        <Stack.Screen name="Chat" component={ChatScreen} />
+        <Stack.Screen name="Profile" component={ProfileScreen} />
       </Stack.Navigator>
 
       {isProfileVisible && (

@@ -15,6 +15,8 @@ import {
   TextInput,
   TouchableOpacity,
   KeyboardAvoidingView,
+  ScrollView,
+  FlatList,
 } from 'react-native';
 import Swiper from 'react-native-deck-swiper';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,7 +27,7 @@ import { Movie } from '../services/api';
 import { auth, db } from '../firebase';
 import { collection, doc, setDoc, getDoc } from 'firebase/firestore';
 import { DIMS, getCardHeight } from '../theme';
-import { fetchMoviesByCategory, searchMoviesAndShows } from '../services/tmdb';
+import { fetchMoviesByCategory, searchMoviesAndShows, fetchTrendingMovies } from '../services/tmdb';
 import PerformanceLogger from '../utils/performanceLogger';
 
 const { width, height } = Dimensions.get('window');
@@ -48,6 +50,28 @@ type RootStackParamList = {
 };
 
 type NavigationProp = StackNavigationProp<RootStackParamList, 'CineBrowse'>;
+
+const genres = {
+  28: 'Action',
+  12: 'Adventure',
+  16: 'Animation',
+  35: 'Comedy',
+  80: 'Crime',
+  99: 'Documentary',
+  18: 'Drama',
+  10751: 'Family',
+  14: 'Fantasy',
+  36: 'History',
+  27: 'Horror',
+  10402: 'Music',
+  9648: 'Mystery',
+  10749: 'Romance',
+  878: 'Sci-Fi',
+  10770: 'TV Movie',
+  53: 'Thriller',
+  10752: 'War',
+  37: 'Western'
+};
 
 const CineBrowseScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
@@ -316,18 +340,62 @@ const CineBrowseScreen: React.FC = () => {
 
       return (
         <View style={styles.cardWrapper}>
-          <Animated.View
+          <Animated.View style={[styles.cardContainer, cardStyle]}>
+            <FlipCard movie={movie} onSwipingStateChange={setSwipingEnabled} />
+          </Animated.View>
+
+          {/* Search Panel - Positioned relative to card */}
+          <Animated.View 
             style={[
-              styles.cardContainer,
-              cardStyle,
+              styles.searchPanel,
+              {
+                transform: [{ translateX: searchPanelAnim }],
+                opacity: searchPanelAnim.interpolate({
+                  inputRange: [-DIMS.cardWidth, 0],
+                  outputRange: [0, 1]
+                }),
+                zIndex: isSearchVisible ? 1000 : -1,
+              }
             ]}
           >
-            <FlipCard movie={movie} onSwipingStateChange={setSwipingEnabled} />
+            <View style={styles.searchHeader}>
+              <TouchableOpacity onPress={hideSearchPanel} style={styles.backButton}>
+                <Ionicons name="arrow-back" size={24} color="#fff" />
+              </TouchableOpacity>
+              <TextInput
+                ref={searchInputRef}
+                style={styles.searchInput}
+                placeholder="Search movies..."
+                placeholderTextColor="rgba(255,255,255,0.5)"
+                onChangeText={handleSearchResult}
+              />
+            </View>
+            
+            <FlatList
+              data={searchResults}
+              numColumns={2}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.searchResultsContainer}
+              renderItem={({ item }) => (
+                <TouchableOpacity 
+                  style={styles.searchResultItem}
+                  onPress={() => handleMovieSelect(item)}
+                >
+                  <Image
+                    source={{ uri: `https://image.tmdb.org/t/p/w500${item.poster_path}` }}
+                    style={styles.searchResultImage}
+                  />
+                  <Text style={styles.searchResultTitle} numberOfLines={1}>
+                    {item.title || item.name}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
           </Animated.View>
         </View>
       );
     },
-    [currentIndex, calculateNextCardStyle]
+    [currentIndex, calculateNextCardStyle, isSearchVisible, searchPanelAnim]
   );
 
   const renderBackground = () => {
@@ -388,14 +456,74 @@ const CineBrowseScreen: React.FC = () => {
     },
   };
 
+  const [isSearchActive, setIsSearchActive] = useState(false);
+  const searchBarAnimation = useRef(new Animated.Value(0)).current;
+  const searchBarTranslateY = useRef(new Animated.Value(0)).current;
+
+  const searchPanelAnim = useRef(new Animated.Value(-DIMS.cardWidth)).current;
+  const [isSearchVisible, setIsSearchVisible] = useState(false);
+  const [searchResults, setSearchResults] = useState<Movie[]>([]);
+  const searchInputRef = useRef<TextInput>(null);
+  
+  const showSearchPanel = () => {
+    setIsSearchVisible(true);
+    setSwipingEnabled(false);
+    Animated.spring(searchPanelAnim, {
+      toValue: 0,
+      useNativeDriver: true,
+      tension: 65,
+      friction: 11
+    }).start(() => {
+      searchInputRef.current?.focus();
+    });
+  };
+
+  const hideSearchPanel = () => {
+    Keyboard.dismiss();
+    Animated.spring(searchPanelAnim, {
+      toValue: -DIMS.cardWidth,
+      useNativeDriver: true,
+      tension: 65,
+      friction: 11
+    }).start(() => {
+      setIsSearchVisible(false);
+      setSwipingEnabled(true);
+    });
+  };
+
+  const handleSearchResult = async (query: string) => {
+    if (!query.trim()) {
+      const trending = await fetchTrendingMovies(10);
+      setSearchResults(trending);
+      return;
+    }
+    const results = await searchMoviesAndShows(query);
+    setSearchResults(results?.results || []);
+  };
+
+  const handleMovieSelect = (movie: Movie) => {
+    hideSearchPanel();
+    setMovies(prevMovies => [movie, ...prevMovies]);
+    setCurrentIndex(0);
+  };
+
+  useEffect(() => {
+    // Load initial trending movies for search panel
+    fetchTrendingMovies(10).then(setSearchResults);
+  }, []);
+
+  const handleSearchFocus = () => {
+    showSearchPanel();
+  };
+
   return (
     <View style={styles.mainContainer}>
-      {/* Background Layer */}
       {renderBackground()}
-
-      {/* Content Layer */}
       <View style={styles.contentLayer}>
-        {/* Main Content */}
+        <View style={styles.logoContainer}>
+          <Text style={styles.logoText}>SeenaFile</Text>
+        </View>
+        
         <View style={styles.contentContainer}>
           {isFetching && movies.length === 0 ? (
             <View style={styles.loaderContainer}>
@@ -519,9 +647,91 @@ const CineBrowseScreen: React.FC = () => {
                   alignSelf: 'center',
                 }}
               />
+              {/* Search Bar */}
+              <Animated.View 
+                style={[
+                  styles.searchBarContainer,
+                  {
+                    transform: [{ translateY: searchBarTranslateY }],
+                  }
+                ]}
+              >
+                <TouchableOpacity 
+                  style={styles.searchBar}
+                  onPress={handleSearchFocus}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="search" size={20} color="rgba(255,255,255,0.6)" />
+                  <Text style={styles.searchPlaceholder}>
+                    Search movies...
+                  </Text>
+                </TouchableOpacity>
+              </Animated.View>
             </View>
           )}
         </View>
+
+        {/* Search Panel */}
+        <Animated.View 
+          style={[
+            styles.searchPanel,
+            {
+              transform: [{ translateX: searchPanelAnim }],
+              width: DIMS.cardWidth,
+              height: getCardHeight(),
+              top: 0,
+            }
+          ]}
+        >
+          <View style={styles.searchHeader}>
+            <TouchableOpacity 
+              onPress={hideSearchPanel}
+              style={styles.backButton}
+            >
+              <Ionicons name="arrow-back" size={24} color="#fff" />
+            </TouchableOpacity>
+            <TextInput
+              ref={searchInputRef}
+              style={styles.searchInput}
+              placeholder="Search movies..."
+              placeholderTextColor="rgba(255,255,255,0.5)"
+              onChangeText={handleSearchResult}
+            />
+          </View>
+          
+          <FlatList
+            data={searchResults}
+            numColumns={2}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.searchResultsContainer}
+            renderItem={({ item }) => (
+              <TouchableOpacity 
+                style={styles.searchResultItem}
+                onPress={() => handleMovieSelect(item)}
+              >
+                <Image
+                  source={{ uri: `https://image.tmdb.org/t/p/w500${item.poster_path}` }}
+                  style={styles.searchResultImage}
+                />
+                <Text style={styles.searchResultTitle} numberOfLines={1}>
+                  {item.title || item.name}
+                </Text>
+              </TouchableOpacity>
+            )}
+          />
+        </Animated.View>
+
+        {/* Existing search bar trigger */}
+        <TouchableOpacity 
+          style={styles.searchBar}
+          onPress={handleSearchFocus}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="search" size={20} color="rgba(255,255,255,0.6)" />
+          <Text style={styles.searchPlaceholder}>
+            Search movies...
+          </Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -632,16 +842,15 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     position: 'relative',
-    overflow: 'hidden', // Changed to hidden to prevent any overflow
+    overflow: 'hidden',
   },
   cardContainer: {
     width: '100%',
     height: '100%',
-    position: 'absolute', // Changed to absolute
+    position: 'absolute',
     borderRadius: 10,
     overflow: 'hidden',
     backgroundColor: 'transparent',
-    // Remove alignSelf and other positioning properties
   },
   preloadedBackground: {
     position: 'absolute',
@@ -719,6 +928,118 @@ const styles = StyleSheet.create({
   },
   swiperContainer: {
     backgroundColor: 'transparent',
+  },
+  logoContainer: {
+    position: 'absolute',
+    top: 41,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoText: {
+    color: 'white',
+    fontSize: 32, // Increased size since it's now the only element
+    fontFamily: 'Helvetica Neue',
+    fontWeight: '500',
+  },
+  searchBarContainer: {
+    position: 'absolute',
+    bottom: 20,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    height: 45,
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    backdropFilter: 'blur(10px)',
+  },
+  searchPlaceholder: {
+    flex: 1,
+    marginLeft: 10,
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 16,
+    fontFamily: Platform.select({
+      ios: 'Helvetica Neue',
+      android: 'sans-serif-light'
+    }),
+    fontWeight: '300',
+  },
+  searchPanel: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#000',
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  searchHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(0,0,0,0.8)',
+  },
+  bottomSearchContainer: {
+    position: 'absolute',
+    bottom: '25%', // Move down 20%
+    left: (width - DIMS.cardWidth) / 2, // Center with card
+    width: DIMS.cardWidth,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    height: 45,
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  searchResultsContainer: {
+    paddingVertical: 8,
+  },
+  searchResultItem: {
+    width: '50%',
+    padding: 8,
+    aspectRatio: 0.8,
+  },
+  searchResultImage: {
+    width: '100%',
+    height: '85%',
+    borderRadius: 8,
+  },
+  searchResultTitle: {
+    color: '#fff',
+    fontSize: 12,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  searchTrigger: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 50 : 16,
+    right: 16,
+    padding: 8,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 20,
+    zIndex: 100,
   },
 });
 

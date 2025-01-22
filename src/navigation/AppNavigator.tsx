@@ -1,18 +1,20 @@
 import { createStackNavigator } from '@react-navigation/stack';
-import ChatScreen from '../screens/ChatScreen';
+import Tabs from './Tabs';
+import MovieSearchScreen from '../screens/MovieSearchScreen';
 
 const Stack = createStackNavigator();
 
-function AppNavigator() {
+const AppNavigator = () => {
   return (
-    <Stack.Navigator>
-      // ...other screens...
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="MainTabs" component={Tabs} />
       <Stack.Screen 
-        name="Chat" 
-        component={ChatScreen}
-        options={({ route }) => ({
-          title: route.params?.username || 'Chat'
-        })}
+        name="MovieSearch" 
+        component={MovieSearchScreen}
+        options={{
+          headerShown: false,
+          presentation: 'modal',
+        }}
       />
     </Stack.Navigator>
   );
