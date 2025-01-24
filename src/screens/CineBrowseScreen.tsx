@@ -27,6 +27,7 @@ import { collection, doc, setDoc, getDoc } from 'firebase/firestore';
 import { DIMS, getCardHeight } from '../theme';
 import { fetchMoviesByCategory, searchMoviesAndShows } from '../services/tmdb';
 import PerformanceLogger from '../utils/performanceLogger';
+import GlossySearchBar from '../components/GlossySearchBar';
 
 const { width, height } = Dimensions.get('window');
 const TAB_BAR_HEIGHT = 100;
@@ -388,15 +389,47 @@ const CineBrowseScreen: React.FC = () => {
     },
   };
 
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchDebounceRef = useRef<NodeJS.Timeout>();
+
+  const handleSearch = useCallback((text: string) => {
+    setSearchQuery(text);
+    
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+
+    searchDebounceRef.current = setTimeout(async () => {
+      if (text.trim()) {
+        setIsFetching(true);
+        try {
+          const results = await searchMoviesAndShows(text);
+          if (results?.length) {
+            setMovies(results);
+            setCurrentIndex(0);
+          }
+        } catch (error) {
+          console.error('Search error:', error);
+        } finally {
+          setIsFetching(false);
+        }
+      } else {
+        handleRefresh();
+      }
+    }, 500);
+  }, []);
+
+  const clearSearch = useCallback(() => {
+    setSearchQuery('');
+    handleRefresh();
+  }, []);
+
   return (
     <View style={styles.mainContainer}>
-      {/* Background Layer */}
       {renderBackground()}
-
-      {/* Content Layer */}
       <View style={styles.contentLayer}>
-        {/* Main Content */}
         <View style={styles.contentContainer}>
+          {/* Move cards section up */}
           {isFetching && movies.length === 0 ? (
             <View style={styles.loaderContainer}>
               <ActivityIndicator size="large" color="#fff" />
@@ -522,6 +555,15 @@ const CineBrowseScreen: React.FC = () => {
             </View>
           )}
         </View>
+
+        {/* Position search bar at bottom */}
+        <View style={styles.bottomSearchContainer}>
+          <GlossySearchBar
+            value={searchQuery}
+            onChangeText={handleSearch}
+            onClear={clearSearch}
+          />
+        </View>
       </View>
     </View>
   );
@@ -556,18 +598,33 @@ const styles = StyleSheet.create({
   contentLayer: {
     flex: 1,
     zIndex: 2,
+    justifyContent: 'space-between', // Add this to push content apart
   },
+  
   contentContainer: {
     flex: 1,
-    paddingTop: 0,
-    marginBottom: TAB_BAR_HEIGHT,
+    paddingTop: Platform.OS === 'ios' ? 50 : 20,
   },
+
   cardsWrapper: {
     flex: 1,
-    justifyContent: 'center', // Center cards vertically
-    marginTop: 100,
-    marginLeft: 20, // Adjust if needed to center perfectly
+    justifyContent: 'center',
+    marginTop: 0, // Remove top margin
+    marginLeft: 20,
   },
+
+  // Add new styles for bottom search container
+  bottomSearchContainer: {
+    position: 'absolute',
+    bottom: TAB_BAR_HEIGHT + 10, // Position above tab bar
+    left: 0,
+    right: 0,
+    paddingHorizontal: 20,
+    paddingBottom: 10,
+    backgroundColor: 'transparent',
+  },
+
+  // Remove or update any conflicting styles like searchBar or topSearchSection
   searchSection: {
     paddingHorizontal: 15,
     paddingBottom: 8,
@@ -719,6 +776,10 @@ const styles = StyleSheet.create({
   },
   swiperContainer: {
     backgroundColor: 'transparent',
+  },
+  searchBar: {
+    marginTop: Platform.OS === 'ios' ? 50 : 20,
+    zIndex: 10,
   },
 });
 
