@@ -52,8 +52,6 @@ const MainNavigator: React.FC = () => {
             iconName = focused ? 'chatbubble' : 'chatbubble-outline';
           } else if (route.name === 'Profile') {
             iconName = focused ? 'person' : 'person-outline';
-          } else if (route.name === 'Search') {
-            iconName = focused ? 'search' : 'search-outline';
           }
 
           return <Ionicons name={iconName} size={24} color="#fff" />;
@@ -74,20 +72,6 @@ const MainNavigator: React.FC = () => {
         name="Home" 
         component={HomeStack}
         options={{ headerShown: false }}
-      />
-      <Tab.Screen 
-        name="Search" 
-        component={MovieSearchScreen}
-        options={{ 
-          headerShown: false,
-          tabBarIcon: ({ focused, color, size }) => (
-            <Ionicons 
-              name={focused ? 'search' : 'search-outline'} 
-              size={24} 
-              color="#fff" 
-            />
-          ),
-        }}
       />
       <Tab.Screen 
         name="Chat" 
