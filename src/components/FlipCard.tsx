@@ -384,19 +384,35 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
 
   // Update the modal close handler
   const handleModalClose = () => {
-    setShowInfo(false);
-    onSwipingStateChange(!isFlipped); // Re-enable swiping if card isn't flipped
+    Animated.spring(slideAnim, {
+      toValue: -width,
+      useNativeDriver: true,
+      friction: 20,
+      tension: 80,
+    }).start(() => {
+      setShowInfo(false);
+      onSwipingStateChange(!isFlipped);
+    });
   };
 
   // Update renderMovieDetails with new close handler
   const renderMovieDetails = () => (
     <Modal
-      animationType="slide"
+      animationType="none"
       transparent={true}
       visible={showInfo}
       onRequestClose={handleModalClose}
     >
-      <View style={styles.modalOverlay}>
+      <Animated.View 
+        style={[
+          styles.modalContainer,
+          {
+            transform: [{
+              translateX: slideAnim
+            }]
+          }
+        ]}
+      >
         <View style={styles.modalContent}>
           <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
             <View>
@@ -437,7 +453,7 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
             <Text style={styles.closeButtonText}>Close</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </Animated.View>
     </Modal>
   );
 
@@ -477,9 +493,37 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
     e.stopPropagation();
     setShowInfo(true);
     onSwipingStateChange(false); // Disable swiping when opening modal
+    Animated.spring(slideAnim, {
+      toValue: 0,
+      useNativeDriver: true,
+      friction: 20,
+      tension: 80,
+    }).start();
     fetchMovieCredits(movie.id);
     fetchMovieDetailsAndReviews(movie.id);
   };
+
+  // Add new state for slide animation
+  const slideAnim = useRef(new Animated.Value(-width)).current;
+
+  // Update modal animation
+  useEffect(() => {
+    if (showInfo) {
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        friction: 8,
+        tension: 40,
+      }).start();
+    } else {
+      Animated.spring(slideAnim, {
+        toValue: -width,
+        useNativeDriver: true,
+        friction: 8,
+        tension: 40,
+      }).start();
+    }
+  }, [showInfo]);
 
   // Update the info button in renderFrontFace
   const renderFrontFace = () => (
@@ -500,6 +544,25 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
       >
         <Text style={styles.infoIcon}>ⓘ</Text>
       </TouchableOpacity>
+      {showInfo && (
+        <Animated.View 
+          style={[
+            styles.modalOverlay,
+            {
+              transform: [{
+                translateX: slideAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-width, 0] // Changed from [width, 0] to [-width, 0]
+                })
+              }]
+            }
+          ]}
+        >
+          <View style={styles.modalContent}>
+            {/* ...existing modal content... */}
+          </View>
+        </Animated.View>
+      )}
       {renderMovieDetails()}
     </View>
   );
@@ -616,7 +679,7 @@ const styles = StyleSheet.create({
   infoButton: {
     position: 'absolute',
     bottom: 20,
-    right: 20,
+    left: 20, // Changed from right: 20 to left: 20
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -631,22 +694,20 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)', // Darker overlay
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalContent: {
-    width: '90%',
-    maxHeight: '80%',
-    backgroundColor: '#1a1a1a', // Dark background
-    borderRadius: 20,
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#1a11a1a',
     padding: 20,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.5,
-    shadowRadius: 4,
   },
   modalTitle: {
     fontSize: 24,
@@ -778,6 +839,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     color: '#e0e0e0', // Light gray text
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000,
   },
 });
 

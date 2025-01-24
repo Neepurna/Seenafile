@@ -28,6 +28,7 @@ import { DIMS, getCardHeight } from '../theme';
 import { fetchMoviesByCategory, searchMoviesAndShows } from '../services/tmdb';
 import PerformanceLogger from '../utils/performanceLogger';
 import GlossySearchBar from '../components/GlossySearchBar';
+import SearchModal from '../components/SearchModal';
 
 const { width, height } = Dimensions.get('window');
 const TAB_BAR_HEIGHT = 100;
@@ -391,6 +392,7 @@ const CineBrowseScreen: React.FC = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const searchDebounceRef = useRef<NodeJS.Timeout>();
+  const [isSearchModalVisible, setIsSearchModalVisible] = useState(false);
 
   const handleSearch = useCallback((text: string) => {
     setSearchQuery(text);
@@ -423,6 +425,15 @@ const CineBrowseScreen: React.FC = () => {
     setSearchQuery('');
     handleRefresh();
   }, []);
+
+  const handleSearchBarPress = () => {
+    setIsSearchModalVisible(true);
+  };
+
+  const handleMovieSelect = (movie: Movie) => {
+    setMovies(prevMovies => [movie, ...prevMovies]);
+    setCurrentIndex(0);
+  };
 
   return (
     <View style={styles.mainContainer}>
@@ -560,9 +571,10 @@ const CineBrowseScreen: React.FC = () => {
         <View style={styles.bottomSearchContainer}>
           <GlossySearchBar
             value={searchQuery}
-            onChangeText={handleSearch}
-            onClear={clearSearch}
-            
+            onChangeText={() => {}}
+            onClear={() => {}}
+            onMovieSelect={handleMovieSelect}
+            style={styles.searchBar}
           />
         </View>
       </View>
@@ -617,7 +629,7 @@ const styles = StyleSheet.create({
   // Add new styles for bottom search container
   bottomSearchContainer: {
     position: 'absolute',
-    bottom: TAB_BAR_HEIGHT - 40, // Adjust this value to position right above tabs
+    bottom: TAB_BAR_HEIGHT +6, // Adjust this value to position right above tabs
     left: 0,
     right: 0,
     paddingHorizontal: 16,
@@ -789,6 +801,9 @@ const styles = StyleSheet.create({
   searchBar: {
     marginTop: Platform.OS === 'ios' ? 50 : 20,
     zIndex: 10,
+  },
+  searchBarTrigger: {
+    width: '100%',
   },
 });
 
