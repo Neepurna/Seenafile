@@ -562,6 +562,7 @@ const CineBrowseScreen: React.FC = () => {
             value={searchQuery}
             onChangeText={handleSearch}
             onClear={clearSearch}
+            
           />
         </View>
       </View>
@@ -609,19 +610,27 @@ const styles = StyleSheet.create({
   cardsWrapper: {
     flex: 1,
     justifyContent: 'center',
-    marginTop: 0, // Remove top margin
+    marginTop: height * 0.1, // Move cards down by 20% of screen height
     marginLeft: 20,
   },
 
   // Add new styles for bottom search container
   bottomSearchContainer: {
     position: 'absolute',
-    bottom: TAB_BAR_HEIGHT + 10, // Position above tab bar
+    bottom: TAB_BAR_HEIGHT - 40, // Adjust this value to position right above tabs
     left: 0,
     right: 0,
-    paddingHorizontal: 20,
-    paddingBottom: 10,
+    paddingHorizontal: 16,
+    paddingBottom: 5, // Reduced padding
     backgroundColor: 'transparent',
+    height: 50, // Slightly reduced height
+    zIndex: 100, // Ensure it's above other elements
+    // Add subtle glow effect
+    shadowColor: '#fff',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.1,
+    shadowRadius: 15,
+    elevation: 5,
   },
 
   // Remove or update any conflicting styles like searchBar or topSearchSection

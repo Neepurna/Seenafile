@@ -49,39 +49,46 @@ const GlossySearchBar: React.FC<GlossySearchBarProps> = ({
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 20,
-    paddingVertical: 0, // Reduce vertical padding
+    paddingVertical: 0,
     width: '100%',
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.75)', // Darker background
+    backgroundColor: 'rgba(255, 255, 255, 0.1)', // More transparent
     borderRadius: 20,
     paddingHorizontal: 12,
-    height: 40, // Slightly smaller height
+    height: 45,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
+        shadowColor: '#fff',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.2,
+        shadowRadius: 10,
+        backdropFilter: 'blur(10px)',
       },
       android: {
         elevation: 5,
+        // For Android, we'll add a subtle gradient
+        backgroundColor: 'rgba(255, 255, 255, 0.15)',
       },
     }),
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   input: {
     flex: 1,
     color: '#fff',
     fontSize: 16,
-    marginLeft: 8,
-    paddingVertical: 8,
+    marginLeft: 10,
+    paddingVertical: 10,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   clearButton: {
-    padding: 4,
+    padding: 6,
+    marginLeft: 5,
   },
 });
 
