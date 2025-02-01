@@ -636,7 +636,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     
     backgroundColor: 'transparent',
-    height: 50, // Slightly reduced height
+    height: 60, // Slightly reduced height
     zIndex: 100, // Ensure it's above other elements
     // Add subtle glow effect
     shadowColor: '#fff',
@@ -676,12 +676,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: Platform.OS === 'ios' ? 50 : 30,
   },
-  searchContainer: {
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#222',
-  },
+  
   searchWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
