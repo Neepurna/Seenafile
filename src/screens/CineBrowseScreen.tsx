@@ -622,6 +622,7 @@ const styles = StyleSheet.create({
   cardsWrapper: {
     flex: 1,
     justifyContent: 'center',
+    alignItems: 'center',
     marginTop: height * 0.1, // Move cards down by 20% of screen height
     marginLeft: 20,
   },
@@ -632,8 +633,8 @@ const styles = StyleSheet.create({
     bottom: TAB_BAR_HEIGHT +6, // Adjust this value to position right above tabs
     left: 0,
     right: 0,
-    paddingHorizontal: 16,
-    paddingBottom: 5, // Reduced padding
+    paddingHorizontal: 6,
+    
     backgroundColor: 'transparent',
     height: 50, // Slightly reduced height
     zIndex: 100, // Ensure it's above other elements
