@@ -17,10 +17,13 @@ import { BlurView } from '@react-native-community/blur';
 import { getImageUrl } from '../services/instance';
 
 const { width, height } = Dimensions.get('window');
+const HEADER_HEIGHT = Platform.OS === 'ios' ? 100 : 100;
+const TAB_BAR_HEIGHT = 100;
 const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 44 : 0;
 const SEARCH_BAR_HEIGHT = 70;
-const AVAILABLE_HEIGHT = height - STATUS_BAR_HEIGHT - SEARCH_BAR_HEIGHT;
-const CARD_WIDTH = width - 32;
+const AVAILABLE_HEIGHT = height - HEADER_HEIGHT - TAB_BAR_HEIGHT - STATUS_BAR_HEIGHT - SEARCH_BAR_HEIGHT;
+const CARD_PADDING = 16;
+const CARD_WIDTH = width - (CARD_PADDING * 2);
 const CARD_HEIGHT = AVAILABLE_HEIGHT * 0.9;
 
 interface MovieReviewProps {
@@ -87,7 +90,6 @@ const MovieReview: React.FC<MovieReviewProps> = ({
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
       style={styles.container}
     >
       {/* Background Image with Blur */}
@@ -152,6 +154,7 @@ const styles = StyleSheet.create({
     height: CARD_HEIGHT,
     borderRadius: 20,
     overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.95)', // Add darker background
   },
   backgroundImage: {
     position: 'absolute',
@@ -167,9 +170,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'space-between',
     padding: 20,
+    height: CARD_HEIGHT, // Ensure inner container matches parent height
   },
   scrollContent: {
     flexGrow: 1,
+    paddingBottom: 20, // Add padding at bottom for better spacing
   },
   reviewHeader: {
     marginBottom: 20,
@@ -197,7 +202,7 @@ const styles = StyleSheet.create({
   reviewInput: {
     color: '#fff',
     fontSize: 16,
-    height: CARD_HEIGHT * 0.25,
+    height: CARD_HEIGHT * 0.2, // Adjust review input height proportionally
     textAlignVertical: 'top',
     padding: 15,
   },
@@ -231,7 +236,8 @@ const styles = StyleSheet.create({
     color: '#FFD700',
   },
   reviewActions: {
-    marginTop: 20,
+    marginTop: 'auto', // Push to bottom
+    paddingBottom: Platform.OS === 'ios' ? 20 : 10, // Add padding for different platforms
   },
   button: {
     backgroundColor: '#fff',

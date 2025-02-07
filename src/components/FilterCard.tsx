@@ -13,18 +13,20 @@ import { DIMS } from '../theme';
 
 const { width } = Dimensions.get('window');
 
-interface FilterCardProps {
+export interface FilterCardProps {
   selectedCategory: string;
   onSelectCategory: (category: string) => void;
   categories: string[];
-  containerStyle?: StyleProp<ViewStyle>; // Add this prop
+  containerStyle?: StyleProp<ViewStyle>;
+  className?: string;  // Make className optional
 }
 
 const FilterCard: React.FC<FilterCardProps> = ({
   selectedCategory,
   onSelectCategory,
   categories,
-  containerStyle // Add this prop
+  containerStyle,
+  className = '',  // Provide default empty string
 }) => {
   return (
     <View style={[styles.container, containerStyle]}>
@@ -32,6 +34,7 @@ const FilterCard: React.FC<FilterCardProps> = ({
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.categoriesContainer}
+        className={`flex-row ${className}`}
       >
         {categories.map((category) => (
           <TouchableOpacity
@@ -41,11 +44,17 @@ const FilterCard: React.FC<FilterCardProps> = ({
               selectedCategory === category && styles.selectedCategory
             ]}
             onPress={() => onSelectCategory(category)}
+            className={`px-4 py-2 rounded-full mr-2 ${
+              selectedCategory === category ? 'bg-accent' : 'bg-secondary'
+            }`}
           >
             <Text style={[
               styles.categoryText,
               selectedCategory === category && styles.selectedCategoryText
-            ]}>
+            ]}
+            className={`${
+              selectedCategory === category ? 'text-primary' : 'text-textSecondary'
+            }`}>
               {category}
             </Text>
           </TouchableOpacity>
@@ -136,13 +145,13 @@ const styles = StyleSheet.create({
   categoryPanel: {
     position: 'absolute',
     top: 0,
-    right: 0, // Changed from left to right
+    right: 0,
     width: width * 0.8,
     height: '100%',
     backgroundColor: '#1a1a1a',
     elevation: 5,
     shadowColor: '#000',
-    shadowOffset: { width: -2, height: 0 }, // Changed shadow direction
+    shadowOffset: { width: -2, height: 0 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     zIndex: 1000,

@@ -67,6 +67,7 @@ interface FlipCardProps {
     title?: string;  // Make title optional
     name?: string;   // Add name as optional for TV shows
     poster_path: string | null;
+    backdrop_path?: string | null;  // Add this line
     vote_average: number;
     overview: string;
     release_date: string;
