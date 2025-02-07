@@ -265,7 +265,6 @@ const CineBrowseScreen: React.FC = () => {
 
   const renderCard = useCallback((movie: Movie) => {
     if (!movie) return null;
-    
     return (
       <View style={styles.cardContainer}>
         <FlipCard 
@@ -284,59 +283,46 @@ const CineBrowseScreen: React.FC = () => {
     }
   }, [movies.length]);
 
-  const handleSwipedLeft = (index: number) => {
-    // Optional: handle left swipe
+  const saveMovieToFirebase = async (movie: Movie, category: string) => {
+    if (!movie || !auth.currentUser) return;
+    
+    try {
+      const userRef = doc(db, 'users', auth.currentUser.uid);
+      const movieRef = doc(collection(userRef, 'movies'), movie.id.toString());
+      
+      const movieData = {
+        id: movie.id,
+        title: movie.title || movie.name || '',
+        poster_path: movie.poster_path,
+        backdrop_path: movie.backdrop_path || null,
+        overview: movie.overview,
+        vote_average: movie.vote_average,
+        release_date: movie.release_date,
+        category: category,
+        timestamp: new Date().toISOString(),
+        userId: auth.currentUser.uid,
+      };
+
+      await setDoc(movieRef, movieData);
+    } catch (error) {
+      console.error('Error saving movie:', error);
+    }
+  };
+
+  const handleSwipedLeft = async (index: number) => {
+    await saveMovieToFirebase(movies[index], 'not_watched');
   };
 
   const handleSwipedRight = async (index: number) => {
-    const movie = movies[index];
-    if (movie) {
-      try {
-        const userRef = doc(db, 'users', auth.currentUser?.uid);
-        const movieRef = doc(collection(userRef, 'movies'), movie.id.toString());
-        await setDoc(movieRef, {
-          ...movie,
-          category: 'watched',
-          timestamp: new Date(),
-        });
-      } catch (error) {
-        console.error('Error saving movie:', error);
-      }
-    }
+    await saveMovieToFirebase(movies[index], 'watched');
   };
 
   const handleSwipedTop = async (index: number) => {
-    const movie = movies[index];
-    if (movie) {
-      try {
-        const userRef = doc(db, 'users', auth.currentUser?.uid);
-        const movieRef = doc(collection(userRef, 'movies'), movie.id.toString());
-        await setDoc(movieRef, {
-          ...movie,
-          category: 'most_watch',
-          timestamp: new Date(),
-        });
-      } catch (error) {
-        console.error('Error saving movie:', error);
-      }
-    }
+    await saveMovieToFirebase(movies[index], 'most_watch');
   };
 
   const handleSwipedBottom = async (index: number) => {
-    const movie = movies[index];
-    if (movie) {
-      try {
-        const userRef = doc(db, 'users', auth.currentUser?.uid);
-        const movieRef = doc(collection(userRef, 'movies'), movie.id.toString());
-        await setDoc(movieRef, {
-          ...movie,
-          category: 'watch_later',
-          timestamp: new Date(),
-        });
-      } catch (error) {
-        console.error('Error saving movie:', error);
-      }
-    }
+    await saveMovieToFirebase(movies[index], 'watch_later');
   };
 
   return (
@@ -347,7 +333,7 @@ const CineBrowseScreen: React.FC = () => {
           <Text style={styles.titleText}>INCLIVO</Text>
         </View>
         
-        <View style={styles.contentContainer}>
+        <View style={styles.swiperContainer}>
           {isFetching && movies.length === 0 ? (
             <View style={styles.loaderContainer}>
               <ActivityIndicator size="large" color="#fff" />
@@ -358,49 +344,26 @@ const CineBrowseScreen: React.FC = () => {
               <Text style={styles.loaderText}>No movies found</Text>
             </View>
           ) : (
-            <View style={styles.swiperContainer}>
-              <Swiper
-                cards={movies}
-                renderCard={renderCard}
-                cardIndex={currentIndex}
-                backgroundColor="transparent"
-                stackSize={2}
-                infinite={false}
-                animateCardOpacity={true}
-                cardHorizontalMargin={0}
-                cardVerticalMargin={0}
-                onSwiped={handleSwiped}
-                onSwipedLeft={handleSwipedLeft}
-                onSwipedRight={handleSwipedRight}
-                onSwipedTop={handleSwipedTop}
-                onSwipedBottom={handleSwipedBottom}
-                containerStyle={styles.swiperWrapper}
-                cardStyle={styles.swiperCard}
-                stackSeparation={0}
-                verticalSwipe={swipingEnabled}
-                horizontalSwipe={swipingEnabled}
-                overlayLabels={{
-                  left: {
-                    title: 'NOPE',
-                    style: {
-                      label: {
-                        backgroundColor: 'red',
-                        color: '#fff',
-                      },
-                    },
-                  },
-                  right: {
-                    title: 'LIKE',
-                    style: {
-                      label: {
-                        backgroundColor: '#4CCC93',
-                        color: '#fff',
-                      },
-                    },
-                  },
-                }}
-              />
-            </View>
+            <Swiper
+              cards={movies}
+              renderCard={renderCard}
+              cardIndex={currentIndex}
+              backgroundColor="transparent"
+              stackSize={2}
+              infinite={false}
+              animateCardOpacity={true}
+              cardHorizontalMargin={0}
+              cardVerticalMargin={0}
+              onSwiped={handleSwiped}
+              onSwipedLeft={handleSwipedLeft}
+              onSwipedRight={handleSwipedRight}
+              onSwipedTop={handleSwipedTop}
+              onSwipedBottom={handleSwipedBottom}
+              containerStyle={styles.swiperWrapper}
+              stackSeparation={0}
+              verticalSwipe={swipingEnabled}
+              horizontalSwipe={swipingEnabled}
+            />
           )}
         </View>
 
@@ -456,20 +419,19 @@ const styles = StyleSheet.create({
 
   swiperContainer: {
     flex: 1,
-    width: '100%',
-    height: '100%',
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
   swiperWrapper: {
-    backgroundColor: 'transparent',
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    padding: 0,
   },
 
   swiperCard: {
@@ -505,8 +467,13 @@ const styles = StyleSheet.create({
   cardContainer: {
     width: DIMS.cardWidth,
     height: getCardHeight(),
-    alignSelf: 'center',
-    justifyContent: 'center',
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    transform: [
+      { translateX: -DIMS.cardWidth / 2 },
+      { translateY: -getCardHeight() / 2 }
+    ],
   },
 
   fullScreenBackground: {
