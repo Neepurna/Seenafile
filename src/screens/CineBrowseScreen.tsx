@@ -441,7 +441,7 @@ const styles = StyleSheet.create({
 
   bottomSearchContainer: {
     position: 'absolute',
-    bottom: Platform.OS === 'ios' ? 90 : 70,
+    bottom: Platform.OS === 'ios' ? 75 : 75,
     left: 0,
     right: 0,
     paddingHorizontal: 16,

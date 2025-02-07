@@ -92,11 +92,15 @@ const MovieReview: React.FC<MovieReviewProps> = ({
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={styles.container}
     >
-      {/* Background Image with Blur */}
+      {/* Background Image */}
       <Image
-        source={{ uri: `https://image.tmdb.org/t/p/w500${movie.poster_path}` }}
+        source={{ 
+          uri: movie.backdrop_path 
+            ? `https://image.tmdb.org/t/p/w500${movie.backdrop_path}`
+            : `https://image.tmdb.org/t/p/w500${movie.poster_path}`
+        }}
         style={styles.backgroundImage}
-        blurRadius={25}
+        blurRadius={2}
       />
       <View style={styles.overlay} />
 
@@ -107,13 +111,24 @@ const MovieReview: React.FC<MovieReviewProps> = ({
           showsVerticalScrollIndicator={false}
           bounces={false}
         >
-          <View style={styles.reviewHeader}>
-            <Text style={styles.title}>Write a Review</Text>
-            <Text style={styles.movieTitle} numberOfLines={2}>{movie.title}</Text>
+          <View style={styles.movieInfoHeader}>
+            <Image 
+              source={{ 
+                uri: `https://image.tmdb.org/t/p/w92${movie.poster_path}` 
+              }}
+              style={styles.miniPoster}
+            />
+            <View style={styles.movieTitleContainer}>
+              <Text style={styles.title}>Write a Review</Text>
+              <Text style={styles.movieTitle} numberOfLines={2}>{movie.title}</Text>
+            </View>
           </View>
           
           <View style={styles.ratingContainer}>
             {renderStars()}
+            <Text style={styles.ratingLabel}>
+              Tap the stars to rate
+            </Text>
           </View>
 
           <View style={styles.reviewInputContainer}>
@@ -164,7 +179,7 @@ const styles = StyleSheet.create({
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(0,0,0,0.85)',
   },
   innerContainer: {
     flex: 1,
@@ -176,28 +191,43 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingBottom: 20, // Add padding at bottom for better spacing
   },
+  movieInfoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingHorizontal: 15,
+  },
+  miniPoster: {
+    width: 60,
+    height: 90,
+    borderRadius: 8,
+    marginRight: 15,
+  },
+  movieTitleContainer: {
+    flex: 1,
+  },
   reviewHeader: {
     marginBottom: 20,
     alignItems: 'center',
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '800',
     color: '#fff',
     marginBottom: 8,
-    textAlign: 'center',
   },
   movieTitle: {
-    fontSize: 20,
+    fontSize: 16,
     color: 'rgba(255,255,255,0.8)',
-    marginBottom: 15,
-    textAlign: 'center',
+    lineHeight: 20,
   },
   reviewInputContainer: {
     backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 15,
     padding: 2,
     marginTop: 20,
+    margin: 15,
+    flex: 1,
   },
   reviewInput: {
     color: '#fff',
@@ -205,6 +235,7 @@ const styles = StyleSheet.create({
     height: CARD_HEIGHT * 0.2, // Adjust review input height proportionally
     textAlignVertical: 'top',
     padding: 15,
+    minHeight: 120,
   },
   characterCount: {
     color: 'rgba(255,255,255,0.5)',
@@ -217,6 +248,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.1)',
     padding: 15,
     borderRadius: 15,
+    marginHorizontal: 15,
+    marginBottom: 20,
   },
   starsContainer: {
     flexDirection: 'row',
@@ -235,9 +268,16 @@ const styles = StyleSheet.create({
   starFilled: {
     color: '#FFD700',
   },
+  ratingLabel: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 14,
+    marginTop: 8,
+  },
   reviewActions: {
     marginTop: 'auto', // Push to bottom
     paddingBottom: Platform.OS === 'ios' ? 20 : 10, // Add padding for different platforms
+    paddingHorizontal: 15,
+    paddingBottom: Platform.OS === 'ios' ? 20 : 15,
   },
   button: {
     backgroundColor: '#fff',
