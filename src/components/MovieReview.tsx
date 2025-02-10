@@ -3,14 +3,14 @@ import {
   View,
   StyleSheet,
   Image,
-  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   Alert,
-  Dimensions
+  Dimensions,
+  Keyboard
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from '@react-native-community/blur';
@@ -71,6 +71,10 @@ const MovieReview: React.FC<MovieReviewProps> = ({
     }
   };
 
+  const handleSubmitEditing = () => {
+    Keyboard.dismiss();
+  };
+
   const renderStars = () => (
     <View style={styles.starsContainer}>
       {[1, 2, 3, 4, 5].map((star) => (
@@ -105,12 +109,7 @@ const MovieReview: React.FC<MovieReviewProps> = ({
       <View style={styles.overlay} />
 
       <View style={styles.innerContainer}>
-        <ScrollView 
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          bounces={false}
-        >
+        <View style={styles.content}>
           <View style={styles.movieInfoHeader}>
             <Image 
               source={{ 
@@ -140,12 +139,15 @@ const MovieReview: React.FC<MovieReviewProps> = ({
               value={review}
               onChangeText={setReview}
               maxLength={500}
+              returnKeyType="done"
+              onSubmitEditing={handleSubmitEditing}
+              blurOnSubmit={true}
             />
             <Text style={styles.characterCount}>
               {review.length}/500
             </Text>
           </View>
-        </ScrollView>
+        </View>
 
         <View style={styles.reviewActions}>
           <TouchableOpacity
@@ -187,14 +189,14 @@ const styles = StyleSheet.create({
     padding: 20,
     height: CARD_HEIGHT, // Ensure inner container matches parent height
   },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: 20, // Add padding at bottom for better spacing
+  content: {
+    flex: 1,
+    justifyContent: 'flex-start',
   },
   movieInfoHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 15,
     paddingHorizontal: 15,
   },
   miniPoster: {
@@ -222,45 +224,42 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   reviewInputContainer: {
+    marginHorizontal: 15,
+    marginTop: 10,
+    height: CARD_HEIGHT * 0.3,
     backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 15,
-    padding: 2,
-    marginTop: 20,
-    margin: 15,
-    flex: 1,
+    padding: 15,
   },
   reviewInput: {
     color: '#fff',
     fontSize: 16,
-    height: CARD_HEIGHT * 0.2, // Adjust review input height proportionally
+    flex: 1,
     textAlignVertical: 'top',
-    padding: 15,
-    minHeight: 120,
   },
   characterCount: {
     color: 'rgba(255,255,255,0.5)',
     fontSize: 12,
     textAlign: 'right',
-    padding: 8,
+    marginTop: 8,
   },
   ratingContainer: {
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    padding: 15,
-    borderRadius: 15,
+    paddingVertical: 15,
     marginHorizontal: 15,
-    marginBottom: 20,
+    marginBottom: 15,
   },
   starsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
+    marginBottom: 5,
   },
   starButton: {
-    padding: 5,
+    padding: 8,
   },
   star: {
     fontSize: 40,
-    marginHorizontal: 8,
+    marginHorizontal: 4,
   },
   starEmpty: {
     color: 'rgba(255,255,255,0.3)',
@@ -271,7 +270,7 @@ const styles = StyleSheet.create({
   ratingLabel: {
     color: 'rgba(255,255,255,0.6)',
     fontSize: 14,
-    marginTop: 8,
+    marginTop: 4,
   },
   reviewActions: {
     marginTop: 'auto', // Push to bottom
