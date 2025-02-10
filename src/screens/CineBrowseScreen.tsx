@@ -30,6 +30,7 @@ import PerformanceLogger from '../utils/performanceLogger';
 import GlossySearchBar from '../components/GlossySearchBar';
 import SearchModal from '../components/SearchModal';
 import { useFonts } from 'expo-font';
+import SearchDrawer from '../components/SearchDrawer';
 
 const { width, height } = Dimensions.get('window');
 const TAB_BAR_HEIGHT = 100;
@@ -102,21 +103,80 @@ const CineBrowseScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const searchDebounceRef = useRef<NodeJS.Timeout>();
   const [isSearchModalVisible, setIsSearchModalVisible] = useState(false);
+  const [isSearchDrawerVisible, setIsSearchDrawerVisible] = useState(false);
+
+  const swiperRef = useRef<any>(null);
+
+  const shuffleArray = <T>(array: T[]): T[] => {
+    const newArray = [...array];
+    for (let i = newArray.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+    }
+    return newArray;
+  };
+
+  const [isSearchMode, setIsSearchMode] = useState(false);
 
   const handleMovieSelect = useCallback((selectedMovie: Movie) => {
     if (!selectedMovie) return;
+
+    setIsSearchMode(true); // Set search mode when selecting from search
+    setMovies([]);
+    displayedMovieIds.current.clear(); // Clear the cache
     
-    setMovies(prevMovies => {
-      // Check if movie already exists in the array
-      const exists = prevMovies.some(movie => movie.id === selectedMovie.id);
-      if (exists) return prevMovies;
+    // Create complete movie object
+    const completeMovie = {
+      id: selectedMovie.id,
+      title: selectedMovie.title || selectedMovie.name || '',
+      name: selectedMovie.name || selectedMovie.title || '',
+      poster_path: selectedMovie.poster_path || null,
+      backdrop_path: selectedMovie.backdrop_path || null,
+      vote_average: selectedMovie.vote_average || 0,
+      overview: selectedMovie.overview || '',
+      release_date: selectedMovie.release_date || selectedMovie.first_air_date || '',
+      first_air_date: selectedMovie.first_air_date || selectedMovie.release_date || '',
+      media_type: selectedMovie.media_type || 'movie',
+      vote_count: selectedMovie.vote_count || 0,
+      genres: selectedMovie.genres || [],
+      popularity: selectedMovie.popularity || 0
+    };
+
+    // Pre-fetch images before updating state
+    const imagesToPreload = [
+      completeMovie.poster_path,
+      completeMovie.backdrop_path,
+    ].filter(Boolean);
+
+    Promise.all(
+      imagesToPreload.map(path =>
+        Image.prefetch(`https://image.tmdb.org/t/p/w500${path}`)
+      )
+    ).then(() => {
+      // Update background
+      setBackgroundImage(completeMovie.poster_path || completeMovie.backdrop_path);
       
-      // Add the selected movie to the beginning of the array
-      return [selectedMovie, ...prevMovies];
+      // Set only the selected movie
+      setMovies([completeMovie]);
+      setCurrentIndex(0);
+      
+      // Reset swiper position
+      if (swiperRef.current) {
+        swiperRef.current.jumpToCardIndex(0);
+      }
+
+      // Reset the movie stack
+      setTimeout(() => {
+        setCurrentPage(1); // Reset to page 1
+        setIsSearchMode(false); // Exit search mode
+        movieCache.data.clear(); // Clear the entire cache
+        displayedMovieIds.current.clear(); // Clear displayed IDs
+        fetchMoreMovies(); // Fetch fresh movies
+      }, 500);
     });
-    
-    setCurrentIndex(0); // Reset to show the newly added movie
-    setIsSearchModalVisible(false); // Close search modal if open
+
+    // Close drawer
+    setIsSearchDrawerVisible(false);
   }, []);
 
   const renderBackground = () => {
@@ -185,55 +245,48 @@ const CineBrowseScreen: React.FC = () => {
   const fetchMoreMovies = async () => {
     if (isFetching || errorCount >= MAX_ERROR_ATTEMPTS) return;
 
-    console.log('Fetching movies...', { currentPage, isFetching });
-    PerformanceLogger.start('fetchMoreMovies');
-    
     try {
       setIsFetching(true);
-      const cacheKey = `page_${currentPage}`;
-      const now = Date.now();
 
-      // Check cache first
-      if (
-        movieCache.data.has(cacheKey) &&
-        now - movieCache.timestamp.get(cacheKey)! < movieCache.CACHE_DURATION
-      ) {
-        console.log('Using cached data for', cacheKey);
-        const cachedData = movieCache.data.get(cacheKey)!;
-        appendMovies(cachedData);
+      // If in search mode, don't fetch more movies
+      if (isSearchMode) {
         setIsFetching(false);
         return;
       }
 
-      // Fetch new data
-      const response = await fetchMoviesByCategory(currentPage, {
-        batchSize: BATCH_SIZE,
-      });
+      // Get 3 random pages between 1 and 20 for better variety
+      const randomPages = Array.from({ length: 3 }, () => 
+        Math.floor(Math.random() * 20) + 1
+      );
 
-      if (!response?.results?.length) {
-        throw new Error('No results returned');
+      const allMovies = await Promise.all(
+        randomPages.map(page => 
+          fetchMoviesByCategory(page, { batchSize: BATCH_SIZE })
+        )
+      );
+
+      let newMovies = allMovies
+        .flatMap(response => response.results || [])
+        .filter((m: Movie) => {
+          const isDuplicate = displayedMovieIds.current.has(m.id) ||
+            movies.some(existing => existing.id === m.id);
+          return !isDuplicate && m.poster_path; // Ensure movie has poster
+        });
+
+      // Shuffle and limit
+      newMovies = shuffleArray(newMovies).slice(0, BATCH_SIZE);
+
+      // Update state with new movies
+      if (newMovies.length > 0) {
+        appendMovies(newMovies);
+        newMovies.forEach(movie => displayedMovieIds.current.add(movie.id));
       }
-
-      const newMovies = response.results
-        .filter((m: Movie) => !displayedMovieIds.current.has(m.id))
-        .sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0));
-
-      // Update cache
-      movieCache.data.set(cacheKey, newMovies);
-      movieCache.timestamp.set(cacheKey, now);
-
-      // Update state
-      appendMovies(newMovies);
-      setBackgroundCards((prev) => [...prev, ...newMovies.slice(0, 3)]);
-      newMovies.forEach((movie: Movie) => displayedMovieIds.current.add(movie.id));
-      setCurrentPage((prev) => prev + 1);
 
     } catch (error) {
       console.error('Error fetching more movies:', error);
-      setErrorCount((prev) => prev + 1);
+      setErrorCount(prev => prev + 1);
     } finally {
       setIsFetching(false);
-      PerformanceLogger.end('fetchMoreMovies');
     }
   };
 
@@ -278,10 +331,13 @@ const CineBrowseScreen: React.FC = () => {
   // Add these swipe handlers
   const handleSwiped = useCallback((index: number) => {
     setCurrentIndex(index + 1);
-    if (movies.length - (index + 1) <= 5) {
+    
+    // Check if we need to fetch more movies
+    const remainingCards = movies.length - (index + 1);
+    if (remainingCards <= 5 && !isSearchMode) {
       fetchMoreMovies();
     }
-  }, [movies.length]);
+  }, [movies.length, isSearchMode]);
 
   const saveMovieToFirebase = async (movie: Movie, category: string) => {
     if (!movie || !auth.currentUser) return;
@@ -293,67 +349,33 @@ const CineBrowseScreen: React.FC = () => {
       // Get current date in YYYY-MM-DD format as fallback
       const currentDate = new Date().toISOString().split('T')[0];
       
-      // Clean and validate data before saving
+      // Create consistent movie data structure
       const movieData = {
         id: movie.id,
         title: movie.title || movie.name || 'Unknown Title',
         poster_path: movie.poster_path || null,
         backdrop_path: movie.backdrop_path || null,
         overview: movie.overview || '',
-        vote_average: parseFloat(movie.vote_average?.toFixed(1)) || 0,
-        release_date: movie.release_date || movie.first_air_date || currentDate,
+        vote_average: parseFloat((movie.vote_average || 0).toFixed(1)),
+        release_date: currentDate,
         category: category || 'uncategorized',
         timestamp: new Date().toISOString(),
         userId: auth.currentUser.uid,
-        media_type: movie.media_type || (movie.first_air_date ? 'tv' : 'movie'),
-        vote_count: movie.vote_count || 0,
+        media_type: movie.media_type || 'movie',
+        vote_count: movie.vote_count || 0
       };
 
-      // Additional validation to ensure no undefined values
-      const cleanData = Object.entries(movieData).reduce((acc, [key, value]) => {
-        // Replace undefined or null values with appropriate defaults
-        if (value === undefined || value === null) {
-          switch (key) {
-            case 'release_date':
-              acc[key] = currentDate;
-              break;
-            case 'title':
-              acc[key] = 'Unknown Title';
-              break;
-            case 'overview':
-              acc[key] = '';
-              break;
-            case 'vote_average':
-              acc[key] = 0;
-              break;
-            case 'vote_count':
-              acc[key] = 0;
-              break;
-            case 'poster_path':
-            case 'backdrop_path':
-              acc[key] = null;
-              break;
-            default:
-              acc[key] = value || null;
-          }
-        } else {
-          acc[key] = value;
-        }
-        return acc;
-      }, {} as Record<string, any>);
+      // Determine the correct release date
+      if (movie.media_type === 'tv' && movie.first_air_date) {
+        movieData.release_date = movie.first_air_date;
+      } else if (movie.release_date) {
+        movieData.release_date = movie.release_date;
+      }
 
-      console.log('Saving movie data:', cleanData); // Debug log
-      await setDoc(movieRef, cleanData);
-      console.log('Successfully saved movie:', cleanData.title);
+      await setDoc(movieRef, movieData);
+      console.log('Successfully saved movie:', movieData.title);
     } catch (error) {
       console.error('Error saving movie:', error);
-      // Log the problematic movie data
-      console.error('Problematic movie data:', {
-        id: movie.id,
-        title: movie.title,
-        release_date: movie.release_date,
-        first_air_date: movie.first_air_date
-      });
     }
   };
 
@@ -372,6 +394,20 @@ const CineBrowseScreen: React.FC = () => {
   const handleSwipedBottom = async (index: number) => {
     await saveMovieToFirebase(movies[index], 'watch_later');
   };
+
+  const renderBottomSearchBar = () => (
+    <TouchableOpacity
+      style={styles.bottomSearchContainer}
+      onPress={() => setIsSearchDrawerVisible(true)}
+    >
+      <View style={styles.searchBarPlaceholder}>
+        <Ionicons name="search" size={24} color="#666" />
+        <Text style={styles.searchBarPlaceholderText}>
+          Search movies & TV shows...
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
     <View style={styles.mainContainer}>
@@ -393,6 +429,7 @@ const CineBrowseScreen: React.FC = () => {
             </View>
           ) : (
             <Swiper
+              ref={swiperRef}
               cards={movies}
               renderCard={renderCard}
               cardIndex={currentIndex}
@@ -415,16 +452,15 @@ const CineBrowseScreen: React.FC = () => {
           )}
         </View>
 
-        <View style={styles.bottomSearchContainer}>
-          <GlossySearchBar
-            value={searchQuery}
-            onChangeText={handleSearch}
-            onClear={clearSearch}
-            onMovieSelect={handleMovieSelect}
-            style={styles.searchBar}
-          />
-        </View>
+        {renderBottomSearchBar()}
       </View>
+
+      <SearchDrawer
+        isVisible={isSearchDrawerVisible}
+        onClose={() => setIsSearchDrawerVisible(false)}
+        onMovieSelect={handleMovieSelect}
+        style={{ zIndex: 999 }} // Add this for extra safety
+      />
     </View>
   );
 };
@@ -474,6 +510,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 1, // Ensure it's below the search drawer
   },
 
   swiperWrapper: {
@@ -490,14 +527,26 @@ const styles = StyleSheet.create({
   bottomSearchContainer: {
     position: 'absolute',
     bottom: Platform.OS === 'ios' ? 75 : 75,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 16,
-    zIndex: 100,
+    left: 16,
+    right: 16,
+    zIndex: 50,
   },
 
-  searchBar: {
-    width: '100%',
+  searchBarPlaceholder: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    padding: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+
+  searchBarPlaceholderText: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 16,
+    marginLeft: 10,
   },
 
   loaderContainer: {

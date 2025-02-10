@@ -262,65 +262,147 @@ export const fetchMovieVideos = async (movieId: number) => {
   return response.json();
 };
 
-// Function to search movies
+// Update searchMovies function to be more robust
 export const searchMovies = async (query: string, page: number = 1) => {
   if (!query.trim()) return { results: [] };
   
-  const response = await fetch(
-    `${TMDB_BASE_URL}/search/movie?api_key=${TMDB_API_KEY}&language=en-US&query=${encodeURIComponent(query)}&page=${page}`
-  );
-  const data = await response.json();
+  try {
+    const response = await fetch(
+      `${TMDB_BASE_URL}/search/movie?api_key=${TMDB_API_KEY}&language=en-US&query=${encodeURIComponent(query.trim())}&page=${page}&include_adult=false`
+    );
 
-  // Map genre IDs to genre names
-  const genres = await fetchGenres();
-  
-  const moviesWithGenres = data.results.map((movie: any) => {
-    const movieGenres = movie.genre_ids.map((genreId: number) => {
-      const genre = genres.find((g) => g.id === genreId);
-      return genre ? genre : null;
-    });
-    return { ...movie, genres: movieGenres.filter((g: any) => g !== null) };
-  });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
 
-  return { ...data, results: moviesWithGenres };
+    const data = await response.json();
+    
+    // Map genre IDs to genre names
+    const genres = await fetchGenres();
+    
+    const moviesWithGenres = data.results
+      .filter(movie => movie.poster_path || movie.backdrop_path) // Only include movies with images
+      .map((movie: any) => {
+        const movieGenres = (movie.genre_ids || []).map((genreId: number) => {
+          const genre = genres.find((g) => g.id === genreId);
+          return genre ? genre : null;
+        }).filter(Boolean);
+
+        return {
+          ...movie,
+          genres: movieGenres,
+          media_type: 'movie'
+        };
+      });
+
+    return {
+      ...data,
+      results: moviesWithGenres
+    };
+  } catch (error) {
+    console.error('Error searching movies:', error);
+    return { results: [] };
+  }
 };
 
-// Function to search TV shows
+// Update searchTVShows function to match the improved pattern
 export const searchTVShows = async (query: string, page: number = 1) => {
   if (!query.trim()) return { results: [] };
   
-  const response = await fetch(
-    `${TMDB_BASE_URL}/search/tv?api_key=${TMDB_API_KEY}&language=en-US&query=${encodeURIComponent(query)}&page=${page}`
-  );
-  const data = await response.json();
-
-  // Map genre IDs to genre names
-  const genres = await fetchGenres();
-  
-  const showsWithGenres = data.results.map((show: any) => ({
-    ...show,
-    title: show.name, // Map TV show name to title for consistency
-    poster_path: show.poster_path,
-    media_type: 'tv',
-    genres: show.genre_ids.map((genreId: number) => {
-      const genre = genres.find((g) => g.id === genreId);
-      return genre ? genre : null;
-    }).filter((g: any) => g !== null)
-  }));
-
-  return { ...data, results: showsWithGenres };
-};
-
-// Updated search function to combine movies and TV shows
-export const searchMoviesAndShows = async (query: string) => {
   try {
     const response = await fetch(
-      `${API_CONFIG.BASE_URL}/search/multi?api_key=${API_CONFIG.TMDB_API_KEY}&query=${encodeURIComponent(query)}&include_adult=false`
+      `${TMDB_BASE_URL}/search/tv?api_key=${TMDB_API_KEY}&language=en-US&query=${encodeURIComponent(query.trim())}&page=${page}&include_adult=false`
     );
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
     const data = await response.json();
-    return data.results || [];
+    
+    // Map genre IDs to genre names
+    const genres = await fetchGenres();
+    
+    const showsWithGenres = data.results
+      .filter(show => show.poster_path || show.backdrop_path) // Only include shows with images
+      .map((show: any) => ({
+        ...show,
+        title: show.name,
+        name: show.name,
+        poster_path: show.poster_path,
+        media_type: 'tv',
+        genres: (show.genre_ids || []).map((genreId: number) => {
+          const genre = genres.find((g) => g.id === genreId);
+          return genre ? genre : null;
+        }).filter(Boolean)
+      }));
+
+    return {
+      ...data,
+      results: showsWithGenres
+    };
+  } catch (error) {
+    console.error('Error searching TV shows:', error);
+    return { results: [] };
+  }
+};
+
+// Updated search function to combine movies and TV shows with better error handling
+export const searchMoviesAndShows = async (query: string) => {
+  if (!query || query.trim().length === 0) {
+    return [];
+  }
+
+  try {
+    const encodedQuery = encodeURIComponent(query.trim());
+    const response = await fetch(
+      `${API_CONFIG.BASE_URL}/search/multi?api_key=${API_CONFIG.TMDB_API_KEY}&query=${encodedQuery}&include_adult=false&page=1`
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    if (!data.results || !Array.isArray(data.results)) {
+      console.warn('Invalid search results format:', data);
+      return [];
+    }
+
+    // Filter and normalize results
+    const normalizedResults = data.results
+      .filter(item => 
+        // Only include movies and TV shows with valid data
+        (item.media_type === 'movie' || item.media_type === 'tv') &&
+        // Ensure basic required fields exist
+        item.id &&
+        (item.title || item.name) &&
+        // Filter out items without images if needed
+        (item.poster_path || item.backdrop_path)
+      )
+      .map(item => ({
+        id: item.id,
+        title: item.title || item.name,
+        name: item.name || item.title,
+        poster_path: item.poster_path,
+        backdrop_path: item.backdrop_path,
+        vote_average: item.vote_average || 0,
+        vote_count: item.vote_count || 0,
+        overview: item.overview || '',
+        release_date: item.release_date || item.first_air_date || null,
+        first_air_date: item.first_air_date || item.release_date || null,
+        media_type: item.media_type,
+        popularity: item.popularity || 0,
+        genre_ids: item.genre_ids || []
+      }));
+
+    // Sort results by popularity
+    return normalizedResults.sort((a, b) => b.popularity - a.popularity);
+
   } catch (error) {
     console.error('Search error:', error);
+    // Return empty array instead of throwing to prevent app crashes
     return [];
   }
 };
