@@ -2,9 +2,10 @@
 
 import axiosInstance from './instance';
 import { Movie, MovieApiResponse } from './api';
+import { API_CONFIG } from '../config/apiConfig';
 
-const TMDB_API_KEY = '559819d48b95a2e3440df0504dea30fd'; // Replace with your TMDB API key
-const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
+const TMDB_API_KEY = API_CONFIG.TMDB_API_KEY;
+const TMDB_BASE_URL = API_CONFIG.BASE_URL;
 
 // Types and Interfaces
 export interface CountryConfig {
@@ -309,27 +310,16 @@ export const searchTVShows = async (query: string, page: number = 1) => {
 };
 
 // Updated search function to combine movies and TV shows
-export const searchMoviesAndShows = async (query: string, page: number = 1) => {
-  if (!query.trim()) return { results: [] };
-
+export const searchMoviesAndShows = async (query: string) => {
   try {
-    const [moviesData, tvShowsData] = await Promise.all([
-      searchMovies(query, page),
-      searchTVShows(query, page)
-    ]);
-
-    const combinedResults = [
-      ...(moviesData.results || []).map(item => ({ ...item, media_type: 'movie' })),
-      ...(tvShowsData.results || [])
-    ];
-
-    // Sort by popularity (assuming vote_average as popularity metric)
-    combinedResults.sort((a, b) => b.vote_average - a.vote_average);
-
-    return { results: combinedResults };
+    const response = await fetch(
+      `${API_CONFIG.BASE_URL}/search/multi?api_key=${API_CONFIG.TMDB_API_KEY}&query=${encodeURIComponent(query)}&include_adult=false`
+    );
+    const data = await response.json();
+    return data.results || [];
   } catch (error) {
     console.error('Search error:', error);
-    return { results: [] };
+    return [];
   }
 };
 
@@ -337,7 +327,7 @@ export const searchMoviesAndShows = async (query: string, page: number = 1) => {
 export const fetchTrendingMovies = async () => {
   try {
     const response = await fetch(
-      `https://api.themoviedb.org/3/trending/movie/week?api_key=${API_KEY}`
+      `${TMDB_BASE_URL}/trending/movie/week?api_key=${TMDB_API_KEY}`
     );
     
     if (!response.ok) {
@@ -469,24 +459,16 @@ export const fetchAvailableCountries = async (): Promise<CountryConfig[]> => {
 };
 
 // Update the movie fetching function to be more centralized
-export const fetchMoviesByCategory = async (
-  page: number,
-  options: { batchSize: number }
-) => {
+export const fetchMoviesByCategory = async (page: number, options: any = {}) => {
   try {
     const response = await fetch(
-      `${TMDB_BASE_URL}/trending/movie/week?api_key=${TMDB_API_KEY}&page=${page}`
+      `${API_CONFIG.BASE_URL}/trending/all/day?api_key=${API_CONFIG.TMDB_API_KEY}&page=${page}`
     );
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
     const data = await response.json();
-    return processAndNormalizeResults(data);
+    return data;
   } catch (error) {
-    console.error('Error fetching movies:', error);
-    throw error;
+    console.error('Error fetching trending movies:', error);
+    return { results: [] };
   }
 };
 

@@ -1,6 +1,9 @@
 import axiosInstance from "./instance";
 import { Genre, Movie, CastMember, CrewMember, MovieResponse } from "./api";
-import { TMDB_API_KEY, TMDB_BASE_URL } from '../config/api.config';
+import { API_CONFIG } from '../config/apiConfig'; // Update this line
+
+const TMDB_API_KEY = API_CONFIG.TMDB_API_KEY;
+const TMDB_BASE_URL = API_CONFIG.BASE_URL;
 
 // Cache for genres
 let genresCache: Genre[] = [];

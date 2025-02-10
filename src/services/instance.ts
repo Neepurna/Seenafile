@@ -1,10 +1,10 @@
 import axios from 'axios';
-import { TMDB_BASE_URL, TMDB_API_KEY } from '../config/api.config';
+import { API_CONFIG } from '../config/apiConfig'; // Update this line
 
 const axiosInstance = axios.create({
-  baseURL: TMDB_BASE_URL,
+  baseURL: API_CONFIG.BASE_URL,
   params: {
-    api_key: TMDB_API_KEY,
+    api_key: API_CONFIG.TMDB_API_KEY,
   },
   timeout: 15000, // Increased timeout
   headers: {
@@ -51,10 +51,10 @@ axiosInstance.interceptors.response.use(
 
 // Image base URLs with fallbacks
 export const IMAGE_BASE_URLS = [
-  'https://image.tmdb.org/t/p/original',
-  'https://image.tmdb.org/t/p/w500',
-  'https://image.tmdb.org/t/p/w342',
-  'https://image.tmdb.org/t/p/w185',
+  `${API_CONFIG.IMAGE_BASE_URL}/original`,
+  `${API_CONFIG.IMAGE_BASE_URL}/w500`,
+  `${API_CONFIG.IMAGE_BASE_URL}/w342`,
+  `${API_CONFIG.IMAGE_BASE_URL}/w185`,
 ];
 
 // Helper function to get working image URL
