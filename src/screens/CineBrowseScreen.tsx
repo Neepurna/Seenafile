@@ -290,22 +290,70 @@ const CineBrowseScreen: React.FC = () => {
       const userRef = doc(db, 'users', auth.currentUser.uid);
       const movieRef = doc(collection(userRef, 'movies'), movie.id.toString());
       
+      // Get current date in YYYY-MM-DD format as fallback
+      const currentDate = new Date().toISOString().split('T')[0];
+      
+      // Clean and validate data before saving
       const movieData = {
         id: movie.id,
-        title: movie.title || movie.name || '',
-        poster_path: movie.poster_path,
+        title: movie.title || movie.name || 'Unknown Title',
+        poster_path: movie.poster_path || null,
         backdrop_path: movie.backdrop_path || null,
-        overview: movie.overview,
-        vote_average: movie.vote_average,
-        release_date: movie.release_date,
-        category: category,
+        overview: movie.overview || '',
+        vote_average: parseFloat(movie.vote_average?.toFixed(1)) || 0,
+        release_date: movie.release_date || movie.first_air_date || currentDate,
+        category: category || 'uncategorized',
         timestamp: new Date().toISOString(),
         userId: auth.currentUser.uid,
+        media_type: movie.media_type || (movie.first_air_date ? 'tv' : 'movie'),
+        vote_count: movie.vote_count || 0,
       };
 
-      await setDoc(movieRef, movieData);
+      // Additional validation to ensure no undefined values
+      const cleanData = Object.entries(movieData).reduce((acc, [key, value]) => {
+        // Replace undefined or null values with appropriate defaults
+        if (value === undefined || value === null) {
+          switch (key) {
+            case 'release_date':
+              acc[key] = currentDate;
+              break;
+            case 'title':
+              acc[key] = 'Unknown Title';
+              break;
+            case 'overview':
+              acc[key] = '';
+              break;
+            case 'vote_average':
+              acc[key] = 0;
+              break;
+            case 'vote_count':
+              acc[key] = 0;
+              break;
+            case 'poster_path':
+            case 'backdrop_path':
+              acc[key] = null;
+              break;
+            default:
+              acc[key] = value || null;
+          }
+        } else {
+          acc[key] = value;
+        }
+        return acc;
+      }, {} as Record<string, any>);
+
+      console.log('Saving movie data:', cleanData); // Debug log
+      await setDoc(movieRef, cleanData);
+      console.log('Successfully saved movie:', cleanData.title);
     } catch (error) {
       console.error('Error saving movie:', error);
+      // Log the problematic movie data
+      console.error('Problematic movie data:', {
+        id: movie.id,
+        title: movie.title,
+        release_date: movie.release_date,
+        first_air_date: movie.first_air_date
+      });
     }
   };
 

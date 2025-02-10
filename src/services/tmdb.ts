@@ -120,16 +120,18 @@ const shuffleArray = <T>(array: T[]): T[] => {
 const normalizeMediaItem = (item: any) => {
   return {
     id: item.id,
-    title: item.title || item.name,
-    poster_path: item.poster_path,
-    backdrop_path: item.backdrop_path,
-    vote_average: item.vote_average,
-    vote_count: item.vote_count,
-    overview: item.overview,
-    release_date: item.release_date || item.first_air_date,
-    media_type: item.name ? 'tv' : 'movie',
-    genre_ids: item.genre_ids,
-    genres: item.genres,
+    title: item.title || item.name || 'Unknown Title',
+    name: item.name || item.title || 'Unknown Title',
+    poster_path: item.poster_path || null,
+    backdrop_path: item.backdrop_path || null,
+    vote_average: item.vote_average || 0,
+    vote_count: item.vote_count || 0,
+    overview: item.overview || '',
+    release_date: item.release_date || item.first_air_date || null,
+    first_air_date: item.first_air_date || item.release_date || null,
+    media_type: item.media_type || (item.name ? 'tv' : 'movie'),
+    genre_ids: item.genre_ids || [],
+    genres: item.genres || [],
   };
 };
 

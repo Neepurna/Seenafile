@@ -25,28 +25,20 @@ const API_KEY = '559819d48b95a2e3440df0504dea30fd';
 
 interface Movie {
   id: number;
-  title: string;
+  title?: string;
+  name?: string;
   poster_path: string | null;
+  backdrop_path?: string | null;
   vote_average: number;
   overview: string;
-  release_date: string;
+  release_date?: string | null;
+  first_air_date?: string | null;
   runtime?: number;
   genres?: Array<{ id: number; name: string }>;
-  category?: string; // Make this more flexible
+  category?: string;
   vote_count?: number;
-  media_type?: 'movie' | 'tv';  // Add this line
-  cast?: {
-    id: number;
-    name: string;
-    character: string;
-    profile_path: string | null;
-  }[];
-  crew?: {
-    id: number;
-    name: string;
-    job: string;
-    department: string;
-  }[];
+  media_type?: 'movie' | 'tv';
+  popularity?: number;
 }
 
 interface Review {
