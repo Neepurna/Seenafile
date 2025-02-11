@@ -566,7 +566,7 @@ const styles = StyleSheet.create({
     height: getCardHeight(),
     position: 'absolute',
     left: '50%',
-    top: '50%',
+    top: '48%',
     transform: [
       { translateX: -DIMS.cardWidth / 2 },
       { translateY: -getCardHeight() / 2 }
