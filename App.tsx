@@ -6,6 +6,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 
 import LoginScreen from './src/screens/LoginScreen';
 import SignUpScreen from './src/screens/SignUpScreen';
@@ -20,6 +21,7 @@ export default function App() {
   return (
     <NavigationContainer>
       <GestureHandlerRootView style={styles.container}>
+        <StatusBar style="light" />
         <Stack.Navigator 
           initialRouteName="Login"
           screenOptions={{
