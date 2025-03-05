@@ -14,12 +14,15 @@ import {
   ActivityIndicator,
   FlatList,
   Alert,
+  PanResponder,
 } from 'react-native';
 import { doc, collection, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase'; // Update this line to point to firebase.ts
 import MovieReview from './MovieReview';
 import { COLORS, DIMS, SPACING, getCardHeight } from '../theme';
 import { getImageUrl } from '../services/instance';
+import { Ionicons } from '@expo/vector-icons';
+import InfoDrawer from './InfoDrawer';
 
 const API_KEY = '559819d48b95a2e3440df0504dea30fd';
 
@@ -56,30 +59,30 @@ interface Review {
 interface FlipCardProps {
   movie: {
     id: number;
-    title?: string;  // Make title optional
-    name?: string;   // Add name as optional for TV shows
-    poster_path: string | null;
-    backdrop_path?: string | null;  // Add this line
+    title: string;
+    name?: string;
+    poster_path: string | null;  // Changed from string to string | null
+    backdrop_path: string | null;  // Changed from string to string | null
     vote_average: number;
     overview: string;
     release_date: string;
     runtime?: number;
     genres?: Array<{ id: number; name: string }>;
-    category?: string; // Make this more flexible
+    category?: string;
     vote_count?: number;
-    media_type?: 'movie' | 'tv';  // Match the type from api.ts
-    cast?: {
+    media_type?: 'movie' | 'tv';
+    cast?: Array<{
       id: number;
       name: string;
       character: string;
       profile_path: string | null;
-    }[];
-    crew?: {
+    }>;
+    crew?: Array<{
       id: number;
       name: string;
       job: string;
       department: string;
-    }[];
+    }>;
   };
   onSwipingStateChange: (enabled: boolean) => void;
 }
@@ -103,10 +106,10 @@ const HEADER_HEIGHT = Platform.OS === 'ios' ? 100 : 100; // Match header height 
 const TAB_BAR_HEIGHT = 100; // Match tab bar height from Tabs.tsx
 const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 44 : 0;
 const SEARCH_BAR_HEIGHT = 70; // Add this constant
-const AVAILABLE_HEIGHT = height - HEADER_HEIGHT - TAB_BAR_HEIGHT - STATUS_BAR_HEIGHT - SEARCH_BAR_HEIGHT;
-const CARD_PADDING = 16;
+const AVAILABLE_HEIGHT = height - HEADER_HEIGHT - TAB_BAR_HEIGHT - STATUS_BAR_HEIGHT;
+const CARD_PADDING = 12; // Reduced padding
 const CARD_WIDTH = width - (CARD_PADDING * 2);
-const CARD_HEIGHT = AVAILABLE_HEIGHT * 0.9; // Use 90% of available height
+const CARD_HEIGHT = AVAILABLE_HEIGHT * 0.95; // Increased to use more available height
 
 const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
   const {
@@ -131,6 +134,9 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
   const isAnimating = useRef(false);
   const [posterUrl, setPosterUrl] = useState<string>('https://via.placeholder.com/500x750?text=Loading...');
   const [imageError, setImageError] = useState<boolean>(false);
+  const [backdropUrl, setBackdropUrl] = useState<string>('');
+  const panRef = useRef(new Animated.Value(0)).current;
+  const [infoButtonActive, setInfoButtonActive] = useState(false);
 
   // Add fade-in animation for new cards
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -187,6 +193,16 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
       });
     }
   }, [movie?.poster_path]);
+
+  // Add backdrop URL loading
+  useEffect(() => {
+    if (movie?.backdrop_path) {
+      const url = `https://image.tmdb.org/t/p/w1280${movie.backdrop_path}`;
+      Image.prefetch(url).then(() => {
+        setBackdropUrl(url);
+      });
+    }
+  }, [movie?.backdrop_path]);
 
   const handleDoubleTap = () => {
     const currentTime = Date.now();
@@ -339,17 +355,26 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
       {isLoadingCredits ? (
         <ActivityIndicator size="small" color="#007AFF" />
       ) : credits.cast.length > 0 ? (
-        <FlatList
-          data={credits.cast}
-          renderItem={renderCastItem}
-          keyExtractor={(item) => `cast-${item.id}`}
+        <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          initialNumToRender={5}
-          maxToRenderPerBatch={5}
-          windowSize={5}
           contentContainerStyle={styles.castContainer}
-        />
+        >
+          {credits.cast.map((castMember) => (
+            <View key={`cast-${castMember.id}`} style={styles.castMember}>
+              <Image
+                source={{
+                  uri: castMember.profile_path
+                    ? `https://image.tmdb.org/t/p/w185${castMember.profile_path}`
+                    : 'https://via.placeholder.com/185x278?text=No+Image'
+                }}
+                style={styles.castImage}
+              />
+              <Text style={styles.castName} numberOfLines={1}>{castMember.name}</Text>
+              <Text style={styles.castCharacter} numberOfLines={1}>{castMember.character}</Text>
+            </View>
+          ))}
+        </ScrollView>
       ) : (
         <Text style={styles.noDataText}>No cast information available</Text>
       )}
@@ -373,81 +398,6 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
         <Text style={styles.noDataText}>No crew information available</Text>
       )}
     </>
-  );
-
-  // Update the modal close handler
-  const handleModalClose = () => {
-    Animated.spring(slideAnim, {
-      toValue: -width,
-      useNativeDriver: true,
-      friction: 20,
-      tension: 80,
-    }).start(() => {
-      setShowInfo(false);
-      onSwipingStateChange(!isFlipped);
-    });
-  };
-
-  // Update renderMovieDetails with new close handler
-  const renderMovieDetails = () => (
-    <Modal
-      animationType="none"
-      transparent={true}
-      visible={showInfo}
-      onRequestClose={handleModalClose}
-    >
-      <Animated.View 
-        style={[
-          styles.modalContainer,
-          {
-            transform: [{
-              translateX: slideAnim
-            }]
-          }
-        ]}
-      >
-        <View style={styles.modalContent}>
-          <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-            <View>
-              <Text style={styles.modalTitle}>{title}</Text>
-              <Text style={styles.modalSubtitle}>
-                Released: {release_date}
-              </Text>
-              <Text style={styles.modalRating}>
-                Rating: ⭐ {vote_average.toFixed(1)}
-              </Text>
-              <Text style={styles.modalRating}>
-                Votes: {movie.vote_count || 0}
-              </Text>
-              {runtime > 0 && (
-                <Text style={styles.modalText}>
-                  Runtime: {runtime} minutes
-                </Text>
-              )}
-              <Text style={styles.modalSection}>Genres</Text>
-              <View style={styles.modalGenres}>
-                {(movieDetails?.genres || []).map(genre => (
-                  <View key={genre.id} style={styles.genreWrapper}>
-                    <Text style={styles.modalGenre}>{genre.name}</Text>
-                  </View>
-                ))}
-              </View>
-              <Text style={styles.modalSection}>Overview</Text>
-              <Text style={styles.modalText}>{overview}</Text>
-              {renderCastSection()}
-              {renderCrewSection()}
-              {renderReviews()}
-            </View>
-          </ScrollView>
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={handleModalClose}
-          >
-            <Text style={styles.closeButtonText}>Close</Text>
-          </TouchableOpacity>
-        </View>
-      </Animated.View>
-    </Modal>
   );
 
   // Add this new function to render reviews
@@ -481,17 +431,87 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
     </>
   );
 
+  // Update pan responder for swipe to close from any part of the drawer
+  const panResponder = React.useMemo(() => 
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderMove: (_, gesture) => {
+        // Allow both left and right swipe
+        panRef.setValue(gesture.dx);
+      },
+      onPanResponderRelease: (_, gesture) => {
+        // Close on significant right swipe
+        if (gesture.dx > 50) {
+          Animated.spring(panRef, {
+            toValue: width,
+            useNativeDriver: true,
+          }).start(() => {
+            setShowInfo(false);
+            onSwipingStateChange(!isFlipped);
+          });
+        } else {
+          // Reset position if swipe wasn't enough
+          Animated.spring(panRef, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+    }),
+    [isFlipped]
+  );
+
+  // Update renderMovieDetails without the swipe hint
+  const renderMovieDetails = () => (
+    <InfoDrawer
+      isVisible={showInfo}
+      onClose={() => {
+        setShowInfo(false);
+        onSwipingStateChange(!isFlipped);
+      }}
+    >
+      <View style={styles.modalContent}>
+        <Text style={styles.modalTitle}>{title}</Text>
+        <Text style={styles.modalRating}>
+          Rating: ⭐ {vote_average.toFixed(1)}
+        </Text>
+        {runtime > 0 && (
+          <Text style={styles.modalText}>
+            Runtime: {runtime} minutes
+          </Text>
+        )}
+        <Text style={styles.modalSection}>Genres</Text>
+        <View style={styles.modalGenres}>
+          {(movieDetails?.genres || []).map(genre => (
+            <View key={genre.id} style={styles.genreWrapper}>
+              <Text style={styles.modalGenre}>{genre.name}</Text>
+            </View>
+          ))}
+        </View>
+        <Text style={styles.modalSection}>Overview</Text>
+        <Text style={styles.modalText}>{overview}</Text>
+        {renderCastSection()}
+        {renderCrewSection()}
+        {renderReviews()}
+      </View>
+    </InfoDrawer>
+  );
+
+  // Toggle info button active state
+  const toggleInfoButtonActive = () => {
+    setInfoButtonActive(prevState => !prevState);
+  };
+
   // Update the info button press handler
   const handleInfoPress = (e: any) => {
     e.stopPropagation();
     setShowInfo(true);
     onSwipingStateChange(false); // Disable swiping when opening modal
-    Animated.spring(slideAnim, {
-      toValue: 0,
-      useNativeDriver: true,
-      friction: 20,
-      tension: 80,
-    }).start();
+    
+    // Reset pan position
+    panRef.setValue(0);
+    
     fetchMovieCredits(movie.id);
     fetchMovieDetailsAndReviews(movie.id);
   };
@@ -532,10 +552,19 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
         }}
       />
       <TouchableOpacity
-        style={styles.infoButton}
+        style={[
+          styles.infoButton,
+          infoButtonActive ? styles.infoButtonActive : styles.infoButtonInactive
+        ]}
         onPress={handleInfoPress}
+        onPressIn={() => setInfoButtonActive(true)}
+        onPressOut={() => setInfoButtonActive(false)}
       >
-        <Text style={styles.infoIcon}>ⓘ</Text>
+        <Ionicons 
+          name="information-circle" 
+          size={28} 
+          color={infoButtonActive ? "#22ff22" : "#ff2222"} 
+        />
       </TouchableOpacity>
       {showInfo && (
         <Animated.View 
@@ -681,10 +710,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 2,
   },
-  infoIcon: {
-    fontSize: 28,
-    color: '#FFFFFF',
-    fontWeight: 'bold',
+  infoButtonActive: {
+    backgroundColor: 'rgba(0, 50, 0, 0.9)',
+    transform: [{ scale: 1.1 }],
+  },
+  infoButtonInactive: {
+    backgroundColor: 'rgba(50, 0, 0, 0.9)',
   },
   modalOverlay: {
     position: 'absolute',
@@ -835,13 +866,57 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'flex-end',
+  },
+  modalWrapper: {
+    backgroundColor: 'transparent',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '85%',
+    width: '100%',
+    overflow: 'hidden',
+  },
+  modalBackdrop: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    zIndex: 1000,
+    width: '100%',
+    height: '100%',
+  },
+  modalContentOverlay: {  // Renamed from modalOverlay to avoid duplicate
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(26, 17, 26, 0.97)',
+  },
+  modalCloseButton: {  // Renamed from closeButton to modalCloseButton
+    position: 'absolute',
+    bottom: 30,
+    left: 20,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(30, 30, 30, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    zIndex: 10,
+  },
+  closeButtonActive: {
+    backgroundColor: 'rgba(0, 50, 0, 0.9)',
+    transform: [{ scale: 1.1 }],
+  },
+  closeButtonInactive: {
+    backgroundColor: 'rgba(50, 0, 0, 0.9)',
   },
 });
 

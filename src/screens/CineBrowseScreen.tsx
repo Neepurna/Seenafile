@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 // CineBrowseScreen.tsx
 ////////////////////////////////////////////////////////////////////////////////
-import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -10,48 +10,73 @@ import {
   Platform,
   Text,
   Image,
-  Animated,
-  Keyboard,
-  TextInput,
   TouchableOpacity,
-  KeyboardAvoidingView,
+  Animated,
+  ScrollView,
+  FlatList,
 } from 'react-native';
 import Swiper from 'react-native-deck-swiper';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { RootStackParamList } from '../navigation/types';
 import { StackNavigationProp } from '@react-navigation/stack';
 import FlipCard from '../components/FlipCard';
-import { Movie } from '../services/api';
 import { auth, db } from '../firebase';
-import { collection, doc, setDoc, getDoc } from 'firebase/firestore';
+import { collection, doc, setDoc } from 'firebase/firestore';
 import { DIMS, getCardHeight } from '../theme';
 import { fetchMoviesByCategory, searchMoviesAndShows } from '../services/tmdb';
-import PerformanceLogger from '../utils/performanceLogger';
-import GlossySearchBar from '../components/GlossySearchBar';
-import SearchModal from '../components/SearchModal';
 import { useFonts } from 'expo-font';
-import SearchDrawer from '../components/SearchDrawer';
+import InfoDrawer from '../components/InfoDrawer';
 
-const { width, height } = Dimensions.get('window');
+const { height } = Dimensions.get('window');
 const TAB_BAR_HEIGHT = 100;
 const SCREEN_HEIGHT = height - TAB_BAR_HEIGHT;
+const BATCH_SIZE = 20;
 
-const NEXT_CARD_SCALE = 1; // Changed to 1 for perfect overlap
-const NEXT_CARD_OPACITY = 1; // Changed to 1 for perfect overlap
-const TRANSITION_DURATION = 150; // Shorter animation duration for snappier feel
+type NavigationProp = StackNavigationProp<RootStackParamList>;
 
-const movieCache = {
-  data: new Map<string, Movie[]>(),
-  timestamp: new Map<string, number>(),
-  CACHE_DURATION: 5 * 60 * 1000,
-};
+interface Movie {
+  id: number;
+  title: string;  // Changed from optional to required
+  name?: string;
+  poster_path: string | null;
+  backdrop_path: string | null;
+  vote_average: number;
+  overview: string;
+  release_date: string;  // Changed from optional to required
+  first_air_date?: string;
+  runtime?: number;
+  genres?: Array<{ id: number; name: string }>;
+  category?: string;
+  vote_count?: number;
+  media_type?: 'movie' | 'tv';
+  popularity?: number;
+}
 
-type RootStackParamList = {
-  CineBrowse: undefined;
-  MovieReview: { movie: Movie };
-};
+interface Review {
+  id: string;
+  author: string;
+  content: string;
+  created_at: string;
+  author_details?: {
+    rating?: number;
+    avatar_path?: string;
+  };
+}
 
-type NavigationProp = StackNavigationProp<RootStackParamList, 'CineBrowse'>;
+interface CastMember {
+  id: number;
+  name: string;
+  character: string;
+  profile_path: string | null;
+}
+
+interface CrewMember {
+  id: number;
+  name: string;
+  job: string;
+  department: string;
+}
 
 const CineBrowseScreen: React.FC = () => {
   const [fontsLoaded] = useFonts({
@@ -64,27 +89,27 @@ const CineBrowseScreen: React.FC = () => {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [isFetching, setIsFetching] = useState<boolean>(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [backgroundCards, setBackgroundCards] = useState<Movie[]>([]);
   const displayedMovieIds = useRef<Set<number>>(new Set());
   const [errorCount, setErrorCount] = useState(0);
+  const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
+  const [credits, setCredits] = useState<{ cast: any[], crew: any[] }>({ cast: [], crew: [] });
+  const [isLoadingCredits, setIsLoadingCredits] = useState(false);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const MAX_ERROR_ATTEMPTS = 3;
 
   const swipeAnimatedValue = useRef(new Animated.Value(0)).current;
   const swipeDirectionRef = useRef<'left' | 'right' | null>(null);
   const debouncedFetch = useRef<any>(null);
 
-  const BATCH_SIZE = 20;
-  const memoizedBackgroundCards = useMemo(
-    () => backgroundCards.slice(0, 3),
-    [backgroundCards]
-  );
   const [preloadedCards, setPreloadedCards] = useState<Movie[]>([]);
 
+  // Drawer animation refs
+  const searchDrawerAnim = useRef(new Animated.Value(0)).current;
+  
   const preloadNextCards = useCallback(
     (currIndex: number) => {
-      PerformanceLogger.start('preloadNextCards');
       const nextCards = movies.slice(currIndex, currIndex + 5);
-      setPreloadedCards(nextCards);
       
       // Preload images using Image.prefetch
       nextCards.forEach(movie => {
@@ -92,14 +117,11 @@ const CineBrowseScreen: React.FC = () => {
           Image.prefetch(`https://image.tmdb.org/t/p/w500${movie.poster_path}`);
         }
       });
-      
-      PerformanceLogger.end('preloadNextCards');
     },
     [movies]
   );
 
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const searchDebounceRef = useRef<NodeJS.Timeout>();
   const [isSearchModalVisible, setIsSearchModalVisible] = useState(false);
@@ -107,7 +129,17 @@ const CineBrowseScreen: React.FC = () => {
 
   const swiperRef = useRef<any>(null);
 
-  const shuffleArray = <T>(array: T[]): T[] => {
+  // Toggle search drawer with animation
+  const toggleSearchDrawer = (visible: boolean) => {
+    setIsSearchDrawerVisible(visible);
+    Animated.timing(searchDrawerAnim, {
+      toValue: visible ? 1 : 0,
+      duration: 300,
+      useNativeDriver: true
+    }).start();
+  };
+
+  const shuffleArray = <T extends any>(array: T[]): T[] => {
     const newArray = [...array];
     for (let i = newArray.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -120,92 +152,46 @@ const CineBrowseScreen: React.FC = () => {
 
   const handleMovieSelect = useCallback((selectedMovie: Movie) => {
     if (!selectedMovie) return;
-
-    setIsSearchMode(true); // Set search mode when selecting from search
-    setMovies([]);
-    displayedMovieIds.current.clear(); // Clear the cache
     
-    // Create complete movie object
-    const completeMovie = {
-      id: selectedMovie.id,
-      title: selectedMovie.title || selectedMovie.name || '',
-      name: selectedMovie.name || selectedMovie.title || '',
+    // Clear existing state first
+    setMovies([]);
+    setIsSearchMode(true);
+    displayedMovieIds.current.clear();
+
+    // Create complete movie object with required non-null values
+    const completeMovie: Movie = {
+      ...selectedMovie,
+      title: selectedMovie.title || selectedMovie.name || 'Unknown Title',
       poster_path: selectedMovie.poster_path || null,
       backdrop_path: selectedMovie.backdrop_path || null,
-      vote_average: selectedMovie.vote_average || 0,
-      overview: selectedMovie.overview || '',
-      release_date: selectedMovie.release_date || selectedMovie.first_air_date || '',
-      first_air_date: selectedMovie.first_air_date || selectedMovie.release_date || '',
       media_type: selectedMovie.media_type || 'movie',
-      vote_count: selectedMovie.vote_count || 0,
-      genres: selectedMovie.genres || [],
-      popularity: selectedMovie.popularity || 0
+      release_date: selectedMovie.release_date || selectedMovie.first_air_date || new Date().toISOString().split('T')[0],
+      vote_average: selectedMovie.vote_average || 0,
+      overview: selectedMovie.overview || 'No overview available'
     };
 
-    // Pre-fetch images before updating state
-    const imagesToPreload = [
-      completeMovie.poster_path,
-      completeMovie.backdrop_path,
-    ].filter(Boolean);
+    // Update state
+    setMovies([completeMovie]);
+    setCurrentIndex(0);
+    
+    // Reset swiper position
+    if (swiperRef.current) {
+      swiperRef.current.jumpToCardIndex(0);
+    }
 
-    Promise.all(
-      imagesToPreload.map(path =>
-        Image.prefetch(`https://image.tmdb.org/t/p/w500${path}`)
-      )
-    ).then(() => {
-      // Update background
-      setBackgroundImage(completeMovie.poster_path || completeMovie.backdrop_path);
-      
-      // Set only the selected movie
-      setMovies([completeMovie]);
-      setCurrentIndex(0);
-      
-      // Reset swiper position
-      if (swiperRef.current) {
-        swiperRef.current.jumpToCardIndex(0);
-      }
+    // Close search drawer with animation
+    toggleSearchDrawer(false);
 
-      // Reset the movie stack
-      setTimeout(() => {
-        setCurrentPage(1); // Reset to page 1
-        setIsSearchMode(false); // Exit search mode
-        movieCache.data.clear(); // Clear the entire cache
-        displayedMovieIds.current.clear(); // Clear displayed IDs
-        fetchMoreMovies(); // Fetch fresh movies
-      }, 500);
-    });
-
-    // Close drawer
-    setIsSearchDrawerVisible(false);
+    // Reset and fetch new movies after a delay
+    setTimeout(() => {
+      setIsSearchMode(false);
+      setCurrentPage(1);
+      displayedMovieIds.current.clear();
+      fetchMoreMovies();
+    }, 500);
   }, []);
 
-  const renderBackground = () => {
-    const imagePath = backgroundImage || movies[currentIndex]?.poster_path;
-    if (!imagePath) return null;
-    
-    return (
-      <View style={styles.fullScreenBackground}>
-        <Animated.Image
-          source={{
-            uri: `https://image.tmdb.org/t/p/w500${imagePath}`,
-          }}
-          style={[
-            styles.backgroundImage,
-            {
-              opacity: swipeAnimatedValue.interpolate({
-                inputRange: [-width/2, 0, width/2],
-                outputRange: [0.5, 1, 0.5],
-                extrapolate: 'clamp',
-              }),
-            }
-          ]}
-          blurRadius={15}
-        />
-        <View style={styles.backgroundOverlay} />
-      </View>
-    );
-  };
-
+  // Handle search with debounce
   const handleSearch = useCallback((text: string) => {
     setSearchQuery(text);
     
@@ -238,8 +224,17 @@ const CineBrowseScreen: React.FC = () => {
     handleRefresh();
   }, []);
 
+  useEffect(() => {
+    // Update selected movie when current index changes
+    if (movies[currentIndex]) {
+      setSelectedMovie(movies[currentIndex]);
+    }
+  }, [currentIndex, movies]);
+
+  // Update handleSearchBarPress to use selected movie
   const handleSearchBarPress = () => {
-    setIsSearchModalVisible(true);
+    setSelectedMovie(movies[currentIndex] || null);
+    toggleSearchDrawer(true);
   };
 
   const fetchMoreMovies = async () => {
@@ -330,14 +325,14 @@ const CineBrowseScreen: React.FC = () => {
 
   // Add these swipe handlers
   const handleSwiped = useCallback((index: number) => {
+    // Update current index first
     setCurrentIndex(index + 1);
     
-    // Check if we need to fetch more movies
-    const remainingCards = movies.length - (index + 1);
-    if (remainingCards <= 5 && !isSearchMode) {
+    // Check if we need more movies
+    if (movies.length - (index + 1) <= 5 && !isSearchMode) {
       fetchMoreMovies();
     }
-  }, [movies.length, isSearchMode]);
+  }, [movies, isSearchMode]);
 
   const saveMovieToFirebase = async (movie: Movie, category: string) => {
     if (!movie || !auth.currentUser) return;
@@ -346,31 +341,14 @@ const CineBrowseScreen: React.FC = () => {
       const userRef = doc(db, 'users', auth.currentUser.uid);
       const movieRef = doc(collection(userRef, 'movies'), movie.id.toString());
       
-      // Get current date in YYYY-MM-DD format as fallback
-      const currentDate = new Date().toISOString().split('T')[0];
-      
-      // Create consistent movie data structure
       const movieData = {
-        id: movie.id,
-        title: movie.title || movie.name || 'Unknown Title',
-        poster_path: movie.poster_path || null,
-        backdrop_path: movie.backdrop_path || null,
-        overview: movie.overview || '',
-        vote_average: parseFloat((movie.vote_average || 0).toFixed(1)),
-        release_date: currentDate,
+        ...movie,
         category: category || 'uncategorized',
         timestamp: new Date().toISOString(),
         userId: auth.currentUser.uid,
-        media_type: movie.media_type || 'movie',
-        vote_count: movie.vote_count || 0
+        poster_path: movie.poster_path,
+        backdrop_path: movie.backdrop_path,
       };
-
-      // Determine the correct release date
-      if (movie.media_type === 'tv' && movie.first_air_date) {
-        movieData.release_date = movie.first_air_date;
-      } else if (movie.release_date) {
-        movieData.release_date = movie.release_date;
-      }
 
       await setDoc(movieRef, movieData);
       console.log('Successfully saved movie:', movieData.title);
@@ -398,7 +376,7 @@ const CineBrowseScreen: React.FC = () => {
   const renderBottomSearchBar = () => (
     <TouchableOpacity
       style={styles.bottomSearchContainer}
-      onPress={() => setIsSearchDrawerVisible(true)}
+      onPress={handleSearchBarPress}
     >
       <View style={styles.searchBarPlaceholder}>
         <Ionicons name="search" size={24} color="#666" />
@@ -408,6 +386,123 @@ const CineBrowseScreen: React.FC = () => {
       </View>
     </TouchableOpacity>
   );
+
+  const renderBackground = () => {
+    return (
+      <View style={styles.fullScreenBackground}>
+        <Image
+          source={require('../../assets/background.jpg')}
+          style={styles.backgroundImage}
+          blurRadius={15}
+        />
+        <View style={styles.backgroundOverlay} />
+      </View>
+    );
+  };
+
+  const renderCastItem = ({ item }: { item: CastMember }) => (
+    <View style={styles.castMember}>
+      <Image
+        source={{
+          uri: item.profile_path
+            ? `https://image.tmdb.org/t/p/w185${item.profile_path}`
+            : 'https://via.placeholder.com/185x278?text=No+Image'
+        }}
+        style={styles.castImage}
+      />
+      <Text style={styles.castName} numberOfLines={1}>{item.name}</Text>
+      <Text style={styles.castCharacter} numberOfLines={1}>{item.character}</Text>
+    </View>
+  );
+
+  const renderCrewItem = ({ item }: { item: CrewMember }) => (
+    <Text style={styles.crewMember}>
+      {item.job}: {item.name}
+    </Text>
+  );
+
+  const renderCastSection = () => {
+    if (!selectedMovie) return null;
+    return (
+      <>
+        <Text style={styles.modalSection}>Cast</Text>
+        {isLoadingCredits ? (
+          <ActivityIndicator size="small" color="#007AFF" />
+        ) : credits.cast.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.castContainer}
+          >
+            {credits.cast.map((castMember) => (
+              <View key={`cast-${castMember.id}`} style={styles.castMember}>
+                {renderCastItem({ item: castMember })}
+              </View>
+            ))}
+          </ScrollView>
+        ) : (
+          <Text style={styles.noDataText}>No cast information available</Text>
+        )}
+      </>
+    );
+  };
+
+  const renderCrewSection = () => {
+    const movie = movies[currentIndex];
+    if (!movie) return null;
+    return (
+      <>
+        <Text style={styles.modalSection}>Crew</Text>
+        {isLoadingCredits ? (
+          <ActivityIndicator size="small" color="#007AFF" />
+        ) : credits.crew.length > 0 ? (
+          <FlatList
+            data={credits.crew}
+            renderItem={renderCrewItem}
+            keyExtractor={(item) => `crew-${item.id}-${item.job}`}
+            scrollEnabled={false}
+            initialNumToRender={5}
+          />
+        ) : (
+          <Text style={styles.noDataText}>No crew information available</Text>
+        )}
+      </>
+    );
+  };
+
+  const renderReviews = () => {
+    const movie = movies[currentIndex];
+    if (!movie) return null;
+    return (
+      <>
+        <Text style={styles.modalSection}>User Reviews</Text>
+        {isLoadingDetails ? (
+          <ActivityIndicator size="small" color="#007AFF" />
+        ) : reviews.length > 0 ? (
+          reviews.map((review) => (
+            <View key={review.id} style={styles.reviewContainer}>
+              <View style={styles.reviewHeader}>
+                <Text style={styles.reviewAuthor}>{review.author}</Text>
+                {review.author_details?.rating && (
+                  <Text style={styles.reviewRating}>
+                    ⭐ {review.author_details.rating.toFixed(1)}
+                  </Text>
+                )}
+              </View>
+              <Text style={styles.reviewDate}>
+                {new Date(review.created_at).toLocaleDateString()}
+              </Text>
+              <Text style={styles.reviewContent} numberOfLines={5}>
+                {review.content}
+              </Text>
+            </View>
+          ))
+        ) : (
+          <Text style={styles.noDataText}>No reviews available</Text>
+        )}
+      </>
+    );
+  };
 
   return (
     <View style={styles.mainContainer}>
@@ -455,12 +550,31 @@ const CineBrowseScreen: React.FC = () => {
         {renderBottomSearchBar()}
       </View>
 
-      <SearchDrawer
+      <InfoDrawer
         isVisible={isSearchDrawerVisible}
-        onClose={() => setIsSearchDrawerVisible(false)}
-        onMovieSelect={handleMovieSelect}
-        style={{ zIndex: 999 }} // Add this for extra safety
-      />
+        onClose={() => toggleSearchDrawer(false)}
+      >
+        {selectedMovie ? (
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{selectedMovie.title || selectedMovie.name}</Text>
+            <Text style={styles.modalRating}>⭐ {selectedMovie.vote_average.toFixed(1)}</Text>
+            {selectedMovie.release_date && (
+              <Text style={styles.modalSubtitle}>
+                Release Date: {new Date(selectedMovie.release_date).toLocaleDateString()}
+              </Text>
+            )}
+            <Text style={styles.modalSectionTitle}>Overview</Text>
+            <Text style={styles.modalText}>{selectedMovie.overview}</Text>
+            {renderCastSection()}
+            {renderCrewSection()}
+            {renderReviews()}
+          </View>
+        ) : (
+          <View style={styles.modalContent}>
+            <Text style={styles.modalText}>No movie selected</Text>
+          </View>
+        )}
+      </InfoDrawer>
     </View>
   );
 };
@@ -591,7 +705,111 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
   },
 
-  // ...rest of existing styles...
+  modalContent: {
+    flex: 1,
+    padding: 20,
+  },
+  modalHeader: {
+    marginBottom: 15,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 8,
+  },
+  modalRating: {
+    fontSize: 18,
+    color: '#FFFFFF',
+    marginBottom: 10,
+  },
+  modalSubtitle: {
+    fontSize: 16,
+    color: '#CCCCCC',
+    marginBottom: 15,
+  },
+  modalSectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginVertical: 10,
+  },
+  modalText: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    lineHeight: 24,
+  },
+  modalSection: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginVertical: 10,
+  },
+  castContainer: {
+    flexDirection: 'row',
+    paddingVertical: 10,
+  },
+  castMember: {
+    width: 100,
+    marginRight: 15,
+    alignItems: 'center',
+  },
+  castImage: {
+    width: 80,
+    height: 120,
+    borderRadius: 10,
+    marginBottom: 5,
+  },
+  castName: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 2,
+    color: '#ffffff',
+  },
+  castCharacter: {
+    fontSize: 11,
+    color: '#9e9e9e',
+    textAlign: 'center',
+  },
+  crewMember: {
+    fontSize: 14,
+    marginBottom: 5,
+    color: '#e0e0e0',
+  },
+  noDataText: {
+    fontSize: 16,
+    color: '#CCCCCC',
+    textAlign: 'center',
+    marginVertical: 10,
+  },
+  reviewContainer: {
+    marginBottom: 15,
+  },
+  reviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+  reviewAuthor: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  reviewRating: {
+    fontSize: 16,
+    color: '#FFFFFF',
+  },
+  reviewDate: {
+    fontSize: 14,
+    color: '#CCCCCC',
+    marginBottom: 5,
+  },
+  reviewContent: {
+    fontSize: 16,
+    color: '#FFFFFF',
+  },
 });
 
 export default CineBrowseScreen;
