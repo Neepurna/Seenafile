@@ -433,10 +433,20 @@ const CineBrowseScreen: React.FC = () => {
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.castContainer}
+            nestedScrollEnabled={true}
           >
             {credits.cast.map((castMember) => (
               <View key={`cast-${castMember.id}`} style={styles.castMember}>
-                {renderCastItem({ item: castMember })}
+                <Image
+                  source={{
+                    uri: castMember.profile_path
+                      ? `https://image.tmdb.org/t/p/w185${castMember.profile_path}`
+                      : 'https://via.placeholder.com/185x278?text=No+Image'
+                  }}
+                  style={styles.castImage}
+                />
+                <Text style={styles.castName} numberOfLines={1}>{castMember.name}</Text>
+                <Text style={styles.castCharacter} numberOfLines={1}>{castMember.character}</Text>
               </View>
             ))}
           </ScrollView>

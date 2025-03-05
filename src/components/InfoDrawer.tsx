@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -27,10 +27,11 @@ const InfoDrawer: React.FC<InfoDrawerProps> = ({
 }) => {
   const drawerPosition = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
-  const [buttonActive, setButtonActive] = React.useState(false);
+  const [buttonActive, setButtonActive] = useState(false);
 
   useEffect(() => {
     if (isVisible) {
+      // Open drawer animation
       Animated.parallel([
         Animated.spring(drawerPosition, {
           toValue: 0,
@@ -45,6 +46,7 @@ const InfoDrawer: React.FC<InfoDrawerProps> = ({
         })
       ]).start();
     } else {
+      // Close drawer animation
       Animated.parallel([
         Animated.spring(drawerPosition, {
           toValue: -DRAWER_WIDTH,
@@ -54,7 +56,7 @@ const InfoDrawer: React.FC<InfoDrawerProps> = ({
         }),
         Animated.timing(overlayOpacity, {
           toValue: 0,
-          duration: 250,
+          duration: 300,
           useNativeDriver: true,
         })
       ]).start();
@@ -62,7 +64,22 @@ const InfoDrawer: React.FC<InfoDrawerProps> = ({
   }, [isVisible]);
 
   const handleClose = () => {
-    onClose();
+    // First animate the drawer
+    Animated.parallel([
+      Animated.timing(drawerPosition, {
+        toValue: -DRAWER_WIDTH,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(overlayOpacity, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      })
+    ]).start(() => {
+      // Then call the onClose callback
+      onClose();
+    });
   };
 
   return (
@@ -93,9 +110,17 @@ const InfoDrawer: React.FC<InfoDrawerProps> = ({
         
         <ScrollView 
           style={styles.content}
-          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={true}
+          nestedScrollEnabled={true}
+          bounces={true}
+          scrollEventThrottle={16}
+          alwaysBounceVertical={false}
+          overScrollMode="always"
         >
-          {children}
+          <View style={styles.innerContent}>
+            {children}
+          </View>
         </ScrollView>
 
         <TouchableOpacity
@@ -108,9 +133,9 @@ const InfoDrawer: React.FC<InfoDrawerProps> = ({
           onPressOut={() => setButtonActive(false)}
         >
           <Ionicons 
-            name="information-circle" 
+            name="close-circle-outline" 
             size={32} 
-            color={buttonActive ? "#22ff22" : "#ff2222"} 
+            color="#ffffff" 
           />
         </TouchableOpacity>
       </Animated.View>
@@ -156,31 +181,31 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingBottom: 80,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
+  innerContent: {
+    padding: 20,
+    paddingBottom: 100,
   },
   closeButton: {
     position: 'absolute',
     bottom: 30,
-    left: 20,
+    right: 20,
     width: 50,
     height: 50,
     borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
     zIndex: 10,
   },
   closeButtonActive: {
-    backgroundColor: 'rgba(0, 50, 0, 0.9)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     transform: [{ scale: 1.1 }],
   },
   closeButtonInactive: {
-    backgroundColor: 'rgba(50, 0, 0, 0.9)',
+    backgroundColor: 'transparent',
   },
 });
 

@@ -205,6 +205,9 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
   }, [movie?.backdrop_path]);
 
   const handleDoubleTap = () => {
+    // Prevent double tap if info drawer is open
+    if (showInfo) return;
+    
     const currentTime = Date.now();
     const tapInterval = currentTime - lastTap.current;
     
@@ -538,6 +541,19 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
     }
   }, [showInfo]);
 
+  const renderInfoButton = () => (
+    <TouchableOpacity
+      style={styles.infoButton}
+      onPress={handleInfoPress}
+    >
+      <Ionicons
+        name="information-circle-outline"
+        size={28}
+        color="#ffffff"
+      />
+    </TouchableOpacity>
+  );
+
   // Update the info button in renderFrontFace
   const renderFrontFace = () => (
     <View style={styles.frontFaceContainer}>
@@ -551,21 +567,7 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
           }
         }}
       />
-      <TouchableOpacity
-        style={[
-          styles.infoButton,
-          infoButtonActive ? styles.infoButtonActive : styles.infoButtonInactive
-        ]}
-        onPress={handleInfoPress}
-        onPressIn={() => setInfoButtonActive(true)}
-        onPressOut={() => setInfoButtonActive(false)}
-      >
-        <Ionicons 
-          name="information-circle" 
-          size={28} 
-          color={infoButtonActive ? "#22ff22" : "#ff2222"} 
-        />
-      </TouchableOpacity>
+      {renderInfoButton()}
       {showInfo && (
         <Animated.View 
           style={[
@@ -700,22 +702,15 @@ const styles = StyleSheet.create({
   },
   infoButton: {
     position: 'absolute',
-    bottom: 20,
-    left: 20, // Changed from right: 20 to left: 20
+    bottom: 10,
+    right: 10,
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 2,
-  },
-  infoButtonActive: {
-    backgroundColor: 'rgba(0, 50, 0, 0.9)',
-    transform: [{ scale: 1.1 }],
-  },
-  infoButtonInactive: {
-    backgroundColor: 'rgba(50, 0, 0, 0.9)',
+    backgroundColor: 'transparent',
+    zIndex: 10,
   },
   modalOverlay: {
     position: 'absolute',
