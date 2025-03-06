@@ -17,11 +17,12 @@ import {
   PanResponder,
 } from 'react-native';
 import { doc, collection, setDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db } from '../firebase'; // Update this line to point to firebase.ts
+import { auth, db } from '../firebase';
 import MovieReview from './MovieReview';
 import { COLORS, DIMS, SPACING, getCardHeight } from '../theme';
 import { getImageUrl } from '../services/instance';
 import { Ionicons } from '@expo/vector-icons';
+// Keep importing InfoDrawer to avoid errors
 import InfoDrawer from './InfoDrawer';
 
 const API_KEY = '559819d48b95a2e3440df0504dea30fd';
@@ -123,6 +124,7 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
   } = movie || {};
 
   const [isFlipped, setIsFlipped] = useState(false);
+  // Set showInfo to false and never change it
   const [showInfo, setShowInfo] = useState(false);
   const [isLoadingCredits, setIsLoadingCredits] = useState(false);
   const [credits, setCredits] = useState<{ cast: any[], crew: any[] }>({ cast: [], crew: [] });
@@ -136,7 +138,6 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
   const [imageError, setImageError] = useState<boolean>(false);
   const [backdropUrl, setBackdropUrl] = useState<string>('');
   const panRef = useRef(new Animated.Value(0)).current;
-  const [infoButtonActive, setInfoButtonActive] = useState(false);
 
   // Add fade-in animation for new cards
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -155,8 +156,8 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
 
   // Add useEffect to handle swipe disabling when modal is open
   useEffect(() => {
-    onSwipingStateChange(!showInfo && !isFlipped);
-  }, [showInfo, isFlipped, onSwipingStateChange]);
+    onSwipingStateChange(!isFlipped);
+  }, [isFlipped, onSwipingStateChange]);
 
   // Load image URL with fallback
   useEffect(() => {
@@ -205,9 +206,6 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
   }, [movie?.backdrop_path]);
 
   const handleDoubleTap = () => {
-    // Prevent double tap if info drawer is open
-    if (showInfo) return;
-    
     const currentTime = Date.now();
     const tapInterval = currentTime - lastTap.current;
     
@@ -465,59 +463,8 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
     [isFlipped]
   );
 
-  // Update renderMovieDetails without the swipe hint
-  const renderMovieDetails = () => (
-    <InfoDrawer
-      isVisible={showInfo}
-      onClose={() => {
-        setShowInfo(false);
-        onSwipingStateChange(!isFlipped);
-      }}
-    >
-      <View style={styles.modalContent}>
-        <Text style={styles.modalTitle}>{title}</Text>
-        <Text style={styles.modalRating}>
-          Rating: ⭐ {vote_average.toFixed(1)}
-        </Text>
-        {runtime > 0 && (
-          <Text style={styles.modalText}>
-            Runtime: {runtime} minutes
-          </Text>
-        )}
-        <Text style={styles.modalSection}>Genres</Text>
-        <View style={styles.modalGenres}>
-          {(movieDetails?.genres || []).map(genre => (
-            <View key={genre.id} style={styles.genreWrapper}>
-              <Text style={styles.modalGenre}>{genre.name}</Text>
-            </View>
-          ))}
-        </View>
-        <Text style={styles.modalSection}>Overview</Text>
-        <Text style={styles.modalText}>{overview}</Text>
-        {renderCastSection()}
-        {renderCrewSection()}
-        {renderReviews()}
-      </View>
-    </InfoDrawer>
-  );
-
-  // Toggle info button active state
-  const toggleInfoButtonActive = () => {
-    setInfoButtonActive(prevState => !prevState);
-  };
-
-  // Update the info button press handler
-  const handleInfoPress = (e: any) => {
-    e.stopPropagation();
-    setShowInfo(true);
-    onSwipingStateChange(false); // Disable swiping when opening modal
-    
-    // Reset pan position
-    panRef.setValue(0);
-    
-    fetchMovieCredits(movie.id);
-    fetchMovieDetailsAndReviews(movie.id);
-  };
+  // Simplify renderMovieDetails to do nothing since InfoDrawer is disabled
+  const renderMovieDetails = () => null;
 
   // Add new state for slide animation
   const slideAnim = useRef(new Animated.Value(-width)).current;
@@ -541,20 +488,7 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
     }
   }, [showInfo]);
 
-  const renderInfoButton = () => (
-    <TouchableOpacity
-      style={styles.infoButton}
-      onPress={handleInfoPress}
-    >
-      <Ionicons
-        name="information-circle-outline"
-        size={28}
-        color="#ffffff"
-      />
-    </TouchableOpacity>
-  );
-
-  // Update the info button in renderFrontFace
+  // Update renderFrontFace to only show the poster
   const renderFrontFace = () => (
     <View style={styles.frontFaceContainer}>
       <Image 
@@ -567,27 +501,6 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
           }
         }}
       />
-      {renderInfoButton()}
-      {showInfo && (
-        <Animated.View 
-          style={[
-            styles.modalOverlay,
-            {
-              transform: [{
-                translateX: slideAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [-width, 0] // Changed from [width, 0] to [-width, 0]
-                })
-              }]
-            }
-          ]}
-        >
-          <View style={styles.modalContent}>
-            {/* ...existing modal content... */}
-          </View>
-        </Animated.View>
-      )}
-      {renderMovieDetails()}
     </View>
   );
 
@@ -699,18 +612,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%', // Use full height
     resizeMode: 'cover',
-  },
-  infoButton: {
-    position: 'absolute',
-    bottom: 10,
-    right: 10,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'transparent',
-    zIndex: 10,
   },
   modalOverlay: {
     position: 'absolute',

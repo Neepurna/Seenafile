@@ -27,6 +27,7 @@ import { DIMS, getCardHeight } from '../theme';
 import { fetchMoviesByCategory, searchMoviesAndShows } from '../services/tmdb';
 import { useFonts } from 'expo-font';
 import InfoDrawer from '../components/InfoDrawer';
+import GlossySearchBar from '../components/GlossySearchBar';
 
 const { height } = Dimensions.get('window');
 const TAB_BAR_HEIGHT = 100;
@@ -125,19 +126,8 @@ const CineBrowseScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const searchDebounceRef = useRef<NodeJS.Timeout>();
   const [isSearchModalVisible, setIsSearchModalVisible] = useState(false);
-  const [isSearchDrawerVisible, setIsSearchDrawerVisible] = useState(false);
 
   const swiperRef = useRef<any>(null);
-
-  // Toggle search drawer with animation
-  const toggleSearchDrawer = (visible: boolean) => {
-    setIsSearchDrawerVisible(visible);
-    Animated.timing(searchDrawerAnim, {
-      toValue: visible ? 1 : 0,
-      duration: 300,
-      useNativeDriver: true
-    }).start();
-  };
 
   const shuffleArray = <T extends any>(array: T[]): T[] => {
     const newArray = [...array];
@@ -149,6 +139,9 @@ const CineBrowseScreen: React.FC = () => {
   };
 
   const [isSearchMode, setIsSearchMode] = useState(false);
+
+  // Make sure isSearchDrawerVisible is set to false and never changes
+  const [isSearchDrawerVisible] = useState(false);
 
   const handleMovieSelect = useCallback((selectedMovie: Movie) => {
     if (!selectedMovie) return;
@@ -178,9 +171,6 @@ const CineBrowseScreen: React.FC = () => {
     if (swiperRef.current) {
       swiperRef.current.jumpToCardIndex(0);
     }
-
-    // Close search drawer with animation
-    toggleSearchDrawer(false);
 
     // Reset and fetch new movies after a delay
     setTimeout(() => {
@@ -230,12 +220,6 @@ const CineBrowseScreen: React.FC = () => {
       setSelectedMovie(movies[currentIndex]);
     }
   }, [currentIndex, movies]);
-
-  // Update handleSearchBarPress to use selected movie
-  const handleSearchBarPress = () => {
-    setSelectedMovie(movies[currentIndex] || null);
-    toggleSearchDrawer(true);
-  };
 
   const fetchMoreMovies = async () => {
     if (isFetching || errorCount >= MAX_ERROR_ATTEMPTS) return;
@@ -372,20 +356,6 @@ const CineBrowseScreen: React.FC = () => {
   const handleSwipedBottom = async (index: number) => {
     await saveMovieToFirebase(movies[index], 'watch_later');
   };
-
-  const renderBottomSearchBar = () => (
-    <TouchableOpacity
-      style={styles.bottomSearchContainer}
-      onPress={handleSearchBarPress}
-    >
-      <View style={styles.searchBarPlaceholder}>
-        <Ionicons name="search" size={24} color="#666" />
-        <Text style={styles.searchBarPlaceholderText}>
-          Search movies & TV shows...
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
 
   const renderBackground = () => {
     return (
@@ -556,35 +526,18 @@ const CineBrowseScreen: React.FC = () => {
             />
           )}
         </View>
-
-        {renderBottomSearchBar()}
+        
+        {/* Add GlossySearchBar below the swiper */}
+        <View style={styles.searchBarContainer}>
+          <GlossySearchBar 
+            value={searchQuery}
+            onChangeText={handleSearch}
+            onClear={clearSearch}
+            placeholder="Search for movies..."
+            onMovieSelect={handleMovieSelect}
+          />
+        </View>
       </View>
-
-      <InfoDrawer
-        isVisible={isSearchDrawerVisible}
-        onClose={() => toggleSearchDrawer(false)}
-      >
-        {selectedMovie ? (
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{selectedMovie.title || selectedMovie.name}</Text>
-            <Text style={styles.modalRating}>⭐ {selectedMovie.vote_average.toFixed(1)}</Text>
-            {selectedMovie.release_date && (
-              <Text style={styles.modalSubtitle}>
-                Release Date: {new Date(selectedMovie.release_date).toLocaleDateString()}
-              </Text>
-            )}
-            <Text style={styles.modalSectionTitle}>Overview</Text>
-            <Text style={styles.modalText}>{selectedMovie.overview}</Text>
-            {renderCastSection()}
-            {renderCrewSection()}
-            {renderReviews()}
-          </View>
-        ) : (
-          <View style={styles.modalContent}>
-            <Text style={styles.modalText}>No movie selected</Text>
-          </View>
-        )}
-      </InfoDrawer>
     </View>
   );
 };
@@ -646,31 +599,6 @@ const styles = StyleSheet.create({
   swiperCard: {
     width: DIMS.cardWidth,
     height: getCardHeight(),
-  },
-
-  bottomSearchContainer: {
-    position: 'absolute',
-    bottom: Platform.OS === 'ios' ? 75 : 75,
-    left: 16,
-    right: 16,
-    zIndex: 50,
-  },
-
-  searchBarPlaceholder: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 12,
-    padding: 12,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-
-  searchBarPlaceholderText: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 16,
-    marginLeft: 10,
   },
 
   loaderContainer: {
@@ -819,6 +747,14 @@ const styles = StyleSheet.create({
   reviewContent: {
     fontSize: 16,
     color: '#FFFFFF',
+  },
+  searchBarContainer: {
+    position: 'absolute',
+    bottom: '10%', // Changed from 20 (pixels) to 25% to move it up by about 20%
+    left: 0,
+    right: 0,
+    paddingHorizontal: 20,
+    zIndex: 10,
   },
 });
 
