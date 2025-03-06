@@ -22,6 +22,7 @@ import MovieReview from './MovieReview';
 import { COLORS, DIMS, SPACING, getCardHeight } from '../theme';
 import { getImageUrl } from '../services/instance';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 // Keep importing InfoDrawer to avoid errors
 import InfoDrawer from './InfoDrawer';
 
@@ -488,7 +489,7 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
     }
   }, [showInfo]);
 
-  // Update renderFrontFace to only show the poster
+  // Update renderFrontFace to remove title, rating and double tap info
   const renderFrontFace = () => (
     <View style={styles.frontFaceContainer}>
       <Image 
@@ -501,6 +502,8 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
           }
         }}
       />
+      {/* Removed the gradient overlay */}
+      {/* Removed the cardInfo section with title, rating, year text and tap instruction */}
     </View>
   );
 
@@ -813,6 +816,64 @@ const styles = StyleSheet.create({
   },
   closeButtonInactive: {
     backgroundColor: 'rgba(50, 0, 0, 0.9)',
+  },
+  gradientOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '30%',
+  },
+  cardInfo: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 15,
+  },
+  ratingBadge: {
+    position: 'absolute',
+    top: -70,
+    right: 15,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#FFD700',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
+  },
+  ratingText: {
+    color: '#1a1a2e',
+    fontWeight: 'bold',
+    fontSize: 18,
+  },
+  titleText: {
+    color: 'white',
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 5,
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
+  yearText: {
+    color: '#FFD700',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  tapInstruction: {
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingVertical: 5,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 5,
+  },
+  tapText: {
+    color: '#fff',
+    fontSize: 12,
   },
 });
 

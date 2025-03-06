@@ -72,8 +72,14 @@ const GlossySearchBar = React.forwardRef<TextInput, GlossySearchBarProps>((props
   const handleSearch = async (text: string) => {
     setSearchQuery(text);
     if (text.trim()) {
-      const results = await searchMoviesAndShows(text);
-      setSearchResults(results?.results || []);
+      try {
+        const results = await searchMoviesAndShows(text);
+        // Fix: searchMoviesAndShows returns array directly, not an object with results property
+        setSearchResults(results || []);
+      } catch (error) {
+        console.error('Error searching:', error);
+        setSearchResults([]);
+      }
     } else {
       setSearchResults([]);
     }

@@ -347,7 +347,7 @@ export const searchTVShows = async (query: string, page: number = 1) => {
   }
 };
 
-// Updated search function to combine movies and TV shows with better error handling
+// Updated search function to combine movies and TV shows with better error handling and prioritize popularity and vote count
 export const searchMoviesAndShows = async (query: string) => {
   if (!query || query.trim().length === 0) {
     return [];
@@ -397,8 +397,28 @@ export const searchMoviesAndShows = async (query: string) => {
         genre_ids: item.genre_ids || []
       }));
 
-    // Sort results by popularity
-    return normalizedResults.sort((a, b) => b.popularity - a.popularity);
+    // Enhanced sorting that prioritizes both popularity and vote count
+    // Calculate a combined score that weights both factors
+    const sortedResults = normalizedResults.sort((a, b) => {
+      // Normalize vote_count (0-10000 range common for TMDB)
+      const normalizedVoteCountA = Math.min(a.vote_count || 0, 10000) / 10000;
+      const normalizedVoteCountB = Math.min(b.vote_count || 0, 10000) / 10000;
+      
+      // Normalize popularity (0-1000 range common for TMDB)
+      const normalizedPopularityA = Math.min(a.popularity || 0, 1000) / 1000;
+      const normalizedPopularityB = Math.min(b.popularity || 0, 1000) / 1000;
+      
+      // Calculate combined score (60% popularity, 40% vote count)
+      const scoreA = (normalizedPopularityA * 0.6) + (normalizedVoteCountA * 0.4);
+      const scoreB = (normalizedPopularityB * 0.6) + (normalizedVoteCountB * 0.4);
+      
+      return scoreB - scoreA;
+    });
+    
+    // Add debug log to help troubleshoot
+    console.log(`Search for "${query}" found ${sortedResults.length} results`);
+    
+    return sortedResults;
 
   } catch (error) {
     console.error('Search error:', error);
