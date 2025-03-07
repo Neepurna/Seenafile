@@ -1,14 +1,27 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Dimensions, ActivityIndicator, Alert } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TouchableOpacity, 
+  FlatList, 
+  Image, 
+  Dimensions, 
+  ActivityIndicator, 
+  Alert,
+  StatusBar,
+  Platform
+} from 'react-native';
+import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { db, auth } from '../firebase';
 import { collection, query, orderBy, onSnapshot, getDocs, where, doc, getDoc, updateDoc, setDoc, limit } from 'firebase/firestore';
 import { calculateMatchScore } from '../utils/matchingUtils';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ChatList from '../components/ChatList';
 import { useNavigation, NavigationProp } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 
-const SCREEN_HEIGHT = Dimensions.get('window').height;
+const { width, height } = Dimensions.get('window');
 const STORAGE_KEY = '@connected_users';
 
 type CinePalScreenProps = {
@@ -18,6 +31,7 @@ type CinePalScreenProps = {
 const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
   const [matches, setMatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [connectedUsers, setConnectedUsers] = useState<string[]>([]);
   const [debugInfo, setDebugInfo] = useState<string>('');
@@ -144,12 +158,7 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
                 score: matchScore.score,
                 commonMovies: matchScore.commonMovies,
                 moviesCount: moviesSnap.size,
-                debugDetails: `
-                  User: ${username}
-                  Movies: ${moviesSnap.size}
-                  Common Movies: ${matchScore.commonMovies?.length || 0}
-                  Score: ${matchScore.score}%
-                `
+                lastActive: userProfile?.lastActive || userData?.lastActive || Date.now(),
               };
             } catch (error) {
               console.error('Match calculation error:', error);
@@ -170,7 +179,11 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
         )
       ]);
 
-      setMatches(matchResults.filter(Boolean));
+      // Filter out null results and sort by match score (highest first)
+      const validMatches = matchResults.filter(Boolean);
+      validMatches.sort((a, b) => b.score - a.score);
+      
+      setMatches(validMatches);
       
     } catch (error) {
       const errorMessage = `Error fetching matches: ${error}`;
@@ -179,7 +192,13 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
       setDebugInfo(errorMessage);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    fetchMatches();
   };
 
   const handleUserConnect = useCallback(async (userId: string) => {
@@ -196,12 +215,16 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
         throw new Error('User details not found');
       }
 
-      // Update navigation options to preserve bottom tabs
-      navigation.navigate('UserProfileChat', {
-        userId,
-        username: matchedUser.username || 'Movie Enthusiast',
-        chatId,
-        preserveTabBar: true // Add this flag
+      // Update navigation to use nested stack
+      navigation.navigate('UserProfile', {
+        screen: 'UserProfileMain',
+        params: {
+          userId: matchedUser.userId,
+          username: matchedUser.username || 'Movie Enthusiast',
+          chatId: chatId,
+          photoURL: matchedUser.photoURL,
+          email: matchedUser.email
+        }
       });
 
     } catch (error) {
@@ -210,13 +233,52 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
     }
   }, [matches, navigation]);
 
-  if (loading) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#BB86FC" />
+  // Function to generate active status text
+  const getActiveStatus = (lastActive: number) => {
+    const now = Date.now();
+    const diffInMinutes = Math.floor((now - lastActive) / (1000 * 60));
+    
+    if (diffInMinutes < 5) return "Active now";
+    if (diffInMinutes < 60) return `Active ${diffInMinutes}m ago`;
+    if (diffInMinutes < 1440) return `Active ${Math.floor(diffInMinutes / 60)}h ago`;
+    return `Active ${Math.floor(diffInMinutes / 1440)}d ago`;
+  };
+
+  const renderMatchItem = ({ item }: { item: any }) => (
+    <TouchableOpacity 
+      style={styles.matchItem}
+      onPress={() => handleUserConnect(item.userId)}
+      activeOpacity={0.7}
+    >
+      <LinearGradient
+        colors={['#120E43', '#3A0CA3']}
+        style={styles.avatarGradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
+        <View style={styles.avatarContainer}>
+          {item.photoURL ? (
+            <Image source={{ uri: item.photoURL }} style={styles.avatarImage} />
+          ) : (
+            <Text style={styles.avatarText}>{item.username?.charAt(0).toUpperCase() || 'M'}</Text>
+          )}
+        </View>
+      </LinearGradient>
+      
+      <View style={styles.matchInfoContainer}>
+        <View style={styles.matchNameRow}>
+          <Text style={styles.username}>{item.username || 'Movie Enthusiast'}</Text>
+          <View style={styles.matchScoreContainer}>
+            <Text style={styles.matchScore}>{Math.round(item.score)}% match</Text>
+          </View>
+        </View>
+        
+        <Text style={styles.statusText}>
+          {getActiveStatus(item.lastActive)}
+        </Text>
       </View>
-    );
-  }
+    </TouchableOpacity>
+  );
 
   if (error) {
     return (
@@ -231,72 +293,67 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollView}>
-        {__DEV__ && (
-          <View style={styles.debugContainer}>
-            <Text style={styles.debugText}>{debugInfo}</Text>
-            <TouchableOpacity 
-              style={styles.debugButton} 
-              onPress={() => fetchMatches()}
-            >
-              <Text style={styles.debugButtonText}>Refresh Matches</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        <View style={styles.headerSection}>
-          <Text style={styles.headerTitle}>Your Movie Matches</Text>
-          <Text style={styles.headerSubtitle}>Connect with cinema enthusiasts who share your taste</Text>
-        </View>
-        
-        <View style={styles.matchesContainer}>
-          {matches.map((match) => (
-            <TouchableOpacity 
-              key={match.userId} 
-              style={styles.matchCard}
-              onPress={() => handleUserConnect(match.userId)}
-            >
-              <View style={styles.matchHeader}>
-                <View style={styles.userInfo}>
-                  <View style={styles.avatarContainer}>
-                    <MaterialIcons name="person" size={30} color="#BB86FC" />
-                  </View>
-                  <View style={styles.nameSection}>
-                    <Text style={styles.username}>{match.username || 'Movie Enthusiast'}</Text>
-                    <Text style={styles.matchScore}>
-                      {Math.round(match.score)}% Match
-                    </Text>
-                  </View>
-                </View>
-                <MaterialIcons 
-                  name={connectedUsers.includes(match.userId) ? "chat" : "add-circle"} 
-                  size={24} 
-                  color="#BB86FC" 
-                />
-              </View>
+      <StatusBar barStyle="light-content" />
+      
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Movie Matches</Text>
+        <TouchableOpacity 
+          style={styles.refreshButton}
+          onPress={handleRefresh}
+          disabled={loading || refreshing}
+        >
+          {loading || refreshing ? (
+            <ActivityIndicator size="small" color="#BB86FC" />
+          ) : (
+            <Ionicons name="refresh" size={24} color="#BB86FC" />
+          )}
+        </TouchableOpacity>
+      </View>
 
-              <View style={styles.commonMoviesSection}>
-                <Text style={styles.sectionTitle}>Common Interests</Text>
-                <ScrollView 
-                  horizontal 
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.commonMoviesScroll}
-                >
-                  {match.commonMovies.slice(0, 5).map((movie, idx) => (
-                    <View key={idx} style={styles.movieTag}>
-                      <Text style={styles.movieTagText}>{movie.category}</Text>
-                    </View>
-                  ))}
-                  {match.commonMovies.length > 5 && (
-                    <View style={[styles.movieTag, styles.moreTag]}>
-                      <Text style={styles.movieTagText}>+{match.commonMovies.length - 5} more</Text>
-                    </View>
-                  )}
-                </ScrollView>
-              </View>
-            </TouchableOpacity>
-          ))}
+      {loading && !refreshing ? (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#BB86FC" />
+          <Text style={styles.loadingText}>Finding your movie matches...</Text>
         </View>
-      </ScrollView>
+      ) : (
+        <>
+          {matches.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <MaterialIcons name="movie-filter" size={60} color="#555" />
+              <Text style={styles.emptyTitle}>No matches found</Text>
+              <Text style={styles.emptySubtitle}>
+                Add more movies to your profile to find matches with similar taste
+              </Text>
+              <TouchableOpacity
+                style={styles.addMoviesButton}
+                onPress={() => navigation.navigate('CineBrowse')}
+              >
+                <Text style={styles.addMoviesButtonText}>Find Movies</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <FlatList
+              data={matches}
+              renderItem={renderMatchItem}
+              keyExtractor={(item) => item.userId}
+              contentContainerStyle={styles.listContainer}
+              showsVerticalScrollIndicator={false}
+              initialNumToRender={10}
+              maxToRenderPerBatch={10}
+              windowSize={10}
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+            />
+          )}
+        </>
+      )}
+      
+      {__DEV__ && (
+        <View style={styles.debugContainer}>
+          <Text style={styles.debugText} numberOfLines={2}>{debugInfo}</Text>
+        </View>
+      )}
     </View>
   );
 };
@@ -305,129 +362,173 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#121212',
+    // Add padding to ensure content is above tab bar
+    paddingBottom: 60,
   },
-  scrollView: {
-    flex: 1,
-    padding: 16,
-  },
-  headerSection: {
-    marginBottom: 24,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 60 : 20,
+    paddingBottom: 15,
+    borderBottomColor: '#222',
+    borderBottomWidth: 1,
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 8,
   },
-  headerSubtitle: {
-    fontSize: 16,
-    color: '#888',
+  refreshButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  matchesContainer: {
-    gap: 16,
+  listContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
-  matchCard: {
+  matchItem: {
+    flexDirection: 'row',
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
+  avatarGradient: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  avatarContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: '#1E1E1E',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
   },
-  matchHeader: {
+  avatarImage: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+  },
+  avatarText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#BB86FC',
+  },
+  matchInfoContainer: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  matchNameRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-  },
-  userInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  avatarContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#2A2A2A',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  nameSection: {
-    flex: 1,
+    marginBottom: 4,
   },
   username: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 4,
+  },
+  matchScoreContainer: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: 'rgba(187,134,252,0.2)',
   },
   matchScore: {
     fontSize: 14,
-    color: '#BB86FC',
     fontWeight: '600',
+    color: '#BB86FC',
   },
-  commonMoviesSection: {
-    borderTopWidth: 1,
-    borderTopColor: '#333',
-    paddingTop: 16,
-  },
-  sectionTitle: {
+  statusText: {
     fontSize: 14,
     color: '#888',
-    marginBottom: 8,
-  },
-  commonMoviesScroll: {
-    flexDirection: 'row',
-  },
-  movieTag: {
-    backgroundColor: '#2A2A2A',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginRight: 8,
-  },
-  movieTagText: {
-    color: '#fff',
-    fontSize: 12,
-  },
-  moreTag: {
-    backgroundColor: '#333',
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 30,
+  },
+  loadingText: {
+    color: '#999',
+    fontSize: 16,
+    marginTop: 20,
+    textAlign: 'center',
   },
   errorText: {
     color: '#FF5252',
     fontSize: 16,
     marginBottom: 16,
+    textAlign: 'center',
   },
   retryButton: {
     backgroundColor: '#BB86FC',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: 30,
+    paddingVertical: 12,
     borderRadius: 8,
   },
   retryButtonText: {
-    color: '#FFF',
-    fontSize: 14,
+    color: '#1a1a2e',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 30,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 16,
+    color: '#888',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  addMoviesButton: {
+    backgroundColor: '#BB86FC',
+    paddingHorizontal: 30,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  addMoviesButtonText: {
+    color: '#1a1a2e',
+    fontSize: 16,
     fontWeight: 'bold',
   },
   debugContainer: {
-    padding: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     backgroundColor: '#2A2A2A',
-    borderRadius: 8,
-    marginBottom: 16,  },  debugText: {    color: '#BB86FC',    fontSize: 12,    fontFamily: 'monospace',  },  debugButton: {    backgroundColor: '#BB86FC',    padding: 8,    borderRadius: 4,    marginTop: 8,
+    opacity: 0.7,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
   },
-  debugButtonText: {
-    color: '#000',
-    textAlign: 'center',
+  debugText: {
+    color: '#BB86FC',
+    fontSize: 10,
+    fontFamily: 'monospace',
   },
 });
 

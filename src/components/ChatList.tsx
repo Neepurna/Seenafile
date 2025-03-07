@@ -1,5 +1,3 @@
-// chatlist.tsx
-
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
@@ -15,10 +13,10 @@ import {
   SafeAreaView,
   Alert,
   ActivityIndicator,
-  useWindowDimensions,
   Keyboard,
+  StatusBar,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { db, auth } from '../firebase';
 import {
   collection,
@@ -41,6 +39,7 @@ interface Message {
   text: string;
   senderId: string;
   timestamp: Date;
+  read: boolean;
 }
 
 interface MovieMatch {
@@ -58,28 +57,28 @@ interface Match {
   commonMovies: MovieMatch[];
   displayName?: string;
   photoURL?: string;
+  username?: string;
 }
 
 interface UserDetails {
   name: string;
   photoURL: string;
   email: string;
+  lastActive?: number;
 }
 
 interface ChatListProps {
   matches: Match[];
   selectedMatch?: Match | null;
-  onSelectMatch?: (match: Match | null) => void;
-  connectedUsers?: string[];
-  onUserConnect?: (userId: string) => void;
+  onClose?: () => void;
+  preserveNavigation?: boolean;
 }
 
 const ChatList: React.FC<ChatListProps> = ({
   matches,
   selectedMatch: propSelectedMatch,
-  onSelectMatch,
-  connectedUsers = [],
-  onUserConnect,
+  onClose,
+  preserveNavigation = false
 }) => {
   const currentUserId = auth.currentUser?.uid;
 
@@ -95,11 +94,11 @@ const ChatList: React.FC<ChatListProps> = ({
   const [newMatchUser, setNewMatchUser] = useState<UserDetails | null>(null);
   const [isLoadingPersisted, setIsLoadingPersisted] = useState(true);
   const [seenMatches, setSeenMatches] = useState<string[]>([]);
-  const messagesListRef = useRef<FlatList>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [permissionError, setPermissionError] = useState<string | null>(null);
-
-  // Store unsubscribe functions
+  const [isLoading, setIsLoading] = useState(false);
+  
+  const messagesListRef = useRef<FlatList>(null);
   const unsubscribeRefs = useRef<(() => void)[]>([]);
 
   const fetchUserDetails = async (userId: string) => {
@@ -112,9 +111,10 @@ const ChatList: React.FC<ChatListProps> = ({
           ...prev,
           [userId]: {
             name:
-              userData.name || userData.displayName || 'Anonymous User', // Try both fields
-            photoURL: userData.photoURL || 'https://via.placeholder.com/50',
+              userData.name || userData.displayName || 'Anonymous User',
+            photoURL: userData.photoURL || null,
             email: userData.email || '',
+            lastActive: userData.lastActive || Date.now(),
           },
         }));
       } else {
@@ -128,8 +128,9 @@ const ChatList: React.FC<ChatListProps> = ({
           ...prev,
           [userId]: {
             name: 'User',
-            photoURL: 'https://via.placeholder.com/50',
+            photoURL: null,
             email: '',
+            lastActive: Date.now() - 1000 * 60 * 60 * 24, // 1 day ago
           },
         }));
       } else {
@@ -217,7 +218,7 @@ const ChatList: React.FC<ChatListProps> = ({
                   userData.displayName ||
                   'Anonymous User',
                 photoURL:
-                  userData.photoURL || 'https://via.placeholder.com/50',
+                  userData.photoURL || null,
                 email: userData.email || '',
               });
               setShowMatchNotification(true);
@@ -242,7 +243,6 @@ const ChatList: React.FC<ChatListProps> = ({
 
     return () => {
       unsubscribe();
-      // Remove the unsubscribe function from the array
       unsubscribeRefs.current = unsubscribeRefs.current.filter(
         (fn) => fn !== unsubscribe
       );
@@ -276,6 +276,8 @@ const ChatList: React.FC<ChatListProps> = ({
   const handleSelectMatch = async (match: Match) => {
     try {
       if (!currentUserId || !match.userId) return;
+      
+      setIsLoading(true);
 
       // Create unique chat ID
       const chatId = [currentUserId, match.userId].sort().join('_');
@@ -289,6 +291,10 @@ const ChatList: React.FC<ChatListProps> = ({
         lastMessageTime: null,
       }, { merge: true });
 
+      // Clean up previous listeners
+      unsubscribeRefs.current.forEach(unsubscribe => unsubscribe());
+      unsubscribeRefs.current = [];
+
       // Set up real-time listener for messages
       const messagesRef = collection(chatRef, 'messages');
       const q = query(messagesRef, orderBy('timestamp', 'asc'));
@@ -299,7 +305,21 @@ const ChatList: React.FC<ChatListProps> = ({
           ...doc.data(),
         }) as Message);
         setMessages(newMessages);
-        messagesListRef.current?.scrollToEnd({ animated: true });
+        
+        // Mark received messages as read
+        snapshot.docs.forEach(async (doc) => {
+          const messageData = doc.data();
+          if (
+            messageData.senderId !== currentUserId && 
+            !messageData.read
+          ) {
+            await updateDoc(doc.ref, { read: true });
+          }
+        });
+        
+        if (messagesListRef.current) {
+          messagesListRef.current.scrollToEnd({ animated: false });
+        }
       });
 
       // Store unsubscribe function
@@ -311,6 +331,8 @@ const ChatList: React.FC<ChatListProps> = ({
     } catch (error: any) {
       console.error('Error setting up chat:', error);
       setPermissionError('Failed to initialize chat. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -346,17 +368,25 @@ const ChatList: React.FC<ChatListProps> = ({
     }
   };
 
+  // Function to generate active status text
+  const getActiveStatus = (lastActive?: number) => {
+    if (!lastActive) return "";
+    
+    const now = Date.now();
+    const diffInMinutes = Math.floor((now - lastActive) / (1000 * 60));
+    
+    if (diffInMinutes < 5) return "Active now";
+    if (diffInMinutes < 60) return `Active ${diffInMinutes}m ago`;
+    if (diffInMinutes < 1440) return `Active ${Math.floor(diffInMinutes / 60)}h ago`;
+    return `Active ${Math.floor(diffInMinutes / 1440)}d ago`;
+  };
+
   // Filter out invalid matches
   const validMatches = matches.filter(
     (match) =>
       match &&
       match.userId &&
-      typeof match.score === 'number' &&
-      Array.isArray(match.commonMovies) &&
-      match.commonMovies.every(
-        (movie) =>
-          movie && movie.movieId && movie.title && movie.category
-      )
+      typeof match.score === 'number'
   );
 
   // Update the filtered matches threshold to 20%
@@ -364,14 +394,23 @@ const ChatList: React.FC<ChatListProps> = ({
     (match) => match.score >= 20
   );
 
-  // Update empty state message
-  const EmptyState = () => (
-    <View style={styles.emptyContainer}>
-      <Text style={styles.emptyText}>
-        No matches yet! You need at least 20% compatibility to match.
-      </Text>
-    </View>
-  );
+  // Format timestamp
+  const formatMessageTime = (timestamp: any) => {
+    if (!timestamp) return '';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    const now = new Date();
+    const diffInDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (diffInDays === 0) {
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } else if (diffInDays === 1) {
+      return 'Yesterday';
+    } else if (diffInDays < 7) {
+      return date.toLocaleDateString([], { weekday: 'short' });
+    } else {
+      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    }
+  };
 
   // Filter matches to show connected users first
   const sortedMatches = [...filteredMatches].sort((a, b) => {
@@ -450,6 +489,24 @@ const ChatList: React.FC<ChatListProps> = ({
     }
   }, [currentUserId]);
 
+  const handleBack = () => {
+    if (onClose && preserveNavigation) {
+      onClose();
+    } else {
+      navigation.goBack();
+    }
+  };
+
+  const EmptyState = () => (
+    <View style={styles.emptyContainer}>
+      <Ionicons name="chatbubble-ellipses-outline" size={60} color="#555" />
+      <Text style={styles.emptyTitle}>No matches yet</Text>
+      <Text style={styles.emptyText}>
+        You need at least 20% compatibility to match with other cinema enthusiasts.
+      </Text>
+    </View>
+  );
+
   const renderChat = () => {
     if (permissionError) {
       return (
@@ -470,105 +527,133 @@ const ChatList: React.FC<ChatListProps> = ({
       );
     }
 
+    const matchUserDetails = selectedMatch ? userDetails[selectedMatch.userId] : null;
+
     return (
       <View style={styles.chatContainer}>
+        {/* Chat Header */}
         <View style={styles.chatHeader}>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => setSelectedMatch(null)}
           >
-            <MaterialIcons name="arrow-back" size={24} color="#FFF" />
+            <Ionicons name="chevron-back" size={24} color="#FFF" />
           </TouchableOpacity>
-          <Text style={styles.chatTitle}>
-            {userDetails[selectedMatch?.userId]?.name || 'Chat'}
-          </Text>
+          
+          <TouchableOpacity 
+            style={styles.userInfoContainer}
+            onPress={() => {
+              // You could add a profile view here
+              if (selectedMatch && onUserConnect) {
+                onUserConnect(selectedMatch.userId);
+              }
+            }}
+          >
+            <View style={styles.chatAvatarContainer}>
+              {matchUserDetails?.photoURL ? (
+                <Image
+                  source={{ uri: matchUserDetails.photoURL }}
+                  style={styles.chatAvatar}
+                />
+              ) : (
+                <View style={styles.chatAvatarPlaceholder}>
+                  <Text style={styles.chatAvatarText}>
+                    {(matchUserDetails?.name?.charAt(0) || '').toUpperCase()}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.chatTitleContainer}>
+              <Text style={styles.chatTitle} numberOfLines={1}>
+                {matchUserDetails?.name || selectedMatch?.username || 'Chat'}
+              </Text>
+              <Text style={styles.chatSubtitle} numberOfLines={1}>
+                {getActiveStatus(matchUserDetails?.lastActive)}
+              </Text>
+            </View>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.chatOptionsButton}>
+            <Ionicons name="ellipsis-horizontal" size={24} color="#FFF" />
+          </TouchableOpacity>
         </View>
 
+        {/* Main Chat Area */}
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.keyboardAvoidingView}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 150 : 120}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
         >
-          <View style={styles.chatContentContainer}>
-            <FlatList
-              ref={messagesListRef}
-              data={messages}
-              inverted={false}
-              renderItem={({ item }) => (
+          <FlatList
+            ref={messagesListRef}
+            data={messages}
+            renderItem={({ item }) => {
+              const isCurrentUser = item.senderId === currentUserId;
+              
+              return (
                 <View
                   style={[
                     styles.messageContainer,
-                    item.senderId === currentUserId
-                      ? styles.sentMessage
-                      : styles.receivedMessage,
+                    isCurrentUser ? styles.sentMessage : styles.receivedMessage,
                   ]}
                 >
                   <Text
                     style={[
                       styles.messageText,
-                      item.senderId === currentUserId
-                        ? styles.sentMessageText
-                        : styles.receivedMessageText,
+                      isCurrentUser ? styles.sentMessageText : styles.receivedMessageText,
                     ]}
                   >
                     {item.text}
                   </Text>
+                  <Text style={styles.messageTimestamp}>
+                    {formatMessageTime(item.timestamp)}
+                    {isCurrentUser && (
+                      <Text> • {item.read ? 'Read' : 'Sent'}</Text>
+                    )}
+                  </Text>
                 </View>
-              )}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={[
-                styles.messagesContentContainer,
-                {
-                  flexGrow: 1,
-                  justifyContent: 'flex-end',
-                  paddingBottom:
-                    Platform.OS === 'ios'
-                      ? keyboardHeight + 90
-                      : keyboardHeight + 60,
-                },
-              ]}
-              onLayout={() => {
-                messagesListRef.current?.scrollToEnd({ animated: false });
-              }}
-              onContentSizeChange={() => {
-                messagesListRef.current?.scrollToEnd({ animated: true });
-              }}
-            />
-          </View>
+              );
+            }}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.messagesContentContainer}
+            showsVerticalScrollIndicator={false}
+            onLayout={() => {
+              messagesListRef.current?.scrollToEnd({ animated: false });
+            }}
+            onContentSizeChange={() => {
+              messagesListRef.current?.scrollToEnd({ animated: true });
+            }}
+          />
 
-          <View
-            style={[
-              styles.inputWrapper,
-              Platform.OS === 'android' && {
-                position: 'absolute',
-                bottom: keyboardHeight > 0 ? keyboardHeight + 30 : 0,
-                left: 0,
-                right: 0,
-                backgroundColor: '#1E1E1E',
-              },
-            ]}
-          >
+          {/* Message Input */}
+          <View style={styles.inputWrapper}>
             <View style={styles.inputContainer}>
+              <TouchableOpacity style={styles.inputActionButton}>
+                <Ionicons name="add-circle-outline" size={24} color="#777" />
+              </TouchableOpacity>
+              
               <TextInput
                 style={styles.input}
                 value={newMessage}
                 onChangeText={setNewMessage}
-                placeholder="Type a message..."
-                placeholderTextColor="#666"
+                placeholder="Message..."
+                placeholderTextColor="#777"
                 multiline
                 maxLength={1000}
               />
-              <TouchableOpacity
-                style={styles.sendButton}
-                onPress={sendMessage}
-                disabled={!newMessage.trim()}
-              >
-                <MaterialIcons
-                  name="send"
-                  size={24}
-                  color={newMessage.trim() ? '#BB86FC' : '#666'}
-                />
-              </TouchableOpacity>
+              
+              {newMessage.trim() ? (
+                <TouchableOpacity
+                  style={styles.sendButton}
+                  onPress={sendMessage}
+                >
+                  <Ionicons name="send" size={24} color="#fff" />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={styles.inputActionButton}>
+                  <Ionicons name="mic-outline" size={24} color="#777" />
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -576,56 +661,99 @@ const ChatList: React.FC<ChatListProps> = ({
     );
   };
 
+  const renderMatchItem = ({ item }: { item: Match }) => {
+    const details = userDetails[item.userId] || {};
+    const hasUnreadMessages = false; // This would need logic to check for unread messages
+    
+    return (
+      <TouchableOpacity
+        style={styles.matchItem}
+        onPress={() => handleSelectMatch(item)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.avatarWrapper}>
+          {details.photoURL ? (
+            <Image
+              source={{ uri: details.photoURL }}
+              style={styles.avatar}
+            />
+          ) : (
+            <View style={styles.avatarPlaceholder}>
+              <Text style={styles.avatarText}>
+                {(details.name?.charAt(0) || item.username?.charAt(0) || '').toUpperCase()}
+              </Text>
+            </View>
+          )}
+          
+          {/* Online indicator */}
+          {getActiveStatus(details.lastActive) === "Active now" && (
+            <View style={styles.onlineIndicator} />
+          )}
+        </View>
+        
+        <View style={styles.matchInfo}>
+          <View style={styles.nameContainer}>
+            <Text style={styles.username} numberOfLines={1}>
+              {details.name || item.username || 'User'}
+            </Text>
+            <Text style={styles.matchTime}>
+              {Math.round(item.score)}% match
+            </Text>
+          </View>
+          
+          <View style={styles.previewContainer}>
+            <Text 
+              style={[
+                styles.messagePreview,
+                hasUnreadMessages && styles.unreadPreview
+              ]}
+              numberOfLines={1}
+            >
+              {hasUnreadMessages ? 'New message' : 'Tap to start chatting'}
+            </Text>
+            
+            {hasUnreadMessages && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadBadgeText}>1</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   if (isLoadingPersisted) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size={24} color="#BB86FC" />
+        <ActivityIndicator size="large" color="#fff" />
       </View>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" />
+      
       {selectedMatch ? (
         renderChat()
       ) : (
-        <FlatList
-          data={sortedMatches}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[
-                styles.matchItem,
-                connectedUsers.includes(item.userId) &&
-                  styles.connectedMatchItem,
-              ]}
-              onPress={() => handleSelectMatch(item)}
-            >
-              <Image
-                source={{
-                  uri:
-                    userDetails[item.userId]?.photoURL ||
-                    'https://via.placeholder.com/50',
-                }}
-                style={styles.avatar}
-              />
-              <View style={styles.matchInfo}>
-                <Text style={styles.username}>
-                  {userDetails[item.userId]?.name || 'Loading...'}
-                  {connectedUsers.includes(item.userId) && (
-                    <Text style={styles.connectedBadge}> • Connected</Text>
-                  )}
-                </Text>
-                <Text style={styles.matchScore}>
-                  {item.score.toFixed(0)}% Match •{' '}
-                  {item.commonMovies.length} movies in common
-                </Text>
-              </View>
+        <>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={handleBack}>
+              <Ionicons name="chevron-back" size={24} color="#fff" />
             </TouchableOpacity>
-          )}
-          keyExtractor={(item) => item.userId}
-          contentContainerStyle={styles.listContainer}
-          ListEmptyComponent={EmptyState}
-        />
+            <Text style={styles.headerTitle}>Chats</Text>
+          </View>
+          
+          <FlatList
+            data={sortedMatches}
+            renderItem={renderMatchItem}
+            keyExtractor={(item) => item.userId}
+            contentContainerStyle={styles.listContainer}
+            ListEmptyComponent={EmptyState}
+          />
+        </>
       )}
 
       {/* Match Notification Modal */}
@@ -637,25 +765,45 @@ const ChatList: React.FC<ChatListProps> = ({
       >
         <View style={styles.notificationOverlay}>
           <View style={styles.notificationBox}>
+            <Ionicons name="checkmark-circle" size={40} color="#fff" />
             <Text style={styles.notificationTitle}>
-              Congratulations! 🎉
+              New Match!
             </Text>
             <Text style={styles.notificationText}>
-              You matched with {newMatchUser?.name}!
+              You matched with {newMatchUser?.name || "a new user"}
             </Text>
-            <Image
-              source={{ uri: newMatchUser?.photoURL }}
-              style={styles.notificationAvatar}
-            />
+            
+            <View style={styles.notificationAvatarContainer}>
+              {newMatchUser?.photoURL ? (
+                <Image
+                  source={{ uri: newMatchUser.photoURL }}
+                  style={styles.notificationAvatar}
+                />
+              ) : (
+                <View style={styles.notificationAvatarPlaceholder}>
+                  <Text style={styles.notificationAvatarText}>
+                    {(newMatchUser?.name?.charAt(0) || '').toUpperCase()}
+                  </Text>
+                </View>
+              )}
+            </View>
+            
             <TouchableOpacity
               style={styles.notificationButton}
               onPress={() => setShowMatchNotification(false)}
             >
-              <Text style={styles.notificationButtonText}>Got it!</Text>
+              <Text style={styles.notificationButtonText}>Start Chatting</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
+      
+      {/* Loading overlay */}
+      {isLoading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#fff" />
+        </View>
+      )}
     </SafeAreaView>
   );
 };
@@ -663,122 +811,241 @@ const ChatList: React.FC<ChatListProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#121212',
+    // Ensure chat list appears above tab bar
+    position: 'relative',
+    zIndex: 1,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  header: {
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#222',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginLeft: 10,
+  },
   listContainer: {
     flexGrow: 1,
-    padding: 16,
+    padding: 0,
   },
   matchItem: {
     flexDirection: 'row',
-    padding: 12,
-    backgroundColor: '#2C2C2C',
-    borderRadius: 8,
-    marginBottom: 8,
     alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
   },
-  connectedMatchItem: {
-    backgroundColor: '#3C3C3C',
+  avatarWrapper: {
+    position: 'relative',
+    marginRight: 12,
   },
   avatar: {
     width: 50,
     height: 50,
     borderRadius: 25,
-    marginRight: 12,
+  },
+  avatarPlaceholder: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#333',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  onlineIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#4CAF50',
+    borderWidth: 2,
+    borderColor: '#121212',
   },
   matchInfo: {
     flex: 1,
   },
+  nameContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
   username: {
-    color: '#FFF',
+    color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+    flex: 1,
   },
-  matchScore: {
-    color: '#BB86FC',
-    fontSize: 14,
+  matchTime: {
+    color: '#777',
+    fontSize: 12,
   },
-  connectedBadge: {
-    color: '#4CAF50',
+  previewContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  messagePreview: {
+    color: '#777',
     fontSize: 14,
+    flex: 1,
+  },
+  unreadPreview: {
+    color: '#ddd',
+    fontWeight: '600',
+  },
+  unreadBadge: {
+    backgroundColor: '#fff',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  unreadBadgeText: {
+    color: '#121212',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   chatContainer: {
     flex: 1,
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#121212',
   },
   chatHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#2C2C2C',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#222',
   },
   backButton: {
-    marginRight: 16,
+    padding: 5,
+  },
+  userInfoContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 5,
+  },
+  chatAvatarContainer: {
+    marginRight: 12,
+  },
+  chatAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  chatAvatarPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#333',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  chatAvatarText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  chatTitleContainer: {
+    flex: 1,
   },
   chatTitle: {
-    color: '#FFF',
-    fontSize: 18,
+    color: '#fff',
+    fontSize: 16,
     fontWeight: '600',
+  },
+  chatSubtitle: {
+    color: '#777',
+    fontSize: 12,
+  },
+  chatOptionsButton: {
+    padding: 5,
   },
   keyboardAvoidingView: {
     flex: 1,
   },
-  chatContentContainer: {
-    flex: 1,
-  },
   messagesContentContainer: {
-    padding: 16,
+    padding: 10,
+    paddingBottom: 10,
   },
   messageContainer: {
-    maxWidth: '80%',
-    marginVertical: 4,
-    padding: 12,
-    borderRadius: 16,
+    maxWidth: '75%',
+    marginVertical: 2,
+    padding: 10,
+    borderRadius: 18,
   },
   sentMessage: {
     alignSelf: 'flex-end',
-    backgroundColor: '#BB86FC',
+    backgroundColor: '#333',
+    borderBottomRightRadius: 4,
   },
   receivedMessage: {
     alignSelf: 'flex-start',
-    backgroundColor: '#2C2C2C',
+    backgroundColor: '#222',
+    borderBottomLeftRadius: 4,
   },
   messageText: {
     fontSize: 16,
   },
   sentMessageText: {
-    color: '#000',
+    color: '#fff',
   },
   receivedMessageText: {
-    color: '#FFF',
+    color: '#fff',
+  },
+  messageTimestamp: {
+    fontSize: 12,
+    color: '#777',
+    marginTop: 4,
   },
   inputWrapper: {
     width: '100%',
-    padding: 16,
-    backgroundColor: '#1E1E1E',
+    padding: 10,
+    backgroundColor: '#121212',
+    // Adjust bottom padding to account for tab bar
+    paddingBottom: Platform.OS === 'ios' ? 70 : 60,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2C2C2C',
+    backgroundColor: '#222',
     borderRadius: 24,
     paddingHorizontal: 16,
   },
   input: {
     flex: 1,
-    color: '#FFF',
+    color: '#fff',
     fontSize: 16,
     paddingVertical: 12,
     maxHeight: 100,
   },
+  inputActionButton: {
+    padding: 5,
+  },
   sendButton: {
-    marginLeft: 8,
-    padding: 8,
+    padding: 5,
   },
   emptyContainer: {
     flex: 1,
@@ -786,10 +1053,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
+  emptyTitle: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginTop: 20,
+  },
   emptyText: {
-    color: '#999',
+    color: '#777',
     fontSize: 16,
     textAlign: 'center',
+    marginTop: 10,
   },
   errorContainer: {
     flex: 1,
@@ -820,29 +1094,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   notificationBox: {
-    backgroundColor: '#2C2C2C',
+    backgroundColor: '#222',
     padding: 24,
     borderRadius: 16,
     alignItems: 'center',
     width: '80%',
   },
   notificationTitle: {
-    color: '#FFF',
+    color: '#fff',
     fontSize: 24,
     fontWeight: '600',
     marginBottom: 16,
   },
   notificationText: {
-    color: '#FFF',
+    color: '#fff',
     fontSize: 18,
     textAlign: 'center',
+    marginBottom: 16,
+  },
+  notificationAvatarContainer: {
     marginBottom: 16,
   },
   notificationAvatar: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    marginBottom: 16,
+  },
+  notificationAvatarPlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#333',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  notificationAvatarText: {
+    color: '#fff',
+    fontSize: 36,
+    fontWeight: 'bold',
   },
   notificationButton: {
     backgroundColor: '#BB86FC',
@@ -855,6 +1144,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

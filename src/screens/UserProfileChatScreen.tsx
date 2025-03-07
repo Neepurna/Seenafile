@@ -1,13 +1,33 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, FlatList, Dimensions } from 'react-native';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TouchableOpacity, 
+  Image, 
+  FlatList, 
+  Dimensions,
+  StatusBar,
+  Animated,
+  Platform
+} from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { db } from '../firebase';
 import { collection, query, getDocs, doc, getDoc, where } from 'firebase/firestore';
 import ChatList from '../components/ChatList';
 import { UserProfileChatScreenProps } from '../types/navigation';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const { width } = Dimensions.get('window');
-const FOLDER_SIZE = width / 2 - 24;
+const HEADER_MAX_HEIGHT = 250;
+const HEADER_MIN_HEIGHT = Platform.OS === 'ios' ? 90 : 70;
+const HEADER_SCROLL_DISTANCE = HEADER_MAX_HEIGHT - HEADER_MIN_HEIGHT;
+
+const GRID_SPACING = 16;
+const NUM_COLUMNS = 2;
+const FOLDER_WIDTH = (width - (GRID_SPACING * 3)) / NUM_COLUMNS;
+const THUMBNAILS_PER_FOLDER = 2; // Changed to 2 thumbnails per folder
+const THUMBNAIL_SIZE = (FOLDER_WIDTH - 24) / 2; // Adjust size for 2 thumbnails
 
 interface FolderData {
   id: string;
@@ -15,6 +35,15 @@ interface FolderData {
   color: string;
   count: number;
   icon: string;
+}
+
+interface MovieThumbnail {
+  id: string;
+  poster_path: string;
+}
+
+interface FolderDataWithThumbs extends FolderData {
+  thumbnails: MovieThumbnail[];
 }
 
 const folders: FolderData[] = [
@@ -25,22 +54,55 @@ const folders: FolderData[] = [
 ];
 
 const UserProfileChatScreen: React.FC<UserProfileChatScreenProps> = ({ route, navigation }) => {
-  const { userId, username, chatId } = route.params;
-  const [userProfile, setUserProfile] = useState<any>(null);
+  // Add validation at the start
+  useEffect(() => {
+    if (!route.params?.userId) {
+      console.error('No userId provided to UserProfileChatScreen');
+      navigation.goBack();
+      return;
+    }
+  }, []);
+
+  // Destructure with default values
+  const { 
+    userId = '', 
+    username = 'User', 
+    chatId = '',
+    photoURL,
+    email 
+  } = route?.params || {};
+
+  const [userProfile, setUserProfile] = useState<any>({
+    photoURL,
+    email,
+    username
+  });
+
   const [folderCounts, setFolderCounts] = useState<{ [key: string]: number }>({});
   const [showChat, setShowChat] = useState(false);
   const [loading, setLoading] = useState(true);
+  const scrollY = new Animated.Value(0);
+  const [folderThumbnails, setFolderThumbnails] = useState<{ [key: string]: MovieThumbnail[] }>({});
+  const [isFullScreenChat, setIsFullScreenChat] = useState(false);
 
   useEffect(() => {
     fetchUserProfile();
     fetchMovieCounts();
+    fetchFolderThumbnails();
   }, []);
 
   const fetchUserProfile = async () => {
+    if (!userId) return;
+    
     try {
-      const userDoc = await getDoc(doc(db, 'users', userId));
+      const userDocRef = doc(db, 'users', userId);
+      const userDoc = await getDoc(userDocRef);
+      
       if (userDoc.exists()) {
-        setUserProfile(userDoc.data());
+        setUserProfile(prev => ({
+          ...prev,
+          ...userDoc.data()
+        }));
       }
     } catch (error) {
       console.error('Error fetching user profile:', error);
@@ -48,6 +110,8 @@ const UserProfileChatScreen: React.FC<UserProfileChatScreenProps> = ({ route, na
   };
 
   const fetchMovieCounts = async () => {
+    if (!userId) return;
+    
     try {
       const userRef = doc(db, 'users', userId);
       const moviesRef = collection(userRef, 'movies');
@@ -76,206 +140,525 @@ const UserProfileChatScreen: React.FC<UserProfileChatScreenProps> = ({ route, na
     }
   };
 
-  const renderFolder = ({ item: folder }: { item: FolderData }) => {
-    const count = folderCounts[folder.id] || 0;
+  const fetchFolderThumbnails = async () => {
+    try {
+      const userRef = doc(db, 'users', userId);
+      const moviesRef = collection(userRef, 'movies');
+      const snapshot = await getDocs(moviesRef);
+      
+      const thumbsByFolder: { [key: string]: MovieThumbnail[] } = {};
+      
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.category && data.poster_path) {
+          if (!thumbsByFolder[data.category]) {
+            thumbsByFolder[data.category] = [];
+          }
+          if (thumbsByFolder[data.category].length < THUMBNAILS_PER_FOLDER) {
+            thumbsByFolder[data.category].push({
+              id: doc.id,
+              poster_path: data.poster_path
+            });
+          }
+        }
+      });
+
+      setFolderThumbnails(thumbsByFolder);
+    } catch (error) {
+      console.error('Error fetching thumbnails:', error);
+    }
+  };
+
+  const headerHeight = scrollY.interpolate({
+    inputRange: [0, HEADER_SCROLL_DISTANCE],
+    outputRange: [HEADER_MAX_HEIGHT, HEADER_MIN_HEIGHT],
+    extrapolate: 'clamp',
+  });
+
+  const headerTitleOpacity = scrollY.interpolate({
+    inputRange: [0, HEADER_SCROLL_DISTANCE / 2, HEADER_SCROLL_DISTANCE],
+    outputRange: [0, 0, 1],
+    extrapolate: 'clamp',
+  });
+
+  const headerContentOpacity = scrollY.interpolate({
+    inputRange: [0, HEADER_SCROLL_DISTANCE / 2],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+
+  const handleNavigateToMovieGrid = (params: any) => {
+    navigation.navigate('MovieGridScreen', {
+      ...params,
+      fromScreen: 'UserProfileMain',
+      previousScreen: 'UserProfile'
+    });
+  };
+
+  const handleCloseChat = () => {
+    setIsFullScreenChat(false);
+    setTimeout(() => {
+      setShowChat(false);
+    }, 300);
+  };
+
+  const handleChatPress = () => {
+    if (!showChat) {
+      setShowChat(true);
+      // Add a small delay before going fullscreen for smooth animation
+      setTimeout(() => setIsFullScreenChat(true), 100);
+    } else {
+      setIsFullScreenChat(false);
+      // Add a small delay before hiding chat for smooth animation
+      setTimeout(() => setShowChat(false), 300);
+    }
+  };
+
+  const renderFolder = ({ item }: { item: FolderData }) => {
+    const count = folderCounts[item.id] || 0;
     const isDisabled = count === 0;
+    const thumbs = folderThumbnails[item.id] || [];
   
     return (
       <TouchableOpacity 
         style={[
-          styles.folderContainer,
-          { 
-            borderColor: isDisabled ? '#666' : folder.color,
-            backgroundColor: isDisabled 
-              ? 'rgba(102,102,102,0.1)'
-              : folder.id === 'critics'
-                ? 'rgba(255,64,129,0.1)'
-                : 'rgba(255,255,255,0.05)',
-            opacity: isDisabled ? 0.5 : 1
-          }
+          styles.folderItem,
+          { opacity: isDisabled ? 0.5 : 1 }
         ]}
         onPress={() => {
           if (!isDisabled) {
-            navigation.navigate('MovieGridScreen', { 
-              folderId: folder.id,
-              folderName: folder.name,
-              folderColor: folder.color,
+            handleNavigateToMovieGrid({ 
+              folderId: item.id,
+              folderName: item.name,
+              folderColor: item.color,
               userId: userId,
-              isCritics: folder.id === 'critics'
+              isCritics: item.id === 'critics'
             });
           }
         }}
         disabled={isDisabled}
       >
-        <Ionicons 
-          name={folder.icon as any} 
-          size={folder.id === 'critics' ? 45 : 40} 
-          color={folder.color} 
-        />
-        <Text style={styles.folderName}>{folder.name}</Text>
-        <Text style={[styles.folderCount, { color: folder.color }]}>
-          {folderCounts[folder.id] || 0} {folder.id === 'critics' ? 'reviews' : 'movies'}
-        </Text>
+        <View style={styles.folderContent}>
+          <View style={styles.folderHeader}>
+            <View style={styles.folderIconContainer}>
+              <Ionicons name={item.icon as any} size={24} color="#fff" />
+            </View>
+            <View style={styles.folderInfo}>
+              <Text style={styles.folderName}>{item.name}</Text>
+              <Text style={styles.folderCount}>
+                {count} {item.id === 'critics' ? 'reviews' : 'movies'}
+              </Text>
+            </View>
+          </View>
+          
+          <View style={styles.thumbnailsRow}>
+            {thumbs.slice(0, THUMBNAILS_PER_FOLDER).map((thumb, index) => (
+              <View key={thumb.id} style={styles.thumbnailWrapper}>
+                <Image
+                  source={{ uri: `https://image.tmdb.org/t/p/w92${thumb.poster_path}` }}
+                  style={styles.thumbnail}
+                  resizeMode="cover"
+                />
+              </View>
+            ))}
+            {count > THUMBNAILS_PER_FOLDER && (
+              <View style={styles.moreIndicator}>
+                <Text style={styles.moreIndicatorText}>+{count - THUMBNAILS_PER_FOLDER}</Text>
+              </View>
+            )}
+          </View>
+        </View>
       </TouchableOpacity>
+    );
+  };
+
+  const renderBackground = () => {
+    return (
+      <View style={styles.fullScreenBackground}>
+        <Image
+          source={require('../../assets/background.jpg')}
+          style={styles.backgroundImage}
+          blurRadius={15}
+        />
+        <View style={styles.backgroundOverlay} />
+      </View>
     );
   };
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollView}>
+      <StatusBar barStyle="light-content" />
+      {renderBackground()}
+
+      {/* Static Layout */}
+      <View style={styles.content}>
         {/* Profile Section */}
         <View style={styles.profileSection}>
           <View style={styles.profileImageContainer}>
             {userProfile?.photoURL ? (
               <Image source={{ uri: userProfile.photoURL }} style={styles.profileImage} />
             ) : (
-              <MaterialIcons name="person" size={60} color="#BB86FC" />
+              <View style={styles.profileImagePlaceholder}>
+                <Text style={styles.profileImageText}>
+                  {username.charAt(0).toUpperCase()}
+                </Text>
+              </View>
             )}
           </View>
           <Text style={styles.userName}>{username}</Text>
-          <Text style={styles.userHandle}>{userProfile?.email}</Text>
-          <Text style={styles.userBio}>
+          <Text style={styles.userEmail}>{userProfile?.email}</Text>
+          <Text style={styles.bioText}>
             {userProfile?.bio || "This user hasn't added a bio yet 🎬"}
           </Text>
         </View>
 
-        {/* Folders Grid */}
-        <View style={styles.contentContainer}>
+        {/* Collections Grid */}
+        <View style={styles.collectionsContainer}>
+          <Text style={styles.sectionTitle}>Movie Collections</Text>
           <FlatList
             data={folders}
             renderItem={renderFolder}
             keyExtractor={item => item.id}
             numColumns={2}
-            contentContainerStyle={styles.gridContainer}
             scrollEnabled={false}
+            columnWrapperStyle={styles.gridRow}
           />
         </View>
+      </View>
 
-        {/* Chat Toggle */}
+      {/* Chat Button and Section */}
+      {!isFullScreenChat && (
         <TouchableOpacity 
           style={styles.chatButton}
-          onPress={() => setShowChat(!showChat)}
+          onPress={handleChatPress}
         >
-          <MaterialIcons 
-            name={showChat ? "chat-bubble" : "chat-bubble-outline"} 
+          <Ionicons 
+            name={showChat ? "close" : "chatbubble"} 
             size={24} 
-            color="#000" 
+            color="#fff" 
           />
-          <Text style={styles.chatButtonText}>
-            {showChat ? 'Hide Chat' : 'Show Chat'}
-          </Text>
         </TouchableOpacity>
-      </ScrollView>
+      )}
 
       {showChat && (
-        <View style={styles.chatSection}>
+        <Animated.View style={[
+          styles.chatSection,
+          isFullScreenChat ? styles.chatSectionFullscreen : styles.chatSectionNormal
+        ]}>
+          <View style={styles.chatHeader}>
+            {isFullScreenChat && (
+              <TouchableOpacity 
+                style={styles.minimizeButton}
+                onPress={handleCloseChat}
+              >
+                <Ionicons name="chevron-down" size={24} color="#fff" />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity 
+              style={styles.maximizeButton}
+              onPress={() => setIsFullScreenChat(true)}
+            >
+              {!isFullScreenChat && (
+                <Ionicons name="expand" size={20} color="#fff" />
+              )}
+            </TouchableOpacity>
+          </View>
+          
           <ChatList 
             matches={[{ userId, username }]}
             selectedMatch={{ userId, username }}
+            onClose={handleCloseChat}
+            preserveNavigation={true}
           />
-        </View>
+        </Animated.View>
       )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  // ... copy styles from ProfileScreen and add/modify as needed ...
   container: {
     flex: 1,
     backgroundColor: '#121212',
+    // Ensure content is above tab bar
+    position: 'relative',
+    zIndex: 1,
   },
-  scrollView: {
-    flex: 1,
+  header: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    overflow: 'hidden',
+    zIndex: 1,
   },
-  profileSection: {
+  headerBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: HEADER_MIN_HEIGHT,
+    flexDirection: 'row',
     alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333',
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'ios' ? 40 : 20,
+  },
+  headerContent: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: Platform.OS === 'ios' ? 40 : 20,
+  },
+  backButton: {
+    padding: 8,
+  },
+  menuButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+    textAlign: 'center',
+    marginHorizontal: 16,
   },
   profileImageContainer: {
-    position: 'relative',
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#2A2A2A',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     marginBottom: 16,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   profileImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: '100%',
+    height: '100%',
+  },
+  profileImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#333',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  profileImageText: {
+    fontSize: 48,
+    fontWeight: 'bold',
+    color: '#fff',
   },
   userName: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 8,
+    marginBottom: 4,
   },
-  userHandle: {
+  userEmail: {
     fontSize: 16,
     color: '#888',
-    marginBottom: 8,
   },
-  userBio: {
+  scrollView: {
+    flex: 1,
+    marginTop: HEADER_MAX_HEIGHT,
+  },
+  contentContainer: {
+    padding: 16,
+  },
+  bioSection: {
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  bioText: {
     fontSize: 14,
     color: '#fff',
     textAlign: 'center',
-    paddingHorizontal: 20,
+    marginTop: 8,
+    marginHorizontal: 20,
   },
-  contentContainer: {
+  collectionsContainer: {
     flex: 1,
+    paddingTop: 16,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 16,
+  },
+  folderItem: {
+    width: FOLDER_WIDTH,
+    aspectRatio: 1, // Make it square
+    backgroundColor: 'rgba(26, 26, 26, 0.8)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
     padding: 12,
   },
-  gridContainer: {
-    padding: 6,
+  folderContent: {
+    flex: 1,
+    justifyContent: 'space-between',
   },
-  folderContainer: {
-    width: FOLDER_SIZE,
-    height: FOLDER_SIZE,
-    margin: 6,
-    borderRadius: 15,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 2,
-    padding: 15,
-    justifyContent: 'center',
+  folderHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
+  folderIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(51, 51, 51, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  folderInfo: {
+    flex: 1,
+  },
   folderName: {
-    color: '#fff',
     fontSize: 16,
-    fontWeight: 'bold',
-    marginTop: 10,
-    textAlign: 'center',
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 4,
   },
   folderCount: {
     fontSize: 14,
-    marginTop: 5,
+    color: '#888',
+  },
+  thumbnailsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+  },
+  thumbnailWrapper: {
+    width: THUMBNAIL_SIZE,
+    height: THUMBNAIL_SIZE * 1.5,
+    borderRadius: 6,
+    overflow: 'hidden',
+    backgroundColor: '#333',
+  },
+  thumbnail: {
+    width: '100%',
+    height: '100%',
+  },
+  moreIndicator: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  moreIndicatorText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   chatButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    position: 'absolute',
+    right: 16,
+    bottom: 76, // Adjusted to be above tab bar
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(51, 51, 51, 0.9)',
     justifyContent: 'center',
-    backgroundColor: '#BB86FC',
-    padding: 16,
-    margin: 20,
-    borderRadius: 8,
-  },
-  chatButtonText: {
-    color: '#000',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 8,
+    alignItems: 'center',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    zIndex: 1,
   },
   chatSection: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(26, 26, 26, 0.95)',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    overflow: 'hidden',
+    zIndex: 2,
+    // Add transition properties
+    transition: 'all 0.3s ease-in-out',
+  },
+
+  chatSectionNormal: {
+    bottom: 60,
+    height: '65%',
+  },
+
+  chatSectionFullscreen: {
+    top: 0,
+    bottom: 0,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+  },
+
+  chatHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+
+  minimizeButton: {
+    padding: 8,
+  },
+
+  maximizeButton: {
+    padding: 8,
+    alignSelf: 'flex-end',
+  },
+  headerBackground: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#1a1a1a',
+    opacity: 0.98, // Adjust this value for desired transparency
+  },
+  fullScreenBackground: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#000',
+  },
+  backgroundImage: {
+    width: '100%',
+    height: '100%',
+    opacity: 0.5,
+  },
+  backgroundOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+  },
+  contentGradient: {
     flex: 1,
-    maxHeight: 400,
-    borderTopWidth: 1,
-    borderTopColor: '#333',
-  }
+    paddingTop: HEADER_MAX_HEIGHT,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  profileSection: {
+    height: '35%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  gridRow: {
+    justifyContent: 'space-between',
+    marginBottom: GRID_SPACING,
+  },
 });
 
 export default UserProfileChatScreen;

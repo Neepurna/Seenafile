@@ -29,6 +29,22 @@ const MovieGridScreen = ({ route, navigation }) => {
     });
   }, [navigation]);
 
+  useEffect(() => {
+    // Set up navigation options based on source screen
+    if (route.params?.fromScreen === 'UserProfileChat') {
+      navigation.setOptions({
+        headerLeft: () => (
+          <TouchableOpacity 
+            onPress={() => navigation.goBack()}
+            style={{ marginLeft: 16 }}
+          >
+            <Ionicons name="chevron-back" size={24} color="#fff" />
+          </TouchableOpacity>
+        )
+      });
+    }
+  }, [navigation, route.params]);
+
   const [movies, setMovies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
