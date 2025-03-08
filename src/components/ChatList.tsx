@@ -72,13 +72,15 @@ interface ChatListProps {
   selectedMatch?: Match | null;
   onClose?: () => void;
   preserveNavigation?: boolean;
+  hideBackButton?: boolean; // Add this prop
 }
 
 const ChatList: React.FC<ChatListProps> = ({
   matches,
   selectedMatch: propSelectedMatch,
   onClose,
-  preserveNavigation = false
+  preserveNavigation = false,
+  hideBackButton = false // Add this prop
 }) => {
   const currentUserId = auth.currentUser?.uid;
 
@@ -740,9 +742,11 @@ const ChatList: React.FC<ChatListProps> = ({
       ) : (
         <>
           <View style={styles.header}>
-            <TouchableOpacity onPress={handleBack}>
-              <Ionicons name="chevron-back" size={24} color="#fff" />
-            </TouchableOpacity>
+            {!hideBackButton && ( // Only show back button if hideBackButton is false
+              <TouchableOpacity onPress={handleBack}>
+                <Ionicons name="chevron-back" size={24} color="#fff" />
+              </TouchableOpacity>
+            )}
             <Text style={styles.headerTitle}>Chats</Text>
           </View>
           

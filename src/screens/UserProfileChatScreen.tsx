@@ -369,6 +369,7 @@ const UserProfileChatScreen: React.FC<UserProfileChatScreenProps> = ({ route, na
             selectedMatch={{ userId, username }}
             onClose={handleCloseChat}
             preserveNavigation={true}
+            hideBackButton={true} // Add this prop
           />
         </Animated.View>
       )}
