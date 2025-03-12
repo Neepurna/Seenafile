@@ -10,13 +10,16 @@ import {
   RefreshControl,
   TouchableOpacity,
   Alert,
+  Animated,
+  PanResponder,
+  Modal,
 } from 'react-native';
 import { auth, db } from '../firebase';
 import { doc, collection, query, where, getDocs, orderBy, limit, onSnapshot, getDoc } from 'firebase/firestore';
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 const { width } = Dimensions.get('window');
-const GRID_SIZE = width / 4 - 20;
+const GRID_SIZE = width / 5 - 10; // Changed from 4 to 5 movies per row
 const REVIEW_CARD_WIDTH = width - 30; // Full width cards for reviews
 const ITEMS_PER_PAGE = 20;
 
@@ -28,6 +31,31 @@ const MovieGridScreen = ({ route, navigation }) => {
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(1);
   const moviesRef = useRef<any[]>([]);  // Add this to keep track of all movies
+  const [selectedMovie, setSelectedMovie] = useState(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dx > 0) {
+          slideAnim.setValue(gestureState.dx);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dx > 50) {
+          closeModal();
+        } else {
+          Animated.spring(slideAnim, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+    })
+  ).current;
   
   useEffect(() => {
     loadMovies(true);
@@ -174,12 +202,14 @@ const MovieGridScreen = ({ route, navigation }) => {
         console.log('Fetching movies for folder:', folderId);
         
         try {
-          const userRef = doc(db, 'users', auth.currentUser.uid);
+          // Use the passed userId instead of current user's ID
+          const targetUserId = userId || auth.currentUser.uid;
+          const userRef = doc(db, 'users', targetUserId);
           const moviesRef = collection(userRef, 'movies');
           
           // Log the query parameters
           console.log('Query params:', {
-            userId: auth.currentUser.uid,
+            userId: targetUserId,
             folderId,
             collection: 'movies'
           });
@@ -187,22 +217,12 @@ const MovieGridScreen = ({ route, navigation }) => {
           const q = query(
             moviesRef,
             where('category', '==', folderId)
-            // Remove orderBy temporarily to debug
           );
 
           unsubscribe = onSnapshot(q, {
             next: (snapshot) => {
               if (timeoutId) window.clearTimeout(timeoutId);
               
-              console.log('Snapshot received:', {
-                empty: snapshot.empty,
-                size: snapshot.size,
-                docs: snapshot.docs.map(doc => ({
-                  id: doc.id,
-                  category: doc.data().category
-                }))
-              });
-
               let movieData = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
@@ -217,20 +237,11 @@ const MovieGridScreen = ({ route, navigation }) => {
                 });
               }
               
-              if (movieData.length === 0) {
-                console.log('Debug - Query returned no results:', {
-                  folderId,
-                  userId: auth.currentUser?.uid
-                });
-              } else {
-                console.log(`Found ${movieData.length} movies in folder ${folderId}`);
-              }
-              
               setMovies(movieData);
               setLoading(false);
               
-              // Cache the data
-              const cacheKey = `movies_${folderId}_${auth.currentUser?.uid}`;
+              // Cache the data with correct userId
+              const cacheKey = `movies_${folderId}_${targetUserId}`;
               AsyncStorage.setItem(cacheKey, JSON.stringify(movieData))
                 .catch(error => console.error('Caching error:', error));
             },
@@ -272,7 +283,8 @@ const MovieGridScreen = ({ route, navigation }) => {
   // Add this new function to load cached movies
   const loadCachedMovies = async () => {
     try {
-      const cacheKey = `movies_${folderId}_${auth.currentUser?.uid}`;
+      const targetUserId = userId || auth.currentUser?.uid;
+      const cacheKey = `movies_${folderId}_${targetUserId}`;
       const cachedData = await AsyncStorage.getItem(cacheKey);
       if (cachedData) {
         setMovies(JSON.parse(cachedData));
@@ -292,12 +304,9 @@ const MovieGridScreen = ({ route, navigation }) => {
       const userRef = doc(db, 'users', userId);
       const moviesCollection = collection(userRef, isCritics ? 'reviews' : 'movies');
       
-      // Modified query to avoid composite index requirement
-      let q = query(
+      const q = query(
         moviesCollection,
-        where('category', '==', folderId),
-        // Remove orderBy timestamp temporarily until index is created
-        limit(20 * page)
+        where('category', '==', folderId)
       );
 
       const snapshot = await getDocs(q);
@@ -353,6 +362,26 @@ const MovieGridScreen = ({ route, navigation }) => {
     }
   };
 
+  const closeModal = () => {
+    Animated.parallel([
+      Animated.timing(slideAnim, {
+        toValue: width,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 0.8,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setModalVisible(false);
+      setSelectedMovie(null);
+      slideAnim.setValue(0);
+      scaleAnim.setValue(1);
+    });
+  };
+
   const handleLoadMore = () => {
     if (!loading && hasMore) {
       setPage(prev => prev + 1);
@@ -367,8 +396,15 @@ const MovieGridScreen = ({ route, navigation }) => {
   }, []);
 
   const handleMoviePress = useCallback((movie) => {
-    navigation.navigate('MovieDetails', { movie });
-  }, [navigation]);
+    setSelectedMovie(movie);
+    setModalVisible(true);
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      friction: 8,
+      tension: 40,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
   const formatDate = (date: Date | string | null): string => {
     if (!date) return '';
@@ -494,6 +530,46 @@ const MovieGridScreen = ({ route, navigation }) => {
     );
   };
 
+  const renderMovieModal = () => (
+    <Modal
+      visible={modalVisible}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={closeModal}
+    >
+      <View style={styles.modalOverlay}>
+        <Animated.View
+          style={[
+            styles.modalContent,
+            {
+              transform: [
+                { translateX: slideAnim },
+                { scale: scaleAnim }
+              ]
+            }
+          ]}
+          {...panResponder.panHandlers}
+        >
+          {selectedMovie && (
+            <View style={styles.selectedMovieContainer}>
+              <Image
+                source={{
+                  uri: selectedMovie.poster_path
+                    ? `https://image.tmdb.org/t/p/w500${selectedMovie.poster_path}`
+                    : 'https://via.placeholder.com/500x750'
+                }}
+                style={styles.selectedMoviePoster}
+              />
+              <Text style={styles.selectedMovieTitle}>
+                {selectedMovie.title || 'Untitled'}
+              </Text>
+            </View>
+          )}
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+
   if (loading && page === 1) {
     return (
       <View style={styles.centerContainer}>
@@ -508,7 +584,7 @@ const MovieGridScreen = ({ route, navigation }) => {
         data={movies}
         renderItem={renderContent}
         keyExtractor={item => item.id}
-        numColumns={isCritics ? 1 : 4}
+        numColumns={5}
         key={isCritics ? 'critics' : 'grid'}
         contentContainerStyle={[
           styles.gridContainer,
@@ -524,8 +600,8 @@ const MovieGridScreen = ({ route, navigation }) => {
             tintColor={folderColor}
           />
         }
-        onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.5}
+        onEndReached={null} // Remove infinite scroll
+        onEndReachedThreshold={null}
         ListFooterComponent={renderFooter}
         ListEmptyComponent={
           !loading && (
@@ -537,6 +613,7 @@ const MovieGridScreen = ({ route, navigation }) => {
           )
         }
       />
+      {renderMovieModal()}
     </View>
   );
 };
@@ -674,6 +751,34 @@ const styles = StyleSheet.create({
   loadingFooter: {
     paddingVertical: 20,
     alignItems: 'center'
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: width * 0.8,
+    backgroundColor: '#1A1A1A',
+    borderRadius: 15,
+    overflow: 'hidden',
+  },
+  selectedMovieContainer: {
+    alignItems: 'center',
+    padding: 20,
+  },
+  selectedMoviePoster: {
+    width: width * 0.6,
+    height: (width * 0.6) * 1.5,
+    borderRadius: 10,
+  },
+  selectedMovieTitle: {
+    color: '#FFF',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginTop: 15,
+    textAlign: 'center',
   },
 });
 

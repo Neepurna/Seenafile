@@ -113,6 +113,7 @@ const UserProfileChatScreen: React.FC<UserProfileChatScreenProps> = ({ route, na
     if (!userId) return;
     
     try {
+      // Use the profile owner's userId instead of current user
       const userRef = doc(db, 'users', userId);
       const moviesRef = collection(userRef, 'movies');
       const snapshot = await getDocs(moviesRef);
@@ -141,7 +142,10 @@ const UserProfileChatScreen: React.FC<UserProfileChatScreenProps> = ({ route, na
   };
 
   const fetchFolderThumbnails = async () => {
+    if (!userId) return;
+
     try {
+      // Use the profile owner's userId instead of current user
       const userRef = doc(db, 'users', userId);
       const moviesRef = collection(userRef, 'movies');
       const snapshot = await getDocs(moviesRef);
@@ -188,9 +192,11 @@ const UserProfileChatScreen: React.FC<UserProfileChatScreenProps> = ({ route, na
   });
 
   const handleNavigateToMovieGrid = (params: any) => {
+    console.log('Navigating to MovieGridScreen with userId:', userId);
     navigation.navigate('MovieGridScreen', {
       ...params,
-      fromScreen: 'UserProfileMain',
+      userId: userId, // Ensure userId is passed
+      fromScreen: 'UserProfileChat',
       previousScreen: 'UserProfile'
     });
   };
@@ -231,7 +237,7 @@ const UserProfileChatScreen: React.FC<UserProfileChatScreenProps> = ({ route, na
               folderId: item.id,
               folderName: item.name,
               folderColor: item.color,
-              userId: userId,
+              userId: userId, // Explicitly pass userId
               isCritics: item.id === 'critics'
             });
           }
