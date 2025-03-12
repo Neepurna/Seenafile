@@ -39,6 +39,12 @@ interface FolderData {
   icon: string;
 }
 
+interface MovieThumbnail {
+  id: string;
+  poster_path: string;
+  movieTitle?: string; // Add this field
+}
+
 // Update the folders array with correct icon
 const folders: FolderData[] = [
   { id: 'watched', name: 'Watched', color: '#4BFF4B', count: 0, icon: 'checkmark-circle' },
@@ -64,6 +70,7 @@ const ProfileScreen: React.FC = () => {
     level: 1
   });
   const [isUpdating, setIsUpdating] = useState(false);
+  const [folderThumbnails, setFolderThumbnails] = useState<{ [key: string]: MovieThumbnail[] }>({});
 
   useEffect(() => {
     if (!auth.currentUser) {
@@ -76,36 +83,67 @@ const ProfileScreen: React.FC = () => {
     const moviesRef = collection(userRef, 'movies');
     const reviewsRef = collection(userRef, 'reviews');
 
-    // Fetch user profile
-    const profileUnsubscribe = onSnapshot(userRef, (doc) => {
-      if (doc.exists()) {
-        setUserProfile(doc.data());
-      }
-      setIsLoading(false);
+    // Add separate reviews listener
+    const reviewsUnsubscribe = onSnapshot(reviewsRef, (snapshot) => {
+      const reviewsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setUserReviews(reviewsData);
+
+      // Update critics folder count and thumbnails
+      const criticsCount = reviewsData.length;
+      setFolderCounts(prev => ({ ...prev, critics: criticsCount }));
+
+      // Update critics thumbnails
+      setFolderThumbnails(prev => ({
+        ...prev,
+        critics: reviewsData
+          .filter(review => review.poster_path)
+          .slice(0, 2)
+          .map(review => ({
+            id: review.id,
+            poster_path: review.poster_path,
+            movieTitle: review.movieTitle
+          }))
+      }));
     });
 
-    // Replace fetchData with live snapshot listener
+    // Movies listener
     const moviesUnsubscribe = onSnapshot(moviesRef, (snapshot) => {
       try {
         const counts = {
           watched: 0,
           most_watch: 0,
           watch_later: 0,
-          critics: 0
+          critics: folderCounts.critics || 0 // Preserve critics count
         };
+        
+        const thumbsByFolder = { ...folderThumbnails }; // Preserve existing thumbnails
 
         snapshot.docs.forEach(doc => {
           const data = doc.data();
           if (data.category) {
-            if (data.category === 'most_watched') {
-              counts.most_watch++;
-            } else if (counts.hasOwnProperty(data.category)) {
-              counts[data.category]++;
+            const category = data.category === 'most_watched' ? 'most_watch' : data.category;
+            if (counts.hasOwnProperty(category) && category !== 'critics') { // Skip critics here
+              counts[category]++;
+              
+              if (!thumbsByFolder[category]) {
+                thumbsByFolder[category] = [];
+              }
+              if (thumbsByFolder[category].length < 2 && data.poster_path) {
+                thumbsByFolder[category].push({
+                  id: doc.id,
+                  poster_path: data.poster_path,
+                  movieTitle: data.movieTitle || data.title
+                });
+              }
             }
           }
         });
 
-        setFolderCounts(counts);
+        setFolderCounts(prev => ({ ...prev, ...counts }));
+        setFolderThumbnails(thumbsByFolder);
         setIsLoading(false);
       } catch (error) {
         console.error('Error processing movies:', error);
@@ -114,19 +152,9 @@ const ProfileScreen: React.FC = () => {
       }
     });
 
-    // Fetch reviews if needed for critics folder
-    const reviewsUnsubscribe = onSnapshot(reviewsRef, (snapshot) => {
-      const reviewsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setUserReviews(reviewsData);
-    });
-
     return () => {
-      profileUnsubscribe();
-      moviesUnsubscribe();
       reviewsUnsubscribe();
+      moviesUnsubscribe();
     };
   }, [navigation]);
 
@@ -254,6 +282,62 @@ const ProfileScreen: React.FC = () => {
     </View>
   );
 
+  const renderStats = () => (
+    <View style={styles.statsContainer}>
+      {folders.map((folder) => {
+        const count = folderCounts[folder.id] || 0;
+        const thumbs = folderThumbnails[folder.id] || [];
+        
+        return (
+          <TouchableOpacity
+            key={folder.id}
+            style={styles.statCard}
+            onPress={() => navigation.navigate('MovieGridScreen', {
+              folderId: folder.id,
+              folderName: folder.name,
+              folderColor: folder.color,
+              isCritics: folder.id === 'critics'
+            })}
+          >
+            <LinearGradient
+              colors={['rgba(187,134,252,0.2)', 'rgba(187,134,252,0.1)']}
+              style={styles.statGradient}
+            >
+              <View style={styles.folderHeader}>
+                <View style={styles.folderIconContainer}>
+                  <Ionicons name={folder.icon as any} size={24} color="#fff" />
+                </View>
+                <View style={styles.folderInfo}>
+                  <Text style={styles.folderName}>{folder.name}</Text>
+                  <Text style={styles.folderCount}>
+                    {count} {folder.id === 'critics' ? 'reviews' : 'movies'}
+                  </Text>
+                </View>
+              </View>
+              
+              <View style={styles.thumbnailsRow}>
+                {thumbs.map((thumb, index) => (
+                  <View key={thumb.id} style={styles.thumbnailWrapper}>
+                    <Image
+                      source={{ uri: `https://image.tmdb.org/t/p/w92${thumb.poster_path}` }}
+                      style={styles.thumbnail}
+                      resizeMode="cover"
+                    />
+                  </View>
+                ))}
+                {count > 2 && (
+                  <View style={styles.moreIndicator}>
+                    <Text style={styles.moreIndicatorText}>+{count - 2}</Text>
+                  </View>
+                )}
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
@@ -271,29 +355,7 @@ const ProfileScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.statsContainer}>
-          {Object.entries(folderCounts).map(([key, count]) => (
-            <TouchableOpacity 
-              key={key}
-              style={styles.statCard}
-              onPress={() => navigation.navigate('MovieGridScreen', {
-                folderId: key,
-                folderName: folders.find(f => f.id === key)?.name,
-                folderColor: folders.find(f => f.id === key)?.color
-              })}
-            >
-              <LinearGradient
-                colors={['rgba(187,134,252,0.2)', 'rgba(187,134,252,0.1)']}
-                style={styles.statGradient}
-              >
-                <Text style={styles.statCount}>{count}</Text>
-                <Text style={styles.statLabel}>
-                  {key.replace('_', ' ')}
-                </Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          ))}
-        </View>
+        {renderStats()}
 
         <TouchableOpacity 
           style={styles.signOutButton} 
@@ -418,16 +480,65 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
   },
-  statCount: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#BB86FC',
+  folderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  folderIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(51, 51, 51, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  folderInfo: {
+    flex: 1,
+  },
+  folderName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
     marginBottom: 4,
   },
-  statLabel: {
-    fontSize: 12,
+  folderCount: {
+    fontSize: 14,
+    color: '#888',
+  },
+  thumbnailsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    gap: 8,
+  },
+  thumbnailWrapper: {
+    width: 45,
+    height: 68,
+    borderRadius: 6,
+    overflow: 'hidden',
+    backgroundColor: '#333',
+  },
+  thumbnail: {
+    width: '100%',
+    height: '100%',
+  },
+  moreIndicator: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  moreIndicatorText: {
     color: '#fff',
-    textTransform: 'capitalize',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   signOutButton: {
     flexDirection: 'row',
@@ -437,10 +548,10 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     marginTop: 'auto',
-    marginBottom: 16,
+    marginBottom: '30%', // Adjusted to move button up
   },
   signOutText: {
-    color: '#fff',
+    color: '#fff', // Changed from default black to white
     marginLeft: 8,
     fontSize: 16,
     fontWeight: '600',
