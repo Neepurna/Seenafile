@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   View, 
   StyleSheet, 
@@ -22,7 +22,17 @@ const ITEMS_PER_PAGE = 20;
 
 const MovieGridScreen = ({ route, navigation }) => {
   const { folderId, folderName, folderColor, isCritics, userId } = route.params;
+  const [movies, setMovies] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(1);
+  const moviesRef = useRef<any[]>([]);  // Add this to keep track of all movies
   
+  useEffect(() => {
+    loadMovies(true);
+  }, []);
+
   useEffect(() => {
     navigation.setOptions({
       // Remove the headerLeft and gestureEnabled options to allow default behavior
@@ -44,12 +54,6 @@ const MovieGridScreen = ({ route, navigation }) => {
       });
     }
   }, [navigation, route.params]);
-
-  const [movies, setMovies] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
 
   const fetchMovieDetails = async (reviewData) => {
     try {
@@ -199,10 +203,19 @@ const MovieGridScreen = ({ route, navigation }) => {
                 }))
               });
 
-              const movieData = snapshot.docs.map(doc => ({
+              let movieData = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
               }));
+
+              // Sort alphabetically for specific folders
+              if (['watched', 'most_watch', 'watch_later'].includes(folderId)) {
+                movieData = movieData.sort((a, b) => {
+                  const titleA = (a.title || a.movieTitle || '').toLowerCase();
+                  const titleB = (b.title || b.movieTitle || '').toLowerCase();
+                  return titleA.localeCompare(titleB);
+                });
+              }
               
               if (movieData.length === 0) {
                 console.log('Debug - Query returned no results:', {
@@ -270,43 +283,80 @@ const MovieGridScreen = ({ route, navigation }) => {
   };
 
   // Update the loadMovies function
-  const loadMovies = async (refreshing = false) => {
-    if (!auth.currentUser || loading) return;
-
+  const loadMovies = async (isInitial = false) => {
+    if (loading && !isInitial) return;
+    
     try {
       setLoading(true);
-      const targetUserId = userId || auth.currentUser.uid;
-      const userRef = doc(db, 'users', targetUserId);
-      const moviesRef = collection(userRef, 'movies');
-
-      const q = isCritics
-        ? query(
-            moviesRef,
-            where('category', '==', 'critics'),
-            orderBy('createdAt', 'desc'),
-            limit(50)
-          )
-        : query(
-            moviesRef,
-            where('category', '==', folderId),
-            orderBy('createdAt', 'desc'),
-            limit(50)
-          );
+      const userId = auth.currentUser?.uid || route.params.userId;
+      const userRef = doc(db, 'users', userId);
+      const moviesCollection = collection(userRef, isCritics ? 'reviews' : 'movies');
+      
+      // Modified query to avoid composite index requirement
+      let q = query(
+        moviesCollection,
+        where('category', '==', folderId),
+        // Remove orderBy timestamp temporarily until index is created
+        limit(20 * page)
+      );
 
       const snapshot = await getDocs(q);
-      const movieData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate?.() || new Date()
-      }));
+      let movieData = await Promise.all(
+        snapshot.docs.map(async (doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            timestamp: data.timestamp?.toDate?.() || new Date()
+          };
+        })
+      );
 
+      // Sort based on folder type
+      if (['watched', 'most_watch', 'watch_later'].includes(folderId)) {
+        // Sort alphabetically
+        movieData = movieData.sort((a, b) => {
+          const titleA = (a.title || a.movieTitle || '').toLowerCase();
+          const titleB = (b.title || b.movieTitle || '').toLowerCase();
+          return titleA.localeCompare(titleB);
+        });
+      } else {
+        // Sort by timestamp for other folders
+        movieData = movieData.sort((a, b) => {
+          const timeA = a.timestamp instanceof Date ? a.timestamp : new Date(a.timestamp);
+          const timeB = b.timestamp instanceof Date ? b.timestamp : new Date(b.timestamp);
+          return timeB.getTime() - timeA.getTime();
+        });
+      }
+
+      // Store all movies in ref and state
+      moviesRef.current = movieData;
       setMovies(movieData);
-      setHasMore(false);
+      setHasMore(movieData.length === 20 * page);
+      
+      // Cache the movies
+      const cacheKey = `${folderId}_${userId}_movies`;
+      await AsyncStorage.setItem(cacheKey, JSON.stringify(movieData));
+      
     } catch (error) {
-      console.error('Load error:', error);
-      await loadCachedMovies();
+      console.error('Error loading movies:', error);
+      // Try to load from cache
+      const cacheKey = `${folderId}_${userId}_movies`;
+      const cachedMovies = await AsyncStorage.getItem(cacheKey);
+      if (cachedMovies) {
+        const movieData = JSON.parse(cachedMovies);
+        moviesRef.current = movieData;
+        setMovies(movieData);
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleLoadMore = () => {
+    if (!loading && hasMore) {
+      setPage(prev => prev + 1);
+      loadMovies();
     }
   };
 
@@ -435,6 +485,15 @@ const MovieGridScreen = ({ route, navigation }) => {
     );
   }, [handleMoviePress, isCritics]);
 
+  const renderFooter = () => {
+    if (!loading) return null;
+    return (
+      <View style={styles.loadingFooter}>
+        <ActivityIndicator size="small" color={folderColor} />
+      </View>
+    );
+  };
+
   if (loading && page === 1) {
     return (
       <View style={styles.centerContainer}>
@@ -458,21 +517,21 @@ const MovieGridScreen = ({ route, navigation }) => {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={onRefresh}
+            onRefresh={() => {
+              setPage(1);
+              loadMovies(true);
+            }}
             tintColor={folderColor}
           />
         }
-        onEndReached={() => !loading && hasMore && loadMovies()}
+        onEndReached={handleLoadMore}
         onEndReachedThreshold={0.5}
-        ListFooterComponent={loading && hasMore ? (
-          <ActivityIndicator size="small" color={folderColor} />
-        ) : null}
+        ListFooterComponent={renderFooter}
         ListEmptyComponent={
           !loading && (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No movies in this folder</Text>
-              <Text style={styles.emptySubText}>
-                Swipe movies in CineBrowse to add them here
+              <Text style={styles.emptyText}>
+                No {isCritics ? 'reviews' : 'movies'} in this folder yet
               </Text>
             </View>
           )
@@ -611,6 +670,10 @@ const styles = StyleSheet.create({
   },
   reviewContainer: {
     paddingHorizontal: 15,
+  },
+  loadingFooter: {
+    paddingVertical: 20,
+    alignItems: 'center'
   },
 });
 

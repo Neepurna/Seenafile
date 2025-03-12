@@ -25,6 +25,7 @@ import { doc, getDoc, collection, query, onSnapshot, getDocs, updateDoc } from '
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
 const COVER_HEIGHT = height * 0.25; // Reduced cover height
@@ -109,25 +110,37 @@ const ProfileScreen: React.FC = () => {
       }));
     });
 
-    // Movies listener
-    const moviesUnsubscribe = onSnapshot(moviesRef, (snapshot) => {
+    // Movies listener with persistent cache
+    const MOVIES_CACHE_KEY = `user_movies_${userId}`;
+    const moviesUnsubscribe = onSnapshot(moviesRef, async (snapshot) => {
       try {
         const counts = {
           watched: 0,
           most_watch: 0,
           watch_later: 0,
-          critics: folderCounts.critics || 0 // Preserve critics count
+          critics: folderCounts.critics || 0
         };
         
-        const thumbsByFolder = { ...folderThumbnails }; // Preserve existing thumbnails
+        const thumbsByFolder = { ...folderThumbnails };
+        const moviesByFolder: { [key: string]: any[] } = {};
 
         snapshot.docs.forEach(doc => {
           const data = doc.data();
           if (data.category) {
             const category = data.category === 'most_watched' ? 'most_watch' : data.category;
-            if (counts.hasOwnProperty(category) && category !== 'critics') { // Skip critics here
+            if (counts.hasOwnProperty(category) && category !== 'critics') {
               counts[category]++;
               
+              // Store full movie data by folder
+              if (!moviesByFolder[category]) {
+                moviesByFolder[category] = [];
+              }
+              moviesByFolder[category].push({
+                id: doc.id,
+                ...data
+              });
+
+              // Update thumbnails
               if (!thumbsByFolder[category]) {
                 thumbsByFolder[category] = [];
               }
@@ -142,11 +155,45 @@ const ProfileScreen: React.FC = () => {
           }
         });
 
+        // Cache the full movie data
+        await AsyncStorage.setItem(MOVIES_CACHE_KEY, JSON.stringify(moviesByFolder));
+
         setFolderCounts(prev => ({ ...prev, ...counts }));
         setFolderThumbnails(thumbsByFolder);
         setIsLoading(false);
       } catch (error) {
         console.error('Error processing movies:', error);
+        
+        // Try to load from cache if live update fails
+        try {
+          const cachedData = await AsyncStorage.getItem(MOVIES_CACHE_KEY);
+          if (cachedData) {
+            const moviesByFolder = JSON.parse(cachedData);
+            // Update counts and thumbnails from cache
+            const counts = Object.keys(moviesByFolder).reduce((acc, category) => ({
+              ...acc,
+              [category]: moviesByFolder[category].length
+            }), {});
+            
+            setFolderCounts(prev => ({ ...prev, ...counts }));
+            // Update thumbnails from cached data
+            const thumbsByFolder = Object.keys(moviesByFolder).reduce((acc, category) => ({
+              ...acc,
+              [category]: moviesByFolder[category]
+                .filter(movie => movie.poster_path)
+                .slice(0, 2)
+                .map(movie => ({
+                  id: movie.id,
+                  poster_path: movie.poster_path,
+                  movieTitle: movie.movieTitle || movie.title
+                }))
+            }), {});
+            setFolderThumbnails(thumbsByFolder);
+          }
+        } catch (cacheError) {
+          console.error('Error loading cached movies:', cacheError);
+        }
+        
         setError('Failed to load data');
         setIsLoading(false);
       }

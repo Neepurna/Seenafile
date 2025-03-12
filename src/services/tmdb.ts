@@ -151,11 +151,31 @@ export const fetchGenres = async () => {
   return genresList;
 };
 
-// Update fetchMovies to use the new queue
+// Update fetchMovies to include better caching
 export const fetchMovies = async (page: number = 1) => {
   return requestQueue.add(async () => {
-    const response = await axiosInstance.get(`/movie/popular`, { params: { page } });
-    return response.data;
+    try {
+      const response = await axiosInstance.get(`/movie/popular`, { 
+        params: { 
+          page,
+          per_page: 20 // Ensure we get enough movies per page
+        }
+      });
+
+      // Cache the response
+      const cacheKey = `movies_page_${page}`;
+      await AsyncStorage.setItem(cacheKey, JSON.stringify(response.data));
+      
+      return response.data;
+    } catch (error) {
+      // Try to get cached data if request fails
+      const cacheKey = `movies_page_${page}`;
+      const cachedData = await AsyncStorage.getItem(cacheKey);
+      if (cachedData) {
+        return JSON.parse(cachedData);
+      }
+      throw error;
+    }
   });
 };
 
