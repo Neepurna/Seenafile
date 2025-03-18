@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useImperativeHandle } from 'react';
 import {
   View,
   Text,
@@ -105,7 +105,7 @@ const CHAT_PROMPTS: ChatPrompt[] = [
   { id: '5', text: "What genre do you never get tired of?" }
 ];
 
-const ChatList: React.FC<ChatListProps> = ({
+const ChatList = React.forwardRef<any, ChatListProps>(({
   matches,
   selectedMatch: propSelectedMatch,
   onClose,
@@ -115,7 +115,7 @@ const ChatList: React.FC<ChatListProps> = ({
   onPromptSelect,
   showPrompts: propShowPrompts,
   setShowPrompts: propSetShowPrompts
-}) => {
+}, ref) => {
   const currentUserId = auth.currentUser?.uid;
 
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(
@@ -340,12 +340,34 @@ const ChatList: React.FC<ChatListProps> = ({
     };
   }, []);
 
+  // Add resetChat method
+  const resetChat = useCallback(() => {
+    setSelectedMatch(null);
+    setMessages([]);
+    setNewMessage('');
+    setPermissionError(null);
+    // Clean up listeners
+    unsubscribeRefs.current.forEach((unsubscribe) => unsubscribe());
+    unsubscribeRefs.current = [];
+  }, []);
+
+  // Expose methods through ref
+  useImperativeHandle(ref, () => ({
+    selectMatch: handleSelectMatch,
+    resetChat
+  }));
+
+  // Modify handleSelectMatch
   const handleSelectMatch = async (match: Match) => {
     try {
       if (!currentUserId || !match.userId) return;
       
       setIsLoading(true);
       setMessages([]); // Clear previous messages
+
+      // Clean up previous listeners
+      unsubscribeRefs.current.forEach(unsubscribe => unsubscribe());
+      unsubscribeRefs.current = [];
 
       // Create unique chat ID
       const chatId = [currentUserId, match.userId].sort().join('_');
@@ -358,10 +380,6 @@ const ChatList: React.FC<ChatListProps> = ({
         lastMessage: null,
         lastMessageTime: null,
       }, { merge: true });
-
-      // Clean up previous listeners
-      unsubscribeRefs.current.forEach(unsubscribe => unsubscribe());
-      unsubscribeRefs.current = [];
 
       // Set up real-time listener for messages
       const messagesRef = collection(chatRef, 'messages');
@@ -377,10 +395,7 @@ const ChatList: React.FC<ChatListProps> = ({
         // Mark received messages as read
         snapshot.docs.forEach(async (doc) => {
           const messageData = doc.data();
-          if (
-            messageData.senderId !== currentUserId && 
-            !messageData.read
-          ) {
+          if (messageData.senderId !== currentUserId && !messageData.read) {
             await updateDoc(doc.ref, { read: true });
           }
         });
@@ -944,7 +959,7 @@ const ChatList: React.FC<ChatListProps> = ({
       </PanGestureHandler>
     </GestureHandlerRootView>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {

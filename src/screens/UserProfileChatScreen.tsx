@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -113,6 +113,7 @@ const UserProfileChatScreen: React.FC<UserProfileChatScreenProps> = ({ route, na
   const [selectedPrompt, setSelectedPrompt] = useState<ChatPrompt | null>(null);
   const [showPrompts, setShowPrompts] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const chatListRef = useRef<any>(null);
 
   useEffect(() => {
     fetchUserProfile();
@@ -237,19 +238,28 @@ const UserProfileChatScreen: React.FC<UserProfileChatScreenProps> = ({ route, na
     }, 300);
   };
 
+  // Modify handleChatPress to include user details
   const handleChatPress = () => {
     if (!showChat) {
-      setSelectedUserId(userId); // Set current user's ID
+      setSelectedUserId(userId);
       setShowChat(true);
-      setSelectedPrompt(null); // Reset prompt when opening chat
-      setTimeout(() => setIsFullScreenChat(true), 100);
-    } else {
-      setIsFullScreenChat(false);
+      setSelectedPrompt(null);
       setTimeout(() => {
-        setShowChat(false);
-        setSelectedPrompt(null); // Reset prompt when closing chat
-        setSelectedUserId(null); // Clear selected user ID
-      }, 300);
+        setIsFullScreenChat(true);
+        if (chatListRef.current) {
+          chatListRef.current.selectMatch({
+            userId,
+            username,
+            photoURL: userProfile?.photoURL,
+            score: 100,
+            commonMovies: [],
+            email: userProfile?.email,
+            displayName: username
+          });
+        }
+      }, 100);
+    } else {
+      handleChatBack();
     }
   };
 
@@ -257,9 +267,27 @@ const UserProfileChatScreen: React.FC<UserProfileChatScreenProps> = ({ route, na
     setIsFullScreenChat(false);
     setTimeout(() => {
       setShowChat(false);
-      setSelectedUserId(null); // Clear selected user ID
+      setSelectedPrompt(null);
+      setSelectedUserId(null);
+      if (chatListRef.current) {
+        chatListRef.current.resetChat();
+      }
     }, 300);
   };
+
+  // Add useEffect to reset chat state when leaving screen
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('blur', () => {
+      setShowChat(false);
+      setIsFullScreenChat(false);
+      setSelectedUserId(null);
+      if (chatListRef.current) {
+        chatListRef.current.resetChat();
+      }
+    });
+
+    return unsubscribe;
+  }, [navigation]);
 
   const renderFolder = ({ item }: { item: FolderData }) => {
     const count = folderCounts[item.id] || 0;
@@ -447,8 +475,25 @@ const UserProfileChatScreen: React.FC<UserProfileChatScreenProps> = ({ route, na
           </View>
           
           <ChatList 
-            matches={[{ userId, username }]} // Only pass current user's match
-            selectedMatch={selectedUserId === userId ? { userId, username } : null}
+            ref={chatListRef}
+            matches={[{
+              userId,
+              username,
+              photoURL: userProfile?.photoURL,
+              score: 100,
+              commonMovies: [],
+              email: userProfile?.email,
+              displayName: username
+            }]}
+            selectedMatch={{
+              userId,
+              username,
+              photoURL: userProfile?.photoURL,
+              score: 100,
+              commonMovies: [],
+              email: userProfile?.email,
+              displayName: username
+            }}
             onClose={handleChatBack}
             preserveNavigation={true}
             hideBackButton={true} // Add this prop
