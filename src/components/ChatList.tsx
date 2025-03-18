@@ -29,8 +29,18 @@ import {
   setDoc,
   where,
   updateDoc,
+  getDocs,
+  writeBatch,
 } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { GestureHandlerRootView, PanGestureHandler } from 'react-native-gesture-handler';
+import Animated, { 
+  useAnimatedGestureHandler,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  runOnJS
+} from 'react-native-reanimated';
 
 const SEEN_MATCHES_KEY = '@seen_matches';
 
@@ -40,6 +50,8 @@ interface Message {
   senderId: string;
   timestamp: Date;
   read: boolean;
+  isLike?: boolean; // Add this
+  promptId?: string; // Add this
 }
 
 interface MovieMatch {
@@ -73,14 +85,36 @@ interface ChatListProps {
   onClose?: () => void;
   preserveNavigation?: boolean;
   hideBackButton?: boolean; // Add this prop
+  selectedPrompt?: ChatPrompt | null;
+  onPromptSelect?: (prompt: ChatPrompt | null) => void;
+  showPrompts?: boolean;
+  setShowPrompts?: (show: boolean) => void;
 }
+
+interface ChatPrompt {
+  id: string;
+  text: string;
+}
+
+// Add these after existing interfaces
+const CHAT_PROMPTS: ChatPrompt[] = [
+  { id: '1', text: "What's your favorite movie of all time?" },
+  { id: '2', text: "Which director's work inspires you the most?" },
+  { id: '3', text: "What's the last movie that made you cry?" },
+  { id: '4', text: "Favorite movie snack combo?" },
+  { id: '5', text: "What genre do you never get tired of?" }
+];
 
 const ChatList: React.FC<ChatListProps> = ({
   matches,
   selectedMatch: propSelectedMatch,
   onClose,
   preserveNavigation = false,
-  hideBackButton = false // Add this prop
+  hideBackButton = false, // Add this prop
+  selectedPrompt: propSelectedPrompt,
+  onPromptSelect,
+  showPrompts: propShowPrompts,
+  setShowPrompts: propSetShowPrompts
 }) => {
   const currentUserId = auth.currentUser?.uid;
 
@@ -99,9 +133,38 @@ const ChatList: React.FC<ChatListProps> = ({
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [showPrompts, setShowPrompts] = useState(false);
+  const [selectedPrompt, setSelectedPrompt] = useState<ChatPrompt | null>(null);
   
   const messagesListRef = useRef<FlatList>(null);
   const unsubscribeRefs = useRef<(() => void)[]>([]);
+
+  const translateX = useSharedValue(0);
+  const context = useSharedValue({ x: 0 });
+
+  // Add gesture handler for swipe
+  const panGesture = useAnimatedGestureHandler({
+    onStart: (_, ctx) => {
+      ctx.x = translateX.value;
+    },
+    onActive: (event, ctx) => {
+      translateX.value = ctx.x + event.translationX;
+    },
+    onEnd: (event) => {
+      if (event.translationX > 100) {
+        translateX.value = withSpring(400);
+        runOnJS(handleBack)();
+      } else {
+        translateX.value = withSpring(0);
+      }
+    },
+  });
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateX: translateX.value }],
+    };
+  });
 
   const fetchUserDetails = async (userId: string) => {
     try {
@@ -339,7 +402,7 @@ const ChatList: React.FC<ChatListProps> = ({
   };
 
   const sendMessage = async () => {
-    if (!selectedMatch || !newMessage.trim() || !currentUserId) return;
+    if (!selectedMatch || (!newMessage.trim() && !selectedPrompt) || !currentUserId) return;
 
     const chatId = [currentUserId, selectedMatch.userId].sort().join('_');
     const chatRef = doc(db, 'chats', chatId);
@@ -347,10 +410,11 @@ const ChatList: React.FC<ChatListProps> = ({
 
     try {
       const messageData = {
-        text: newMessage.trim(),
+        text: selectedPrompt ? selectedPrompt.text : newMessage.trim(),
         senderId: currentUserId,
         timestamp: new Date(),
         read: false,
+        promptId: selectedPrompt?.id || null, // Set to null instead of undefined
       };
 
       // Add message to Firestore
@@ -358,12 +422,14 @@ const ChatList: React.FC<ChatListProps> = ({
 
       // Update chat metadata
       await updateDoc(chatRef, {
-        lastMessage: newMessage.trim(),
+        lastMessage: messageData.text,
         lastMessageTime: new Date(),
         lastSenderId: currentUserId,
       });
 
       setNewMessage('');
+      setSelectedPrompt(null);
+      setShowPrompts(false);
     } catch (error) {
       console.error('Error sending message:', error);
       Alert.alert('Error', 'Failed to send message. Please try again.');
@@ -499,6 +565,37 @@ const ChatList: React.FC<ChatListProps> = ({
     }
   };
 
+  const handleUnmatch = async (matchUserId: string) => {
+    if (!currentUserId) return;
+    
+    try {
+      const chatId = [currentUserId, matchUserId].sort().join('_');
+      const chatRef = doc(db, 'chats', chatId);
+      
+      // Delete chat messages
+      const messagesRef = collection(chatRef, 'messages');
+      const messagesSnapshot = await getDocs(messagesRef);
+      const batch = writeBatch(db);
+      
+      messagesSnapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+      });
+      
+      // Delete chat document
+      batch.delete(chatRef);
+      
+      // Remove match from both users
+      const matchRef = doc(db, 'matches', `${currentUserId}_${matchUserId}`);
+      batch.delete(matchRef);
+      
+      await batch.commit();
+      setSelectedMatch(null);
+    } catch (error) {
+      console.error('Error unmatching:', error);
+      Alert.alert('Error', 'Failed to unmatch. Please try again.');
+    }
+  };
+
   const EmptyState = () => (
     <View style={styles.emptyContainer}>
       <Ionicons name="chatbubble-ellipses-outline" size={60} color="#555" />
@@ -628,40 +725,79 @@ const ChatList: React.FC<ChatListProps> = ({
           />
 
           {/* Message Input */}
-          <View style={styles.inputWrapper}>
-            <View style={styles.inputContainer}>
-              <TouchableOpacity style={styles.inputActionButton}>
-                <Ionicons name="add-circle-outline" size={24} color="#777" />
-              </TouchableOpacity>
-              
-              <TextInput
-                style={styles.input}
-                value={newMessage}
-                onChangeText={setNewMessage}
-                placeholder="Message..."
-                placeholderTextColor="#777"
-                multiline
-                maxLength={1000}
-              />
-              
-              {newMessage.trim() ? (
-                <TouchableOpacity
-                  style={styles.sendButton}
-                  onPress={sendMessage}
-                >
-                  <Ionicons name="send" size={24} color="#fff" />
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity style={styles.inputActionButton}>
-                  <Ionicons name="mic-outline" size={24} color="#777" />
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
+          {renderInputSection()}
         </KeyboardAvoidingView>
       </View>
     );
   };
+
+  const renderInputSection = () => (
+    <View style={styles.inputWrapper}>
+      <View style={styles.inputContainer}>
+        <TouchableOpacity 
+          style={styles.inputActionButton}
+          onPress={() => setShowPrompts(true)}
+        >
+          <Ionicons name="help-circle-outline" size={24} color="#777" />
+        </TouchableOpacity>
+        
+        <TextInput
+          style={styles.input}
+          value={newMessage}
+          onChangeText={setNewMessage}
+          placeholder="Type a message..."
+          placeholderTextColor="#777"
+          multiline
+          maxLength={1000}
+        />
+        
+        {newMessage.trim() && (
+          <TouchableOpacity
+            style={styles.sendButton}
+            onPress={sendMessage}
+          >
+            <Ionicons name="send" size={24} color="#fff" />
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+
+  const renderPrompts = () => (
+    <Modal
+      visible={showPrompts}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowPrompts(false)}
+    >
+      <View style={styles.promptsOverlay}>
+        <View style={styles.promptsContainer}>
+          <View style={styles.promptsHeader}>
+            <Text style={styles.promptsTitle}>Start the conversation</Text>
+            <TouchableOpacity onPress={() => setShowPrompts(false)}>
+              <Ionicons name="close" size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={CHAT_PROMPTS}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.promptItem}
+                onPress={() => {
+                  setSelectedPrompt(item);
+                  setShowPrompts(false);
+                  sendMessage();
+                }}
+              >
+                <Text style={styles.promptText}>{item.text}</Text>
+              </TouchableOpacity>
+            )}
+            keyExtractor={item => item.id}
+          />
+        </View>
+      </View>
+    </Modal>
+  );
 
   const renderMatchItem = ({ item }: { item: Match }) => {
     const details = userDetails[item.userId] || {};
@@ -734,81 +870,83 @@ const ChatList: React.FC<ChatListProps> = ({
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      
-      {selectedMatch ? (
-        renderChat()
-      ) : (
-        <>
-          <View style={styles.header}>
-            {!hideBackButton && ( // Only show back button if hideBackButton is false
-              <TouchableOpacity onPress={handleBack}>
-                <Ionicons name="chevron-back" size={24} color="#fff" />
-              </TouchableOpacity>
-            )}
-            <Text style={styles.headerTitle}>Chats</Text>
-          </View>
-          
-          <FlatList
-            data={sortedMatches}
-            renderItem={renderMatchItem}
-            keyExtractor={(item) => item.userId}
-            contentContainerStyle={styles.listContainer}
-            ListEmptyComponent={EmptyState}
-          />
-        </>
-      )}
-
-      {/* Match Notification Modal */}
-      <Modal
-        visible={showMatchNotification}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowMatchNotification(false)}
-      >
-        <View style={styles.notificationOverlay}>
-          <View style={styles.notificationBox}>
-            <Ionicons name="checkmark-circle" size={40} color="#fff" />
-            <Text style={styles.notificationTitle}>
-              New Match!
-            </Text>
-            <Text style={styles.notificationText}>
-              You matched with {newMatchUser?.name || "a new user"}
-            </Text>
-            
-            <View style={styles.notificationAvatarContainer}>
-              {newMatchUser?.photoURL ? (
-                <Image
-                  source={{ uri: newMatchUser.photoURL }}
-                  style={styles.notificationAvatar}
-                />
-              ) : (
-                <View style={styles.notificationAvatarPlaceholder}>
-                  <Text style={styles.notificationAvatarText}>
-                    {(newMatchUser?.name?.charAt(0) || '').toUpperCase()}
-                  </Text>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <PanGestureHandler onGestureEvent={panGesture}>
+        <Animated.View style={[{ flex: 1 }, animatedStyle]}>
+          <SafeAreaView style={styles.container}>
+            {/* Remove the back button from header */}
+            {selectedMatch ? (
+              renderChat()
+            ) : (
+              <>
+                <View style={styles.header}>
+                  <Text style={styles.headerTitle}>Chats</Text>
                 </View>
-              )}
-            </View>
-            
-            <TouchableOpacity
-              style={styles.notificationButton}
-              onPress={() => setShowMatchNotification(false)}
+                {/* Rest of the chat list code */}
+                <FlatList
+                  data={sortedMatches}
+                  renderItem={renderMatchItem}
+                  keyExtractor={(item) => item.userId}
+                  contentContainerStyle={styles.listContainer}
+                  ListEmptyComponent={EmptyState}
+                />
+              </>
+            )}
+            {/* Rest of the components */}
+            {/* Match Notification Modal */}
+            <Modal
+              visible={showMatchNotification}
+              transparent={true}
+              animationType="fade"
+              onRequestClose={() => setShowMatchNotification(false)}
             >
-              <Text style={styles.notificationButtonText}>Start Chatting</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-      
-      {/* Loading overlay */}
-      {isLoading && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#fff" />
-        </View>
-      )}
-    </SafeAreaView>
+              <View style={styles.notificationOverlay}>
+                <View style={styles.notificationBox}>
+                  <Ionicons name="checkmark-circle" size={40} color="#fff" />
+                  <Text style={styles.notificationTitle}>
+                    New Match!
+                  </Text>
+                  <Text style={styles.notificationText}>
+                    You matched with {newMatchUser?.name || "a new user"}
+                  </Text>
+                  
+                  <View style={styles.notificationAvatarContainer}>
+                    {newMatchUser?.photoURL ? (
+                      <Image
+                        source={{ uri: newMatchUser.photoURL }}
+                        style={styles.notificationAvatar}
+                      />
+                    ) : (
+                      <View style={styles.notificationAvatarPlaceholder}>
+                        <Text style={styles.notificationAvatarText}>
+                          {(newMatchUser?.name?.charAt(0) || '').toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  
+                  <TouchableOpacity
+                    style={styles.notificationButton}
+                    onPress={() => setShowMatchNotification(false)}
+                  >
+                    <Text style={styles.notificationButtonText}>Start Chatting</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </Modal>
+            
+            {/* Loading overlay */}
+            {isLoading && (
+              <View style={styles.loadingOverlay}>
+                <ActivityIndicator size="large" color="#fff" />
+              </View>
+            )}
+
+            {renderPrompts()}
+          </SafeAreaView>
+        </Animated.View>
+      </PanGestureHandler>
+    </GestureHandlerRootView>
   );
 };
 
@@ -1154,6 +1292,39 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  promptsOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'flex-end',
+  },
+  promptsContainer: {
+    backgroundColor: '#222',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '70%',
+  },
+  promptsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  promptsTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  promptItem: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  promptText: {
+    color: '#fff',
+    fontSize: 16,
   },
 });
 

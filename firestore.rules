@@ -89,31 +89,56 @@ service cloud.firestore {
 
     // Chat specific rules
     match /chats/{chatId} {
-      // Allow read/write if user is signed in (temporarily relaxed for debugging)
       allow read: if isSignedIn();
       
-      // Messages subcollection rules
+      allow create: if isSignedIn() && 
+        request.resource.data.keys().hasAll(['participants', 'createdAt']) &&
+        request.auth.uid in request.resource.data.participants;
+      
+      allow update: if isSignedIn() && 
+        resource.data.participants.hasAny([request.auth.uid]);
+
       match /messages/{messageId} {
-        // Allow read for all authenticated users (temporarily relaxed for debugging)
-        allow read: if isSignedIn();
+        allow read: if isSignedIn() && exists(/databases/$(database)/documents/chats/$(chatId)) &&
+          get(/databases/$(database)/documents/chats/$(chatId)).data.participants.hasAny([request.auth.uid]);
         
-        allow create: if isSignedIn() 
-          && request.resource.data.senderId == request.auth.uid
-          && request.resource.data.keys().hasAll(['senderId', 'text', 'timestamp', 'read']);
+        allow create: if isSignedIn() && 
+          exists(/databases/$(database)/documents/chats/$(chatId)) &&
+          get(/databases/$(database)/documents/chats/$(chatId)).data.participants.hasAny([request.auth.uid]) &&
+          request.resource.data.keys().hasAll(['senderId', 'text', 'timestamp', 'read']) &&
+          request.resource.data.senderId == request.auth.uid;
         
-        allow update: if isSignedIn() 
-          && (
-            resource.data.senderId == request.auth.uid ||
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
-          );
+        allow update: if isSignedIn() &&
+          exists(/databases/$(database)/documents/chats/$(chatId)) &&
+          get(/databases/$(database)/documents/chats/$(chatId)).data.participants.hasAny([request.auth.uid]) &&
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']));
       }
+    }
 
-      // Relaxed create rule for debugging
-      allow create: if isSignedIn() 
-        && request.resource.data.keys().hasAll(['participants', 'lastMessage', 'lastMessageTimestamp']);
+    // Add user-match mapping collection
+    match /userMatches/{userId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow write: if isSignedIn() && request.auth.uid == userId;
+      
+      match /matches/{matchId} {
+        allow read, write: if isSignedIn() && request.auth.uid == userId;
+      }
+    }
 
-      // Relaxed update rule for debugging
-      allow update: if isSignedIn();
+    // Update matches collection rules
+    match /matches/{matchId} {
+      allow read: if isSignedIn() && 
+        (request.auth.uid in resource.data.participants ||
+         request.auth.uid == resource.data.user1Id ||
+         request.auth.uid == resource.data.user2Id);
+      
+      allow create: if isSignedIn() &&
+        (request.auth.uid == request.resource.data.user1Id ||
+         request.auth.uid == request.resource.data.user2Id);
+      
+      allow update: if isSignedIn() &&
+        (request.auth.uid == resource.data.user1Id ||
+         request.auth.uid == resource.data.user2Id);
     }
 
     // Add this new rule for user-specific chat data

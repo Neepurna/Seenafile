@@ -9,7 +9,8 @@ import {
   Dimensions,
   StatusBar,
   Animated,
-  Platform
+  Platform,
+  Modal
 } from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { db } from '../firebase';
@@ -53,6 +54,31 @@ const folders: FolderData[] = [
   { id: 'critics', name: 'Critics', color: '#FF4081', count: 0, icon: 'star' },
 ];
 
+interface Message {
+  id: string;
+  text: string;
+  senderId: string;
+  timestamp: Date;
+  read: boolean;
+  promptId?: string | null; // Add this to match ChatList.tsx
+  isLike?: boolean; // Add this to match ChatList.tsx
+}
+
+// Add ChatPrompt interface
+interface ChatPrompt {
+  id: string;
+  text: string;
+}
+
+// Add chat prompts constant
+const CHAT_PROMPTS: ChatPrompt[] = [
+  { id: '1', text: "What's your favorite movie of all time?" },
+  { id: '2', text: "Which director's work inspires you the most?" },
+  { id: '3', text: "What's the last movie that made you cry?" },
+  { id: '4', text: "Favorite movie snack combo?" },
+  { id: '5', text: "What genre do you never get tired of?" }
+];
+
 const UserProfileChatScreen: React.FC<UserProfileChatScreenProps> = ({ route, navigation }) => {
   // Add validation at the start
   useEffect(() => {
@@ -84,6 +110,8 @@ const UserProfileChatScreen: React.FC<UserProfileChatScreenProps> = ({ route, na
   const scrollY = new Animated.Value(0);
   const [folderThumbnails, setFolderThumbnails] = useState<{ [key: string]: MovieThumbnail[] }>({});
   const [isFullScreenChat, setIsFullScreenChat] = useState(false);
+  const [selectedPrompt, setSelectedPrompt] = useState<ChatPrompt | null>(null);
+  const [showPrompts, setShowPrompts] = useState(false);
 
   useEffect(() => {
     fetchUserProfile();
@@ -211,13 +239,22 @@ const UserProfileChatScreen: React.FC<UserProfileChatScreenProps> = ({ route, na
   const handleChatPress = () => {
     if (!showChat) {
       setShowChat(true);
-      // Add a small delay before going fullscreen for smooth animation
+      setSelectedPrompt(null); // Reset prompt when opening chat
       setTimeout(() => setIsFullScreenChat(true), 100);
     } else {
       setIsFullScreenChat(false);
-      // Add a small delay before hiding chat for smooth animation
-      setTimeout(() => setShowChat(false), 300);
+      setTimeout(() => {
+        setShowChat(false);
+        setSelectedPrompt(null); // Reset prompt when closing chat
+      }, 300);
     }
+  };
+
+  const handleChatBack = () => {
+    setIsFullScreenChat(false);
+    setTimeout(() => {
+      setShowChat(false);
+    }, 300);
   };
 
   const renderFolder = ({ item }: { item: FolderData }) => {
@@ -290,6 +327,41 @@ const UserProfileChatScreen: React.FC<UserProfileChatScreenProps> = ({ route, na
       </View>
     );
   };
+
+  const renderPrompts = () => (
+    <Modal
+      visible={showPrompts}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowPrompts(false)}
+    >
+      <View style={styles.promptsOverlay}>
+        <View style={styles.promptsContainer}>
+          <View style={styles.promptsHeader}>
+            <Text style={styles.promptsTitle}>Start the conversation</Text>
+            <TouchableOpacity onPress={() => setShowPrompts(false)}>
+              <Ionicons name="close" size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
+          <FlatList
+            data={CHAT_PROMPTS}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.promptItem}
+                onPress={() => {
+                  setSelectedPrompt(item);
+                  setShowPrompts(false);
+                }}
+              >
+                <Text style={styles.promptText}>{item.text}</Text>
+              </TouchableOpacity>
+            )}
+            keyExtractor={item => item.id}
+          />
+        </View>
+      </View>
+    </Modal>
+  );
 
   return (
     <View style={styles.container}>
@@ -373,10 +445,16 @@ const UserProfileChatScreen: React.FC<UserProfileChatScreenProps> = ({ route, na
           <ChatList 
             matches={[{ userId, username }]}
             selectedMatch={{ userId, username }}
-            onClose={handleCloseChat}
+            onClose={handleChatBack}
             preserveNavigation={true}
             hideBackButton={true} // Add this prop
+            selectedPrompt={selectedPrompt}
+            onPromptSelect={setSelectedPrompt}
+            showPrompts={showPrompts}
+            setShowPrompts={setShowPrompts}
           />
+          
+          {renderPrompts()}
         </Animated.View>
       )}
     </View>
@@ -665,6 +743,39 @@ const styles = StyleSheet.create({
   gridRow: {
     justifyContent: 'space-between',
     marginBottom: GRID_SPACING,
+  },
+  promptsOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'flex-end',
+  },
+  promptsContainer: {
+    backgroundColor: '#222',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '70%',
+  },
+  promptsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  promptsTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  promptItem: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  promptText: {
+    color: '#fff',
+    fontSize: 16,
   },
 });
 
