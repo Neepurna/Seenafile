@@ -112,6 +112,7 @@ const UserProfileChatScreen: React.FC<UserProfileChatScreenProps> = ({ route, na
   const [isFullScreenChat, setIsFullScreenChat] = useState(false);
   const [selectedPrompt, setSelectedPrompt] = useState<ChatPrompt | null>(null);
   const [showPrompts, setShowPrompts] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchUserProfile();
@@ -238,6 +239,7 @@ const UserProfileChatScreen: React.FC<UserProfileChatScreenProps> = ({ route, na
 
   const handleChatPress = () => {
     if (!showChat) {
+      setSelectedUserId(userId); // Set current user's ID
       setShowChat(true);
       setSelectedPrompt(null); // Reset prompt when opening chat
       setTimeout(() => setIsFullScreenChat(true), 100);
@@ -246,6 +248,7 @@ const UserProfileChatScreen: React.FC<UserProfileChatScreenProps> = ({ route, na
       setTimeout(() => {
         setShowChat(false);
         setSelectedPrompt(null); // Reset prompt when closing chat
+        setSelectedUserId(null); // Clear selected user ID
       }, 300);
     }
   };
@@ -254,6 +257,7 @@ const UserProfileChatScreen: React.FC<UserProfileChatScreenProps> = ({ route, na
     setIsFullScreenChat(false);
     setTimeout(() => {
       setShowChat(false);
+      setSelectedUserId(null); // Clear selected user ID
     }, 300);
   };
 
@@ -443,8 +447,8 @@ const UserProfileChatScreen: React.FC<UserProfileChatScreenProps> = ({ route, na
           </View>
           
           <ChatList 
-            matches={[{ userId, username }]}
-            selectedMatch={{ userId, username }}
+            matches={[{ userId, username }]} // Only pass current user's match
+            selectedMatch={selectedUserId === userId ? { userId, username } : null}
             onClose={handleChatBack}
             preserveNavigation={true}
             hideBackButton={true} // Add this prop

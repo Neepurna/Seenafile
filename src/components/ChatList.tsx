@@ -153,7 +153,9 @@ const ChatList: React.FC<ChatListProps> = ({
     onEnd: (event) => {
       if (event.translationX > 100) {
         translateX.value = withSpring(400);
-        runOnJS(handleBack)();
+        if (onClose) {
+          runOnJS(onClose)();
+        }
       } else {
         translateX.value = withSpring(0);
       }
@@ -343,6 +345,7 @@ const ChatList: React.FC<ChatListProps> = ({
       if (!currentUserId || !match.userId) return;
       
       setIsLoading(true);
+      setMessages([]); // Clear previous messages
 
       // Create unique chat ID
       const chatId = [currentUserId, match.userId].sort().join('_');
@@ -632,13 +635,6 @@ const ChatList: React.FC<ChatListProps> = ({
       <View style={styles.chatContainer}>
         {/* Chat Header */}
         <View style={styles.chatHeader}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => setSelectedMatch(null)}
-          >
-            <Ionicons name="chevron-back" size={24} color="#FFF" />
-          </TouchableOpacity>
-          
           <TouchableOpacity 
             style={styles.userInfoContainer}
             onPress={() => {
