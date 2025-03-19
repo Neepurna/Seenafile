@@ -847,6 +847,10 @@ const ChatList = React.forwardRef<any, ChatListProps>((props, ref) => {
             onContentSizeChange={() => {
               messagesListRef.current?.scrollToEnd({ animated: true });
             }}
+            maintainVisibleContentPosition={{
+              minIndexForVisible: 0,
+              autoscrollToTopThreshold: 10,
+            }}
           />
 
           {/* Message Input */}
@@ -1080,9 +1084,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#121212',
-    // Ensure chat list appears above tab bar
-    position: 'relative',
-    zIndex: 1,
+    // Add padding at the bottom to account for tab bar
+    paddingBottom: Platform.OS === 'ios' ? 85 : 60,
   },
   centerContainer: {
     flex: 1,
@@ -1253,10 +1256,13 @@ const styles = StyleSheet.create({
   },
   keyboardAvoidingView: {
     flex: 1,
+    justifyContent: 'flex-end',
   },
   messagesContentContainer: {
-    padding: 10,
-    paddingBottom: 10,
+    flexGrow: 1,
+    paddingHorizontal: 10,
+    // Add padding at the bottom to ensure last message is visible
+    paddingBottom: Platform.OS === 'ios' ? 80 : 60,
   },
   messageContainer: {
     maxWidth: '75%',
@@ -1292,8 +1298,8 @@ const styles = StyleSheet.create({
     width: '100%',
     padding: 10,
     backgroundColor: '#121212',
-    // Adjust bottom padding to account for tab bar
-    paddingBottom: Platform.OS === 'ios' ? 70 : 60,
+    // Adjust padding to account for tab bar
+    paddingBottom: Platform.OS === 'ios' ? 25 : 10,
   },
   inputContainer: {
     flexDirection: 'row',
