@@ -41,6 +41,7 @@ import Animated, {
   withSpring,
   runOnJS
 } from 'react-native-reanimated';
+import { ChatEncryption } from '../utils/encryption';
 
 const SEEN_MATCHES_KEY = '@seen_matches';
 
@@ -105,21 +106,78 @@ const CHAT_PROMPTS: ChatPrompt[] = [
   { id: '5', text: "What genre do you never get tired of?" }
 ];
 
-const ChatList = React.forwardRef<any, ChatListProps>(({
-  matches,
-  selectedMatch: propSelectedMatch,
-  onClose,
-  preserveNavigation = false,
-  hideBackButton = false, // Add this prop
-  selectedPrompt: propSelectedPrompt,
-  onPromptSelect,
-  showPrompts: propShowPrompts,
-  setShowPrompts: propSetShowPrompts
-}, ref) => {
+// Add MessageItem component before ChatList component
+const MessageItem = React.memo(({ 
+  message, 
+  currentUserId, 
+  chatKey, 
+  formatMessageTime 
+}: { 
+  message: Message;
+  currentUserId: string;
+  chatKey: string | null;
+  formatMessageTime: (timestamp: any) => string;
+}) => {
+  const [decryptedText, setDecryptedText] = React.useState<string>(message.text || '🔄 Loading...');
+
+  React.useEffect(() => {
+    const decryptMessage = () => {
+      try {
+        if (!chatKey) {
+          setDecryptedText(message.text || '');
+          return;
+        }
+
+        if (!message.encryptedText || !message.iv) {
+          // Handle legacy or unencrypted messages
+          setDecryptedText(message.text || '');
+          return;
+        }
+
+        const text = ChatEncryption.decryptMessage(
+          message.encryptedText,
+          message.iv,
+          chatKey
+        );
+        setDecryptedText(text);
+      } catch (error) {
+        console.error('Error decrypting message:', error);
+        setDecryptedText('🔒 Encrypted message');
+      }
+    };
+
+    decryptMessage();
+  }, [message, chatKey]);
+
+  return (
+    <View style={[
+      styles.messageContainer,
+      message.senderId === currentUserId ? styles.sentMessage : styles.receivedMessage,
+    ]}>
+      <Text style={[
+        styles.messageText,
+        message.senderId === currentUserId ? styles.sentMessageText : styles.receivedMessageText,
+      ]}>
+        {decryptedText}
+      </Text>
+      <Text style={styles.messageTimestamp}>
+        {formatMessageTime(message.timestamp)}
+        {message.senderId === currentUserId && (
+          <Text> • {message.read ? 'Read' : 'Sent'}</Text>
+        )}
+      </Text>
+    </View>
+  );
+}, (prevProps, nextProps) => {
+  return prevProps.message.id === nextProps.message.id &&
+         prevProps.message.read === nextProps.message.read;
+});
+
+const ChatList = React.forwardRef<any, ChatListProps>((props, ref) => {
   const currentUserId = auth.currentUser?.uid;
 
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(
-    propSelectedMatch || null
+    props.selectedMatch || null
   );
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -135,6 +193,7 @@ const ChatList = React.forwardRef<any, ChatListProps>(({
   const [isLoading, setIsLoading] = useState(false);
   const [showPrompts, setShowPrompts] = useState(false);
   const [selectedPrompt, setSelectedPrompt] = useState<ChatPrompt | null>(null);
+  const [chatKey, setChatKey] = useState<string | null>(null);
   
   const messagesListRef = useRef<FlatList>(null);
   const unsubscribeRefs = useRef<(() => void)[]>([]);
@@ -153,8 +212,8 @@ const ChatList = React.forwardRef<any, ChatListProps>(({
     onEnd: (event) => {
       if (event.translationX > 100) {
         translateX.value = withSpring(400);
-        if (onClose) {
-          runOnJS(onClose)();
+        if (props.onClose) {
+          runOnJS(props.onClose)();
         }
       } else {
         translateX.value = withSpring(0);
@@ -208,14 +267,14 @@ const ChatList = React.forwardRef<any, ChatListProps>(({
 
   useEffect(() => {
     const fetchAllUsers = async () => {
-      const userPromises = matches.map((match) =>
+      const userPromises = props.matches.map((match) =>
         fetchUserDetails(match.userId)
       );
       await Promise.all(userPromises);
     };
 
     fetchAllUsers();
-  }, [matches]);
+  }, [props.matches]);
 
   useEffect(() => {
     const loadSeenMatches = async () => {
@@ -233,7 +292,7 @@ const ChatList = React.forwardRef<any, ChatListProps>(({
 
   useEffect(() => {
     const checkNewMatches = async () => {
-      const highMatches = matches.filter(
+      const highMatches = props.matches.filter(
         (match) => match.score >= 30 && !seenMatches.includes(match.userId)
       );
 
@@ -256,7 +315,7 @@ const ChatList = React.forwardRef<any, ChatListProps>(({
     };
 
     checkNewMatches();
-  }, [matches, userDetails, seenMatches]);
+  }, [props.matches, userDetails, seenMatches]);
 
   useEffect(() => {
     // Listen for new matches
@@ -357,7 +416,7 @@ const ChatList = React.forwardRef<any, ChatListProps>(({
     resetChat
   }));
 
-  // Modify handleSelectMatch
+  // Modify handleSelectMatch to initialize chat key immediately
   const handleSelectMatch = async (match: Match) => {
     try {
       if (!currentUserId || !match.userId) return;
@@ -373,14 +432,26 @@ const ChatList = React.forwardRef<any, ChatListProps>(({
       const chatId = [currentUserId, match.userId].sort().join('_');
       const chatRef = doc(db, 'chats', chatId);
       
-      // Initialize chat if it doesn't exist
+      // Initialize chat and get/create encryption key
+      const chatDoc = await getDoc(chatRef);
+      let encryptionKey = chatDoc.exists() ? chatDoc.data()?.encryptionKey : null;
+      
+      if (!encryptionKey) {
+        encryptionKey = await ChatEncryption.generateChatKey();
+      }
+
+      // Set chat data with encryption key
       await setDoc(chatRef, {
         participants: [currentUserId, match.userId].sort(),
         createdAt: new Date(),
         lastMessage: null,
         lastMessageTime: null,
+        encryptionKey,
       }, { merge: true });
 
+      // Set the chat key immediately
+      setChatKey(encryptionKey);
+      
       // Set up real-time listener for messages
       const messagesRef = collection(chatRef, 'messages');
       const q = query(messagesRef, orderBy('timestamp', 'asc'));
@@ -419,40 +490,88 @@ const ChatList = React.forwardRef<any, ChatListProps>(({
     }
   };
 
-  const sendMessage = async () => {
-    if (!selectedMatch || (!newMessage.trim() && !selectedPrompt) || !currentUserId) return;
-
-    const chatId = [currentUserId, selectedMatch.userId].sort().join('_');
-    const chatRef = doc(db, 'chats', chatId);
-    const messagesRef = collection(chatRef, 'messages');
-
+  // Modify sendMessage to add retry logic
+  const sendMessage = useCallback(async () => {
+    if (!selectedMatch?.userId || !currentUserId) {
+      console.error('Missing user IDs');
+      return;
+    }
+  
+    if (!chatKey) {
+      console.log('Chat key missing, reinitializing...');
+      await handleSelectMatch(selectedMatch);
+      return;
+    }
+  
+    const text = selectedPrompt?.text || newMessage.trim();
+    if (!text) return;
+  
     try {
+      setIsLoading(true);
+      const chatId = [currentUserId, selectedMatch.userId].sort().join('_');
+      const chatRef = doc(db, 'chats', chatId);
+  
+      // Double-check chat key
+      const chatDoc = await getDoc(chatRef);
+      const existingKey = chatDoc.data()?.encryptionKey;
+      
+      // Use existing key or current key
+      const finalChatKey = existingKey || chatKey;
+  
+      // Encrypt the message - Make sure to await the result
+      const { encryptedText, iv } = await ChatEncryption.encryptMessage(text, finalChatKey);
+      
+      if (!encryptedText || !iv) {
+        throw new Error('Encryption failed');
+      }
+
+      const messagesRef = collection(chatRef, 'messages');
       const messageData = {
-        text: selectedPrompt ? selectedPrompt.text : newMessage.trim(),
+        encryptedText,
+        iv,
         senderId: currentUserId,
         timestamp: new Date(),
         read: false,
-        promptId: selectedPrompt?.id || null, // Set to null instead of undefined
+        promptId: selectedPrompt?.id || null,
       };
-
-      // Add message to Firestore
-      await addDoc(messagesRef, messageData);
-
-      // Update chat metadata
-      await updateDoc(chatRef, {
-        lastMessage: messageData.text,
-        lastMessageTime: new Date(),
-        lastSenderId: currentUserId,
-      });
-
+  
+      // Add message and update chat metadata
+      await Promise.all([
+        addDoc(messagesRef, messageData),
+        updateDoc(chatRef, {
+          lastMessage: text,
+          lastMessageTime: messageData.timestamp,
+          lastSenderId: currentUserId,
+        })
+      ]);
+  
+      // Clear input
       setNewMessage('');
       setSelectedPrompt(null);
       setShowPrompts(false);
+  
+      // Scroll to bottom
+      setTimeout(() => {
+        messagesListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+  
     } catch (error) {
       console.error('Error sending message:', error);
       Alert.alert('Error', 'Failed to send message. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
-  };
+  }, [selectedMatch, currentUserId, chatKey, newMessage, selectedPrompt]);
+  
+
+  const handlePromptSelect = useCallback((prompt: ChatPrompt) => {
+    setSelectedPrompt(prompt);
+    setShowPrompts(false);
+    // Use setTimeout to ensure state is updated
+    setTimeout(() => {
+      sendMessage();
+    }, 100);
+  }, [sendMessage]);
 
   // Function to generate active status text
   const getActiveStatus = (lastActive?: number) => {
@@ -468,7 +587,7 @@ const ChatList = React.forwardRef<any, ChatListProps>(({
   };
 
   // Filter out invalid matches
-  const validMatches = matches.filter(
+  const validMatches = props.matches.filter(
     (match) =>
       match &&
       match.userId &&
@@ -576,8 +695,8 @@ const ChatList = React.forwardRef<any, ChatListProps>(({
   }, [currentUserId]);
 
   const handleBack = () => {
-    if (onClose && preserveNavigation) {
-      onClose();
+    if (props.onClose && props.preserveNavigation) {
+      props.onClose();
     } else {
       navigation.goBack();
     }
@@ -623,6 +742,23 @@ const ChatList = React.forwardRef<any, ChatListProps>(({
       </Text>
     </View>
   );
+
+  const renderMessage = useCallback(({ item }: { item: Message }) => (
+    <MessageItem
+      message={item}
+      currentUserId={currentUserId || ''}
+      chatKey={chatKey}
+      formatMessageTime={formatMessageTime}
+    />
+  ), [currentUserId, chatKey, formatMessageTime]);
+
+  const getItemLayout = useCallback((data: any, index: number) => ({
+    length: 80, // Approximate height of message item
+    offset: 80 * index,
+    index,
+  }), []);
+
+  const keyExtractor = useCallback((item: Message) => item.id, []);
 
   const renderChat = () => {
     if (permissionError) {
@@ -697,34 +833,12 @@ const ChatList = React.forwardRef<any, ChatListProps>(({
           <FlatList
             ref={messagesListRef}
             data={messages}
-            renderItem={({ item }) => {
-              const isCurrentUser = item.senderId === currentUserId;
-              
-              return (
-                <View
-                  style={[
-                    styles.messageContainer,
-                    isCurrentUser ? styles.sentMessage : styles.receivedMessage,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.messageText,
-                      isCurrentUser ? styles.sentMessageText : styles.receivedMessageText,
-                    ]}
-                  >
-                    {item.text}
-                  </Text>
-                  <Text style={styles.messageTimestamp}>
-                    {formatMessageTime(item.timestamp)}
-                    {isCurrentUser && (
-                      <Text> • {item.read ? 'Read' : 'Sent'}</Text>
-                    )}
-                  </Text>
-                </View>
-              );
-            }}
-            keyExtractor={(item) => item.id}
+            renderItem={renderMessage}
+            keyExtractor={keyExtractor}
+            getItemLayout={getItemLayout}
+            removeClippedSubviews={true}
+            maxToRenderPerBatch={10}
+            windowSize={10}
             contentContainerStyle={styles.messagesContentContainer}
             showsVerticalScrollIndicator={false}
             onLayout={() => {
@@ -762,12 +876,17 @@ const ChatList = React.forwardRef<any, ChatListProps>(({
           maxLength={1000}
         />
         
-        {newMessage.trim() && (
+        {(newMessage.trim() || selectedPrompt) && (
           <TouchableOpacity
             style={styles.sendButton}
             onPress={sendMessage}
+            disabled={isLoading}
           >
-            <Ionicons name="send" size={24} color="#fff" />
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Ionicons name="send" size={24} color="#fff" />
+            )}
           </TouchableOpacity>
         )}
       </View>
@@ -794,11 +913,7 @@ const ChatList = React.forwardRef<any, ChatListProps>(({
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={styles.promptItem}
-                onPress={() => {
-                  setSelectedPrompt(item);
-                  setShowPrompts(false);
-                  sendMessage();
-                }}
+                onPress={() => handlePromptSelect(item)}
               >
                 <Text style={styles.promptText}>{item.text}</Text>
               </TouchableOpacity>
