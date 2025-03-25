@@ -97,7 +97,10 @@ service cloud.firestore {
         request.resource.data.keys().hasAll(['encryptionKey']);
       
       allow update: if isSignedIn() && 
-        request.auth.uid in resource.data.participants;
+        request.auth.uid in resource.data.participants &&
+        (!('lastMessage' in request.resource.data) || request.resource.data.lastMessage == null) &&
+        (!('lastMessageEncrypted' in request.resource.data) || request.resource.data.lastMessageEncrypted is string) &&
+        (!('lastMessageIv' in request.resource.data) || request.resource.data.lastMessageIv is string);
 
       match /messages/{messageId} {
         allow read: if isSignedIn() && exists(/databases/$(database)/documents/chats/$(chatId)) &&

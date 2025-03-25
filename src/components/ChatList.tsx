@@ -534,12 +534,18 @@ const ChatList = React.forwardRef<any, ChatListProps>((props, ref) => {
         read: false,
         promptId: selectedPrompt?.id || null,
       };
+
+      // Encrypt lastMessage for metadata
+      const { encryptedText: encryptedPreview, iv: previewIv } = 
+        await ChatEncryption.encryptMessage(text, finalChatKey);
   
-      // Add message and update chat metadata
+      // Add message and update chat metadata with encrypted preview
       await Promise.all([
         addDoc(messagesRef, messageData),
         updateDoc(chatRef, {
-          lastMessage: text,
+          lastMessageEncrypted: encryptedPreview,
+          lastMessageIv: previewIv,
+          lastMessage: null, // Keep this null for security
           lastMessageTime: messageData.timestamp,
           lastSenderId: currentUserId,
         })
@@ -930,7 +936,33 @@ const ChatList = React.forwardRef<any, ChatListProps>((props, ref) => {
   );
 
   const renderMatchItem = ({ item }: { item: Match }) => {
+    const [previewText, setPreviewText] = useState<string>('Tap to start chatting');
     const details = userDetails[item.userId] || {};
+    
+    useEffect(() => {
+      const fetchPreview = async () => {
+        try {
+          const chatId = [currentUserId, item.userId].sort().join('_');
+          const chatRef = doc(db, 'chats', chatId);
+          const chatDoc = await getDoc(chatRef);
+          const chatData = chatDoc.data();
+  
+          if (chatData?.lastMessageEncrypted && chatData?.lastMessageIv && chatData?.encryptionKey) {
+            const decryptedPreview = ChatEncryption.decryptMessage(
+              chatData.lastMessageEncrypted,
+              chatData.lastMessageIv,
+              chatData.encryptionKey
+            );
+            setPreviewText(decryptedPreview);
+          }
+        } catch (error) {
+          console.error('Error decrypting preview:', error);
+        }
+      };
+  
+      fetchPreview();
+    }, [item.userId, currentUserId]);
+  
     const hasUnreadMessages = false; // This would need logic to check for unread messages
     
     return (
@@ -977,7 +1009,7 @@ const ChatList = React.forwardRef<any, ChatListProps>((props, ref) => {
               ]}
               numberOfLines={1}
             >
-              {hasUnreadMessages ? 'New message' : 'Tap to start chatting'}
+              {previewText}
             </Text>
             
             {hasUnreadMessages && (
