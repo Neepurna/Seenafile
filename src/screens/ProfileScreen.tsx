@@ -292,10 +292,11 @@ const ProfileScreen: React.FC = () => {
         };
         await updateDoc(userRef, updateData);
 
-        // Update local state
+        // Update local state - FIXED VERSION
         if (type === 'profile') {
           setUserProfile(prev => ({ ...prev, photoURL: cloudinaryUrl }));
         } else {
+          setUserProfile(prev => ({ ...prev, coverURL: cloudinaryUrl }));
           setCoverPhoto(cloudinaryUrl);
         }
 
@@ -510,7 +511,6 @@ const styles = StyleSheet.create({
   },
   userInfo: {
     alignItems: 'center',
-    marginTop: 8,
   },
   userName: {
     fontSize: 24,
