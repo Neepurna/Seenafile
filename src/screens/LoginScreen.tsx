@@ -32,44 +32,42 @@ const LoginScreen = ({ navigation }) => {
       return;
     }
     
-    setIsLoading(true);
-    const { user, error, needsVerification } = await signIn(email, password);
-    setIsLoading(false);
-
-    if (error) {
-      Alert.alert('Error', error);
-      return;
-    }
-
-    if (!user) {
-      Alert.alert('Error', 'Login failed');
-      return;
-    }
-
-    if (!user.emailVerified) {
-      Alert.alert(
-        'Email Not Verified',
-        'Please verify your email before logging in. Check your inbox or request a new verification email.',
-        [
-          { text: 'OK' },
-          { 
-            text: 'Resend Email',
-            onPress: () => handleResendVerification(user)
-          }
-        ]
-      );
-      return;
-    }
-
-    // Store user auth state
     try {
-      await AsyncStorage.setItem('userToken', user.uid);
-      await AsyncStorage.setItem('userEmail', user.email);
-    } catch (e) {
-      console.error('Error saving auth state:', e);
-    }
+      setIsLoading(true);
+      const { user, error, needsVerification } = await signIn(email, password);
+      
+      if (error) {
+        Alert.alert('Error', error);
+        return;
+      }
 
-    navigation.replace('Main');
+      if (needsVerification) {
+        Alert.alert(
+          'Email Not Verified',
+          'Please verify your email before logging in. Check your inbox or request a new verification email.',
+          [
+            { text: 'OK' },
+            { 
+              text: 'Resend Email',
+              onPress: () => handleResendVerification(user)
+            }
+          ]
+        );
+        return;
+      }
+
+      if (user) {
+        // Store user auth state
+        await AsyncStorage.setItem('userToken', user.uid);
+        await AsyncStorage.setItem('userEmail', user.email);
+        navigation.replace('Main');
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      Alert.alert('Error', 'An unexpected error occurred');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSignUp = async () => {

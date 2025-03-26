@@ -1,8 +1,8 @@
 // src/firebase.ts
-import { initializeApp, getApp, getApps } from 'firebase/app';
+import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
 import { 
   initializeAuth, 
-  getAuth,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendEmailVerification,
@@ -62,7 +62,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyD-frQ7fze6ZMh9FWsTjUuGicXAKAHYQW8",
   authDomain: "seenafile.firebaseapp.com",
   projectId: "seenafile",
-  storageBucket: "seenafile.firebasestorage.app",
+  storageBucket: "seenafile.appspot.com", // Make sure this is correct
   messagingSenderId: "634839266205",
   appId: "1:634839266205:web:8e74887ab8cbf3b870f574",
   measurementId: "G-7QGRHQBSWX"
@@ -73,39 +73,18 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
-const actionCodeSettings = {
-  url: 'https://seenafile.firebaseapp.com/verify-email',  // Change this to your verified domain
-  handleCodeInApp: false // Change to false since we're using redirect URL
-};
+// Remove the cloudinary v2 import and configuration
+// Replace with direct API call implementation
 
-export const signIn = async (email: string, password: string) => {
+export const verifyEmail = async (userCredential: any) => {
   try {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    if (!userCredential.user.emailVerified) {
-      await auth.signOut(); // Sign out unverified user
-      return { 
-        user: userCredential.user,
-        error: 'Please verify your email before logging in',
-        needsVerification: true 
-      };
-    }
-    return { user: userCredential.user, error: null };
-  } catch (error) {
-    return { user: null, error: error.message };
-  }
-};
-
-export const signUp = async (email: string, password: string) => {
-  try {
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    await sendEmailVerification(userCredential.user, actionCodeSettings);
-    await auth.signOut(); // Sign out after registration
-    return { 
-      user: userCredential.user, 
+    await sendEmailVerification(userCredential.user);
+    return {
+      user: userCredential.user,
       error: null,
-      message: 'Verification email sent. Please check your inbox.' 
+      message: 'Verification email sent. Please check your inbox.'
     };
-  } catch (error) {
+  } catch (error: any) {
     return { user: null, error: error.message };
   }
 };
@@ -634,6 +613,53 @@ export const saveReviewToUserCollection = async (userId: string, reviewData: {
   } catch (error) {
     console.error('Error saving review:', error);
     throw error;
+  }
+};
+
+// ...existing code...
+
+export const signIn = async (email: string, password: string) => {
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    
+    if (!userCredential.user) {
+      return { user: null, error: 'Login failed', needsVerification: false };
+    }
+
+    if (!userCredential.user.emailVerified) {
+      return { 
+        user: userCredential.user, 
+        error: null, 
+        needsVerification: true 
+      };
+    }
+
+    return { 
+      user: userCredential.user, 
+      error: null, 
+      needsVerification: false 
+    };
+  } catch (error: any) {
+    console.error('Sign in error:', error);
+    let errorMessage = 'An error occurred during sign in';
+    
+    switch (error.code) {
+      case 'auth/invalid-email':
+        errorMessage = 'Invalid email address';
+        break;
+      case 'auth/user-disabled':
+        errorMessage = 'This account has been disabled';
+        break;
+      case 'auth/user-not-found':
+      case 'auth/wrong-password':
+        errorMessage = 'Invalid email or password';
+        break;
+      case 'auth/too-many-requests':
+        errorMessage = 'Too many attempts. Please try again later';
+        break;
+    }
+    
+    return { user: null, error: errorMessage, needsVerification: false };
   }
 };
 

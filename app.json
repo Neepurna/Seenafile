@@ -40,6 +40,13 @@
         {
           "initialOrientation": "PORTRAIT"
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app needs access to your photos to let you share them with your profile.",
+          "cameraPermission": "The app needs access to your camera to let you take profile pictures."
+        }
       ]
     ],
     "extra": {

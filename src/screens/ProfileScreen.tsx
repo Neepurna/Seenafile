@@ -20,12 +20,12 @@ import {
 import { MaterialIcons, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
-import { auth, db, signOut, storage } from '../firebase';
+import { auth, db, signOut } from '../firebase';
 import { doc, getDoc, collection, query, onSnapshot, getDocs, updateDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { launchImageLibrary } from 'react-native-image-picker';
+import * as ImagePicker from 'expo-image-picker';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { uploadToCloudinary } from '../services/cloudinary';
 
 const { width, height } = Dimensions.get('window');
 const COVER_HEIGHT = height * 0.25; // Reduced cover height
@@ -81,6 +81,21 @@ const ProfileScreen: React.FC = () => {
 
     const userId = auth.currentUser.uid;
     const userRef = doc(db, 'users', userId);
+    
+    // Fetch initial user profile data
+    const fetchUserProfile = async () => {
+      try {
+        const userDoc = await getDoc(userRef);
+        if (userDoc.exists()) {
+          setUserProfile(userDoc.data());
+        }
+      } catch (error) {
+        console.error('Error fetching user profile:', error);
+      }
+    };
+    
+    fetchUserProfile();
+
     const moviesRef = collection(userRef, 'movies');
     const reviewsRef = collection(userRef, 'reviews');
 
@@ -229,57 +244,69 @@ const ProfileScreen: React.FC = () => {
     );
   };
 
-  // Replace handleImagePick with this new implementation
   const handleImageSelect = async (type: 'profile' | 'cover') => {
     try {
-      const options = {
-        mediaType: 'photo',
-        quality: 0.8,
-        maxWidth: type === 'cover' ? 1200 : 500,
-        maxHeight: type === 'cover' ? 800 : 500,
-      };
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Please allow access to your photo library to change your profile picture.');
+        return;
+      }
 
-      const result = await launchImageLibrary(options);
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: type === 'profile' ? [1, 1] : [16, 9],
+        quality: 0.7,
+      });
 
-      if (result.didCancel || !result.assets?.[0].uri) return;
+      if (result.canceled) {
+        return;
+      }
 
+      if (!result.assets || result.assets.length === 0) {
+        Alert.alert('Error', 'No image selected');
+        return;
+      }
+
+      const asset = result.assets[0];
       setIsUpdating(true);
-      const imageUri = result.assets[0].uri;
       const userId = auth.currentUser?.uid;
 
       if (!userId) {
         Alert.alert('Error', 'Please log in again');
+        setIsUpdating(false);
         return;
       }
 
-      // Create storage reference
-      const imageName = `${type}_${userId}_${Date.now()}.jpg`;
-      const storageRef = ref(storage, `users/${userId}/${imageName}`);
+      try {
+        // Upload to Cloudinary
+        const cloudinaryUrl = await uploadToCloudinary(
+          asset.uri,
+          `users/${userId}/${type}_images`
+        );
 
-      // Upload file
-      const fetchResponse = await fetch(imageUri);
-      const blob = await fetchResponse.blob();
-      await uploadBytes(storageRef, blob);
+        // Update Firestore user profile
+        const userRef = doc(db, 'users', userId);
+        const updateData = {
+          [type === 'profile' ? 'photoURL' : 'coverURL']: cloudinaryUrl,
+        };
+        await updateDoc(userRef, updateData);
 
-      // Get download URL
-      const downloadURL = await getDownloadURL(storageRef);
+        // Update local state
+        if (type === 'profile') {
+          setUserProfile(prev => ({ ...prev, photoURL: cloudinaryUrl }));
+        } else {
+          setCoverPhoto(cloudinaryUrl);
+        }
 
-      // Update user profile
-      const userRef = doc(db, 'users', userId);
-      await updateDoc(userRef, {
-        [type === 'profile' ? 'photoURL' : 'coverURL']: downloadURL,
-      });
-
-      // Update local state
-      if (type === 'profile') {
-        setUserProfile(prev => ({ ...prev, photoURL: downloadURL }));
-      } else {
-        setCoverPhoto(downloadURL);
+        Alert.alert('Success', 'Image updated successfully');
+      } catch (error) {
+        console.error('Upload error:', error);
+        Alert.alert('Error', 'Failed to upload image. Please try again.');
       }
-
     } catch (error) {
-      console.error('Error updating image:', error);
-      Alert.alert('Error', 'Failed to update image');
+      console.error('Image picker error:', error);
+      Alert.alert('Error', 'Failed to open image picker');
     } finally {
       setIsUpdating(false);
     }
@@ -392,7 +419,6 @@ const ProfileScreen: React.FC = () => {
       
       <View style={styles.contentContainer}>
         <View style={styles.userInfo}>
-          <Text style={styles.userName}>{userProfile?.name || 'Loading...'}</Text>
           <Text style={styles.userEmail}>{userProfile?.email}</Text>
           <TouchableOpacity 
             style={styles.editProfileButton}
