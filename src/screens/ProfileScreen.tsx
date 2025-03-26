@@ -15,7 +15,8 @@ import {
   Platform,
   ImageBackground,
   ActivityIndicator,
-  StatusBar // Add this import
+  StatusBar, // Add this import
+  TextInput
 } from 'react-native';
 import { MaterialIcons, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -72,6 +73,9 @@ const ProfileScreen: React.FC = () => {
   });
   const [isUpdating, setIsUpdating] = useState(false);
   const [folderThumbnails, setFolderThumbnails] = useState<{ [key: string]: MovieThumbnail[] }>({});
+  const [isEditingBio, setIsEditingBio] = useState(false);
+  const [bio, setBio] = useState('');
+  const [tempBio, setTempBio] = useState('');
 
   useEffect(() => {
     if (!auth.currentUser) {
@@ -88,6 +92,7 @@ const ProfileScreen: React.FC = () => {
         const userDoc = await getDoc(userRef);
         if (userDoc.exists()) {
           setUserProfile(userDoc.data());
+          setBio(userDoc.data().bio || '');
         }
       } catch (error) {
         console.error('Error fetching user profile:', error);
@@ -313,6 +318,27 @@ const ProfileScreen: React.FC = () => {
     }
   };
 
+  const handleSaveBio = async () => {
+    if (!auth.currentUser) return;
+
+    try {
+      setIsUpdating(true);
+      const userRef = doc(db, 'users', auth.currentUser.uid);
+      await updateDoc(userRef, {
+        bio: tempBio.trim(),
+        updatedAt: new Date()
+      });
+      setBio(tempBio.trim());
+      setIsEditingBio(false);
+      Alert.alert('Success', 'Bio updated successfully');
+    } catch (error) {
+      console.error('Error updating bio:', error);
+      Alert.alert('Error', 'Failed to update bio');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const renderHeader = () => (
     <View style={styles.headerContainer}>
       <View style={styles.coverContainer}>
@@ -354,6 +380,55 @@ const ProfileScreen: React.FC = () => {
           </View>
         </TouchableOpacity>
       </View>
+    </View>
+  );
+
+  const renderUserInfo = () => (
+    <View style={styles.userInfo}>
+      <Text style={styles.userEmail}>{userProfile?.email}</Text>
+      {isEditingBio ? (
+        <View style={styles.bioEditContainer}>
+          <TextInput
+            style={styles.bioInput}
+            value={tempBio}
+            onChangeText={setTempBio}
+            placeholder="Write something about yourself..."
+            placeholderTextColor="#666"
+            multiline
+            maxLength={150}
+          />
+          <View style={styles.bioButtonsContainer}>
+            <TouchableOpacity 
+              style={[styles.bioButton, styles.cancelButton]}
+              onPress={() => {
+                setTempBio(bio);
+                setIsEditingBio(false);
+              }}
+            >
+              <Text style={styles.bioButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.bioButton, styles.saveButton]}
+              onPress={handleSaveBio}
+            >
+              <Text style={styles.bioButtonText}>Save</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <TouchableOpacity 
+          style={styles.bioContainer}
+          onPress={() => {
+            setTempBio(bio);
+            setIsEditingBio(true);
+          }}
+        >
+          <Text style={styles.bioText}>
+            {bio || 'Tap to add bio'}
+          </Text>
+          <MaterialIcons name="edit" size={20} color="#BB86FC" />
+        </TouchableOpacity>
+      )}
     </View>
   );
 
@@ -419,18 +494,8 @@ const ProfileScreen: React.FC = () => {
       {renderHeader()}
       
       <View style={styles.contentContainer}>
-        <View style={styles.userInfo}>
-          <Text style={styles.userEmail}>{userProfile?.email}</Text>
-          <TouchableOpacity 
-            style={styles.editProfileButton}
-            onPress={() => navigation.navigate('EditProfile')}
-          >
-            <Text style={styles.editProfileText}>Edit Profile</Text>
-          </TouchableOpacity>
-        </View>
-
+        {renderUserInfo()}
         {renderStats()}
-
         <TouchableOpacity 
           style={styles.signOutButton} 
           onPress={handleSignOut}
@@ -533,6 +598,60 @@ const styles = StyleSheet.create({
   },
   editProfileText: {
     color: '#BB86FC',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  bioContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(187,134,252,0.1)',
+    padding: 12,
+    borderRadius: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(187,134,252,0.2)',
+    minWidth: '80%',
+  },
+  bioText: {
+    color: '#fff',
+    flex: 1,
+    marginRight: 8,
+  },
+  bioEditContainer: {
+    width: '80%',
+    marginTop: 8,
+  },
+  bioInput: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 12,
+    padding: 12,
+    color: '#fff',
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  bioButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 8,
+    gap: 8,
+  },
+  bioButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  saveButton: {
+    backgroundColor: 'rgba(187,134,252,0.2)',
+    borderWidth: 1,
+    borderColor: '#BB86FC',
+  },
+  bioButtonText: {
+    color: '#fff',
     fontSize: 14,
     fontWeight: '600',
   },
