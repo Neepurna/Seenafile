@@ -341,7 +341,11 @@ const ProfileScreen: React.FC = () => {
 
   const renderHeader = () => (
     <View style={styles.headerContainer}>
-      <View style={styles.coverContainer}>
+      <TouchableOpacity 
+        style={styles.coverContainer}
+        onPress={() => handleImageSelect('cover')}
+        activeOpacity={0.7}
+      >
         <Image
           source={
             userProfile?.coverURL
@@ -354,18 +358,13 @@ const ProfileScreen: React.FC = () => {
           colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.8)']}
           style={StyleSheet.absoluteFill}
         />
-        <TouchableOpacity 
-          style={styles.changeCoverButton}
-          onPress={() => handleImageSelect('cover')}
-        >
-          <MaterialIcons name="photo-camera" size={24} color="#fff" />
-        </TouchableOpacity>
-      </View>
+      </TouchableOpacity>
 
       <View style={styles.profileImageSection}>
         <TouchableOpacity 
           style={styles.profileImageContainer}
           onPress={() => handleImageSelect('profile')}
+          activeOpacity={0.7}
         >
           <Image
             source={
@@ -375,9 +374,6 @@ const ProfileScreen: React.FC = () => {
             }
             style={styles.profileImage}
           />
-          <View style={styles.profileImageOverlay}>
-            <MaterialIcons name="photo-camera" size={20} color="#fff" />
-          </View>
         </TouchableOpacity>
       </View>
     </View>
@@ -526,19 +522,12 @@ const styles = StyleSheet.create({
   coverContainer: {
     height: COVER_HEIGHT,
     width: '100%',
+    position: 'relative',
   },
   coverImage: {
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
-  },
-  changeCoverButton: {
-    position: 'absolute',
-    right: 16,
-    top: 16,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    padding: 8,
-    borderRadius: 20,
   },
   profileImageSection: {
     position: 'absolute',
@@ -555,20 +544,19 @@ const styles = StyleSheet.create({
     borderWidth: 4,
     borderColor: '#121212',
     overflow: 'hidden',
+    // Add shadow for better visibility
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   profileImage: {
     width: '100%',
     height: '100%',
-  },
-  profileImageOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 30,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   contentContainer: {
     flex: 1,
