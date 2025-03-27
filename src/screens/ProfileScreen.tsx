@@ -96,133 +96,155 @@ const ProfileScreen: React.FC = () => {
         }
       } catch (error) {
         console.error('Error fetching user profile:', error);
+        setError('Unable to load profile data. Please check your connection and try again.');
+        setIsLoading(false);
       }
     };
     
     fetchUserProfile();
 
-    const moviesRef = collection(userRef, 'movies');
-    const reviewsRef = collection(userRef, 'reviews');
-
-    // Add separate reviews listener
-    const reviewsUnsubscribe = onSnapshot(reviewsRef, (snapshot) => {
-      const reviewsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setUserReviews(reviewsData);
-
-      // Update critics folder count and thumbnails
-      const criticsCount = reviewsData.length;
-      setFolderCounts(prev => ({ ...prev, critics: criticsCount }));
-
-      // Update critics thumbnails
-      setFolderThumbnails(prev => ({
-        ...prev,
-        critics: reviewsData
-          .filter(review => review.poster_path)
-          .slice(0, 2)
-          .map(review => ({
-            id: review.id,
-            poster_path: review.poster_path,
-            movieTitle: review.movieTitle
-          }))
-      }));
-    });
-
-    // Movies listener with persistent cache
-    const MOVIES_CACHE_KEY = `user_movies_${userId}`;
-    const moviesUnsubscribe = onSnapshot(moviesRef, async (snapshot) => {
-      try {
-        const counts = {
-          watched: 0,
-          most_watch: 0,
-          watch_later: 0,
-          critics: folderCounts.critics || 0
-        };
-        
-        const thumbsByFolder = { ...folderThumbnails };
-        const moviesByFolder: { [key: string]: any[] } = {};
-
-        snapshot.docs.forEach(doc => {
-          const data = doc.data();
-          if (data.category) {
-            const category = data.category === 'most_watched' ? 'most_watch' : data.category;
-            if (counts.hasOwnProperty(category) && category !== 'critics') {
-              counts[category]++;
-              
-              // Store full movie data by folder
-              if (!moviesByFolder[category]) {
-                moviesByFolder[category] = [];
-              }
-              moviesByFolder[category].push({
-                id: doc.id,
-                ...data
-              });
-
-              // Update thumbnails
-              if (!thumbsByFolder[category]) {
-                thumbsByFolder[category] = [];
-              }
-              if (thumbsByFolder[category].length < 2 && data.poster_path) {
-                thumbsByFolder[category].push({
-                  id: doc.id,
-                  poster_path: data.poster_path,
-                  movieTitle: data.movieTitle || data.title
-                });
-              }
-            }
-          }
-        });
-
-        // Cache the full movie data
-        await AsyncStorage.setItem(MOVIES_CACHE_KEY, JSON.stringify(moviesByFolder));
-
-        setFolderCounts(prev => ({ ...prev, ...counts }));
-        setFolderThumbnails(thumbsByFolder);
-        setIsLoading(false);
-      } catch (error) {
-        console.error('Error processing movies:', error);
-        
-        // Try to load from cache if live update fails
-        try {
-          const cachedData = await AsyncStorage.getItem(MOVIES_CACHE_KEY);
-          if (cachedData) {
-            const moviesByFolder = JSON.parse(cachedData);
-            // Update counts and thumbnails from cache
-            const counts = Object.keys(moviesByFolder).reduce((acc, category) => ({
-              ...acc,
-              [category]: moviesByFolder[category].length
-            }), {});
-            
-            setFolderCounts(prev => ({ ...prev, ...counts }));
-            // Update thumbnails from cached data
-            const thumbsByFolder = Object.keys(moviesByFolder).reduce((acc, category) => ({
-              ...acc,
-              [category]: moviesByFolder[category]
-                .filter(movie => movie.poster_path)
-                .slice(0, 2)
-                .map(movie => ({
-                  id: movie.id,
-                  poster_path: movie.poster_path,
-                  movieTitle: movie.movieTitle || movie.title
-                }))
-            }), {});
-            setFolderThumbnails(thumbsByFolder);
-          }
-        } catch (cacheError) {
-          console.error('Error loading cached movies:', cacheError);
-        }
-        
-        setError('Failed to load data');
-        setIsLoading(false);
+    const handleError = (error: any) => {
+      console.error('Snapshot error:', error);
+      if (error.code === 'permission-denied') {
+        setError('Access denied. Please sign out and sign in again.');
+      } else {
+        setError('Unable to load data. Please check your connection.');
       }
-    });
-
-    return () => {
-      reviewsUnsubscribe();
-      moviesUnsubscribe();
+      setIsLoading(false);
     };
+
+    // Wrap listeners in try-catch
+    try {
+      const moviesRef = collection(userRef, 'movies');
+      const reviewsRef = collection(userRef, 'reviews');
+
+      const reviewsUnsubscribe = onSnapshot(reviewsRef, 
+        (snapshot) => {
+          const reviewsData = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          setUserReviews(reviewsData);
+
+          // Update critics folder count and thumbnails
+          const criticsCount = reviewsData.length;
+          setFolderCounts(prev => ({ ...prev, critics: criticsCount }));
+
+          // Update critics thumbnails
+          setFolderThumbnails(prev => ({
+            ...prev,
+            critics: reviewsData
+              .filter(review => review.poster_path)
+              .slice(0, 2)
+              .map(review => ({
+                id: review.id,
+                poster_path: review.poster_path,
+                movieTitle: review.movieTitle
+              }))
+          }));
+        }, 
+        handleError
+      );
+
+      const MOVIES_CACHE_KEY = `user_movies_${userId}`;
+      const moviesUnsubscribe = onSnapshot(moviesRef, 
+        async (snapshot) => {
+          try {
+            const counts = {
+              watched: 0,
+              most_watch: 0,
+              watch_later: 0,
+              critics: folderCounts.critics || 0
+            };
+            
+            const thumbsByFolder = { ...folderThumbnails };
+            const moviesByFolder: { [key: string]: any[] } = {};
+
+            snapshot.docs.forEach(doc => {
+              const data = doc.data();
+              if (data.category) {
+                const category = data.category === 'most_watched' ? 'most_watch' : data.category;
+                if (counts.hasOwnProperty(category) && category !== 'critics') {
+                  counts[category]++;
+                  
+                  // Store full movie data by folder
+                  if (!moviesByFolder[category]) {
+                    moviesByFolder[category] = [];
+                  }
+                  moviesByFolder[category].push({
+                    id: doc.id,
+                    ...data
+                  });
+
+                  // Update thumbnails
+                  if (!thumbsByFolder[category]) {
+                    thumbsByFolder[category] = [];
+                  }
+                  if (thumbsByFolder[category].length < 2 && data.poster_path) {
+                    thumbsByFolder[category].push({
+                      id: doc.id,
+                      poster_path: data.poster_path,
+                      movieTitle: data.movieTitle || data.title
+                    });
+                  }
+                }
+              }
+            });
+
+            // Cache the full movie data
+            await AsyncStorage.setItem(MOVIES_CACHE_KEY, JSON.stringify(moviesByFolder));
+
+            setFolderCounts(prev => ({ ...prev, ...counts }));
+            setFolderThumbnails(thumbsByFolder);
+            setIsLoading(false);
+          } catch (error) {
+            console.error('Error processing movies:', error);
+            
+            // Try to load from cache if live update fails
+            try {
+              const cachedData = await AsyncStorage.getItem(MOVIES_CACHE_KEY);
+              if (cachedData) {
+                const moviesByFolder = JSON.parse(cachedData);
+                // Update counts and thumbnails from cache
+                const counts = Object.keys(moviesByFolder).reduce((acc, category) => ({
+                  ...acc,
+                  [category]: moviesByFolder[category].length
+                }), {});
+                
+                setFolderCounts(prev => ({ ...prev, ...counts }));
+                // Update thumbnails from cached data
+                const thumbsByFolder = Object.keys(moviesByFolder).reduce((acc, category) => ({
+                  ...acc,
+                  [category]: moviesByFolder[category]
+                    .filter(movie => movie.poster_path)
+                    .slice(0, 2)
+                    .map(movie => ({
+                      id: movie.id,
+                      poster_path: movie.poster_path,
+                      movieTitle: movie.movieTitle || movie.title
+                    }))
+                }), {});
+                setFolderThumbnails(thumbsByFolder);
+              }
+            } catch (cacheError) {
+              console.error('Error loading cached movies:', cacheError);
+            }
+            
+            setError('Failed to load data');
+            setIsLoading(false);
+          }
+        },
+        handleError
+      );
+
+      return () => {
+        reviewsUnsubscribe();
+        moviesUnsubscribe();
+      };
+    } catch (error) {
+      handleError(error);
+      return () => {};
+    }
   }, [navigation]);
 
   const handleSignOut = async () => {
@@ -484,6 +506,20 @@ const ProfileScreen: React.FC = () => {
     </View>
   );
 
+  if (error) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity 
+          style={styles.retryButton}
+          onPress={handleSignOut}
+        >
+          <Text style={styles.retryButtonText}>Sign Out</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
@@ -733,6 +769,28 @@ const styles = StyleSheet.create({
   signOutText: {
     color: '#fff', // Changed from default black to white
     marginLeft: 8,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    color: '#ff6b6b',
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: '#BB86FC',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#000',
     fontSize: 16,
     fontWeight: '600',
   },

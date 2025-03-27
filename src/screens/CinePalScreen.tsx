@@ -91,20 +91,52 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
     setDebugInfo('Starting match calculation...');
     
     try {
-      // First, get current user's movies
+      // First, get current user's movies and validate their count
       const currentUserMoviesRef = collection(db, 'users', auth.currentUser.uid, 'movies');
       const currentUserMoviesSnap = await getDocs(currentUserMoviesRef);
       
       console.log('Debug - Current user movies:', {
         uid: auth.currentUser.uid,
         movieCount: currentUserMoviesSnap.size,
-        movies: currentUserMoviesSnap.docs.map(doc => doc.id)
       });
+
+      // Changed threshold for testing
+      const minMoviesTotal = 100; // Reduced from 150 for testing
+      const minCollectionSize = 25;
       
-      setDebugInfo(`Current user has ${currentUserMoviesSnap.size} movies`);
-      
-      if (currentUserMoviesSnap.empty) {
-        setDebugInfo('You need to add some movies first!');
+      if (currentUserMoviesSnap.size < minMoviesTotal) {
+        setDebugInfo(`You need at least ${minMoviesTotal} movies to see matches!`);
+        console.log('User does not have enough total movies:', currentUserMoviesSnap.size);
+        setMatches([]);
+        return;
+      }
+
+      // Get current user's collection counts with debug logging
+      const currentUserCollections = {
+        watched: 0,
+        most_watch: 0, // Changed from must_watch to most_watch
+        watch_later: 0
+      };
+
+      currentUserMoviesSnap.docs.forEach(doc => {
+        const data = doc.data();
+        const category = data.category;
+        if (currentUserCollections.hasOwnProperty(category)) {
+          currentUserCollections[category]++;
+        }
+      });
+
+      console.log('Current user collections:', currentUserCollections);
+
+      // Modified collection requirement check with detailed logging
+      const collectionsValid = 
+        currentUserCollections.watched >= minCollectionSize &&
+        currentUserCollections.most_watch >= minCollectionSize &&
+        currentUserCollections.watch_later >= minCollectionSize;
+
+      if (!collectionsValid) {
+        setDebugInfo(`Each collection needs ${minCollectionSize}+ movies. Current counts: Watched=${currentUserCollections.watched}, Most Watch=${currentUserCollections.most_watch}, Watch Later=${currentUserCollections.watch_later}`);
+        console.log('Collections do not meet minimum requirements:', currentUserCollections);
         setMatches([]);
         return;
       }
@@ -113,14 +145,46 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
       const usersQuery = query(
         usersRef,
         where('__name__', '!=', auth.currentUser.uid),
-        limit(20) // Limit to 20 users at a time
+        limit(20)
       );
       
       const usersSnap = await getDocs(usersQuery);
-      console.log(`Found ${usersSnap.size} potential matches`);
+      console.log(`Found ${usersSnap.size} potential matches to process`);
       
       const matchPromises = usersSnap.docs.map(async (userDoc) => {
         try {
+          const otherUserMoviesRef = collection(userDoc.ref, 'movies');
+          const otherUserMoviesSnap = await getDocs(otherUserMoviesRef);
+          
+          // Initialize otherUserCollections here
+          const otherUserCollections = {
+            watched: 0,
+            most_watch: 0,
+            watch_later: 0
+          };
+
+          // Count movies in each category
+          otherUserMoviesSnap.docs.forEach(doc => {
+            const category = doc.data().category;
+            if (otherUserCollections.hasOwnProperty(category)) {
+              otherUserCollections[category]++;
+            }
+          });
+
+          // Check minimum requirements for other user
+          const minMoviesTotal = 100;
+          const minCollectionSize = 25;
+
+          if (otherUserMoviesSnap.size < minMoviesTotal) {
+            return null;
+          }
+
+          // Check if other user meets collection requirements
+          if (Object.values(otherUserCollections).some(count => count < minCollectionSize)) {
+            return null;
+          }
+
+          // Continue with existing match calculation code
           const userData = userDoc.data();
           const userProfileDoc = await getDoc(doc(db, 'users', userDoc.id));
           const userProfile = userProfileDoc.data();
@@ -137,35 +201,24 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
             username = userDoc.id.substring(0, 8); // Use part of user ID as fallback
           }
 
-          const moviesRef = collection(userDoc.ref, 'movies');
-          const moviesSnap = await getDocs(moviesRef);
-
-          if (!moviesSnap.empty) {
-            let matchScore;
-            try {
-              matchScore = await calculateMatchScore(auth.currentUser!.uid, userDoc.id);
-              
-              if (!matchScore || typeof matchScore.score !== 'number') {
-                console.error('Invalid match score structure:', matchScore);
-                return null;
-              }
-
-              return {
-                userId: userDoc.id,
-                username,
-                email: userProfile?.email || userData?.email,
-                photoURL: userProfile?.photoURL || userData?.photoURL,
-                score: matchScore.score,
-                commonMovies: matchScore.commonMovies,
-                moviesCount: moviesSnap.size,
-                lastActive: userProfile?.lastActive || userData?.lastActive || Date.now(),
-              };
-            } catch (error) {
-              console.error('Match calculation error:', error);
-              return null;
-            }
+          const matchScore = await calculateMatchScore(auth.currentUser!.uid, userDoc.id);
+          
+          if (!matchScore || typeof matchScore.score !== 'number') {
+            console.error('Invalid match score structure:', matchScore);
+            return null;
           }
-          return null;
+
+          return {
+            userId: userDoc.id,
+            username,
+            email: userProfile?.email || userData?.email,
+            photoURL: userProfile?.photoURL || userData?.photoURL,
+            score: matchScore.score,
+            commonMovies: matchScore.commonMovies,
+            moviesCount: otherUserMoviesSnap.size,
+            collections: otherUserCollections,
+            lastActive: userProfile?.lastActive || userData?.lastActive || Date.now(),
+          };
         } catch (error) {
           console.error('User processing error:', error);
           return null;
@@ -266,13 +319,7 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
       </LinearGradient>
       
       <View style={styles.matchInfoContainer}>
-        <View style={styles.matchNameRow}>
-          <Text style={styles.username}>{item.username || 'Movie Enthusiast'}</Text>
-          <View style={styles.matchScoreContainer}>
-            <Text style={styles.matchScore}>{Math.round(item.score)}% match</Text>
-          </View>
-        </View>
-        
+        <Text style={styles.username}>{item.username || 'Movie Enthusiast'}</Text>
         <Text style={styles.statusText}>
           {getActiveStatus(item.lastActive)}
         </Text>
@@ -430,27 +477,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
   },
-  matchNameRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
   username: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#fff',
-  },
-  matchScoreContainer: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: 'rgba(187,134,252,0.2)',
-  },
-  matchScore: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#BB86FC',
+    marginBottom: 4,
   },
   statusText: {
     fontSize: 14,

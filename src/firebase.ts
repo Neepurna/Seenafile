@@ -458,32 +458,31 @@ interface Match {
 // Make sure to export the function
 export const getUserMatches = async (userId: string): Promise<Match[]> => {
   try {
-    if (!userId) {
-      console.error('No userId provided to getUserMatches');
-      return [];
+    if (!auth.currentUser) {
+      throw new Error('User must be authenticated');
     }
 
-    console.log('Fetching matches for user:', userId);
+    const userRef = doc(db, 'users', userId);
+    const moviesRef = collection(userRef, 'movies');
+    const moviesSnap = await getDocs(moviesRef)
+      .catch(error => {
+        console.error('Error accessing movies collection:', error);
+        throw new Error('Permission denied: Cannot access user movies');
+      });
 
-    const matchesRef = collection(db, 'matches');
-    const userMatchesQuery = query(matchesRef, where('userId', '==', userId));
-    const receivedMatchesQuery = query(matchesRef, where('targetId', '==', userId));
+    return moviesSnap.docs.map(doc => ({
+      id: doc.id,
+      userId: userId,
+      score: 0, // Initial score
+      commonMovies: [{
+        movieId: doc.id,
+        category: doc.data().category
+      }]
+    }));
 
-    const [userMatchesSnap, receivedMatchesSnap] = await Promise.all([
-      getDocs(userMatchesQuery),
-      getDocs(receivedMatchesQuery)
-    ]);
-
-    const allMatches = [
-      ...userMatchesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })),
-      ...receivedMatchesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-    ] as Match[];
-
-    console.log('Found matches:', allMatches.length);
-    return allMatches;
   } catch (error) {
     console.error('Error in getUserMatches:', error);
-    return [];
+    throw error;
   }
 };
 
@@ -546,7 +545,14 @@ export class ListenerManager {
 // Update signOut function to use the new implementation
 export const signOut = async () => {
   try {
-    // Clean up all listeners
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      return { error: null };
+    }
+
+    const userId = currentUser.uid;
+
+    // Clean up listeners first
     ListenerManager.removeAllListeners();
     
     // Clean up legacy listeners
@@ -561,15 +567,32 @@ export const signOut = async () => {
       }
     });
     
-    // Clear the legacy listeners object
     listeners = {};
-    
-    // Sign out from Firebase
+
+    try {
+      // Update user status before signing out
+      const userRef = doc(db, 'users', userId);
+      await updateDoc(userRef, {
+        lastActive: new Date(),
+        status: 'offline'
+      });
+    } catch (statusError) {
+      console.warn('Error updating status:', statusError);
+      // Continue with signout even if status update fails
+    }
+
+    // Finally sign out
     await auth.signOut();
     return { error: null };
-  } catch (error: any) {
+  } catch (error) {
     console.error('Sign out error:', error);
-    return { error: error.message };
+    // Force sign out even if there were errors
+    try {
+      await auth.signOut();
+    } catch (finalError) {
+      console.error('Final signout attempt failed:', finalError);
+    }
+    return { error: 'Sign out completed with some errors' };
   }
 };
 

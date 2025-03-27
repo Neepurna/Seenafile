@@ -42,44 +42,27 @@ service cloud.firestore {
       allow read, write: if isSignedIn();  // Temporarily relaxed for debugging
     }
     
-    // User specific data
+    // User specific data - Simplified rules
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn();  // Temporarily relaxed for debugging
+      // Base read/write rules
+      allow read: if true; // Allow reading user data even when signing out
+      allow write: if isSignedIn() && isOwner(userId);
       
-      // User's movies collection (includes reviews)
-      match /movies/{movieId} {
-        allow read, write: if isSignedIn();  // Temporarily relaxed for debugging
-      }
+      // Allow status updates
+      allow update: if request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['lastActive', 'status', 'presence', 'photoURL', 'coverURL', 'bio', 'updatedAt', 'hasSeenTutorial']);
 
-      // User's reviews subcollection
-      match /reviews/{reviewId} {
-        allow read: if isSignedIn();
+      // Movies subcollection
+      match /movies/{movieId} {
+        allow read: if true; // Allow reading movies even during sign out
         allow write: if isSignedIn() && isOwner(userId);
       }
 
-      // User's shared reviews
-      match /sharedReviews/{reviewId} {
-        allow read: if isSignedIn();
-        allow create, update: if isSignedIn() 
-          && isOwner(userId) 
-          && hasRequiredReviewFields();
-        allow delete: if isSignedIn() && isOwner(userId);
+      // Reviews subcollection
+      match /reviews/{reviewId} {
+        allow read: if true; // Allow reading reviews even during sign out
+        allow write: if isSignedIn() && isOwner(userId);
       }
-
-      // User's chats collection for quick access
-      match /users/{userId}/chats/{chatId} {
-        allow read: if isSignedIn() && isOwner(userId);
-        allow write: if isSignedIn() 
-          && isOwner(userId)
-          && exists(/databases/$(database)/documents/chats/$(chatId))
-          && isChatParticipant(get(/databases/$(database)/documents/chats/$(chatId)).data);
-      }
-
-      // Allow reading and writing tutorial status
-      allow read, update: if isSignedIn() && isOwner(userId) &&
-        (request.resource == null || 
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hasSeenTutorial']));
     }
 
     // Shared reviews collection
@@ -152,6 +135,23 @@ service cloud.firestore {
     // Add this new rule for user-specific chat data
     match /users/{userId}/chats/{chatId} {
       allow read, write: if isSignedIn() && (request.auth.uid == userId);
+    }
+
+    // Add new rule for handling disconnection/cleanup
+    match /users/{userId}/status {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isOwner(userId);
+    }
+
+    match /users/{userId}/presence {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isOwner(userId);
+    }
+
+    // Status collection for user presence
+    match /status/{userId} {
+      allow read: if true;
+      allow write: if isSignedIn() && isOwner(userId);
     }
   }
 }
