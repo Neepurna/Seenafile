@@ -75,6 +75,11 @@ service cloud.firestore {
           && exists(/databases/$(database)/documents/chats/$(chatId))
           && isChatParticipant(get(/databases/$(database)/documents/chats/$(chatId)).data);
       }
+
+      // Allow reading and writing tutorial status
+      allow read, update: if isSignedIn() && isOwner(userId) &&
+        (request.resource == null || 
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hasSeenTutorial']));
     }
 
     // Shared reviews collection

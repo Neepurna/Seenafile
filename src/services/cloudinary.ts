@@ -1,4 +1,27 @@
-import { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } from '@env';
+interface ENV {
+  CLOUDINARY_CLOUD_NAME: string;
+  CLOUDINARY_API_KEY: string;
+  CLOUDINARY_API_SECRET: string;
+}
+
+const getEnvVars = (): ENV => {
+  try {
+    const env = require('../../.env');
+    return {
+      CLOUDINARY_CLOUD_NAME: env.CLOUDINARY_CLOUD_NAME || 'dilpgx5x8',
+      CLOUDINARY_API_KEY: env.CLOUDINARY_API_KEY || '872294811136374',
+      CLOUDINARY_API_SECRET: env.CLOUDINARY_API_SECRET || 'IXihzQP3vPMJjqmXKaqtW7Mi0v8'
+    };
+  } catch (error) {
+    return {
+      CLOUDINARY_CLOUD_NAME: 'dilpgx5x8',
+      CLOUDINARY_API_KEY: '872294811136374',
+      CLOUDINARY_API_SECRET: 'IXihzQP3vPMJjqmXKaqtW7Mi0v8'
+    };
+  }
+};
+
+const { CLOUDINARY_CLOUD_NAME } = getEnvVars();
 
 export const uploadToCloudinary = async (uri: string, folder: string): Promise<string> => {
   try {

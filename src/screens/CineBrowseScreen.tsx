@@ -28,6 +28,8 @@ import { fetchMoviesByCategory, searchMoviesAndShows } from '../services/tmdb';
 import { useFonts } from 'expo-font';
 import InfoDrawer from '../components/InfoDrawer';
 import GlossySearchBar from '../components/GlossySearchBar';
+import TutorialOverlay from '../components/TutorialOverlay';
+import { checkTutorialStatus, markTutorialAsSeen } from '../firebase';
 
 const { height } = Dimensions.get('window');
 const TAB_BAR_HEIGHT = 100;
@@ -484,6 +486,25 @@ const CineBrowseScreen: React.FC = () => {
     );
   };
 
+  const [showTutorial, setShowTutorial] = useState(false);
+  
+  useEffect(() => {
+    const checkFirstTimeUser = async () => {
+      if (auth.currentUser) {
+        const hasSeenTutorial = await checkTutorialStatus(auth.currentUser.uid);
+        setShowTutorial(!hasSeenTutorial);
+      }
+    };
+    checkFirstTimeUser();
+  }, []);
+
+  const handleCloseTutorial = async () => {
+    if (auth.currentUser) {
+      await markTutorialAsSeen(auth.currentUser.uid);
+    }
+    setShowTutorial(false);
+  };
+
   return (
     <View style={styles.mainContainer}>
       {renderBackground()}
@@ -538,6 +559,10 @@ const CineBrowseScreen: React.FC = () => {
           />
         </View>
       </View>
+      <TutorialOverlay 
+        visible={showTutorial} 
+        onClose={handleCloseTutorial}
+      />
     </View>
   );
 };

@@ -664,3 +664,27 @@ export const signIn = async (email: string, password: string) => {
 };
 
 // ...existing code...
+
+export const checkTutorialStatus = async (userId: string) => {
+  try {
+    const userDoc = await getDoc(doc(db, 'users', userId));
+    return userDoc.data()?.hasSeenTutorial || false;
+  } catch (error) {
+    console.error('Error checking tutorial status:', error);
+    return false;
+  }
+};
+
+export const markTutorialAsSeen = async (userId: string) => {
+  try {
+    await updateDoc(doc(db, 'users', userId), {
+      hasSeenTutorial: true
+    });
+    return true;
+  } catch (error) {
+    console.error('Error updating tutorial status:', error);
+    return false;
+  }
+};
+
+// ...existing code...
