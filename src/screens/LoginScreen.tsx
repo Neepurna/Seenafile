@@ -136,7 +136,7 @@ const LoginScreen = ({ navigation }) => {
                 />
               </View>
             </View>
-            <Text style={styles.logoText}>SEENAFILE</Text>
+            <Text style={styles.logoText}>INCLIVO</Text>
             <Text style={styles.tagline}>Where Movie Lovers Connect</Text>
             
             <TouchableOpacity 
