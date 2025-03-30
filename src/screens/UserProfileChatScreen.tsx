@@ -222,12 +222,13 @@ const UserProfileChatScreen: React.FC<UserProfileChatScreenProps> = ({ route, na
   });
 
   const handleNavigateToMovieGrid = (params: any) => {
-    console.log('Navigating to MovieGridScreen with userId:', userId);
-    navigation.navigate('MovieGridScreen', {
-      ...params,
-      userId: userId, // Ensure userId is passed
-      fromScreen: 'UserProfileChat',
-      previousScreen: 'UserProfile'
+    navigation.navigate('UserMovieCollection', {  // Changed from MovieGridScreen to UserMovieCollection
+      folderId: params.folderId,
+      folderName: params.folderName,
+      folderColor: params.folderColor,
+      isCritics: params.isCritics,
+      userId: userId,
+      fromScreen: 'UserProfile'
     });
   };
 

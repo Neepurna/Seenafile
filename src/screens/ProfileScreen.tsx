@@ -20,7 +20,7 @@ import {
 } from 'react-native';
 import { MaterialIcons, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, NavigationProp } from '@react-navigation/native';
 import { auth, db, signOut } from '../firebase';
 import { doc, getDoc, collection, query, onSnapshot, getDocs, updateDoc } from 'firebase/firestore';
 import * as ImagePicker from 'expo-image-picker';
@@ -55,8 +55,24 @@ const folders: FolderData[] = [
   { id: 'critics', name: 'Critics', color: '#FF4081', count: 0, icon: 'star' }, // Changed icon to 'star'
 ];
 
+// Update the type definitions
+type RootStackParamList = {
+  MovieGridScreen: {
+    folderId: string;
+    folderName: string;
+    folderColor: string;
+    isCritics: boolean;
+    userId: string;
+    fromScreen: string;
+  };
+  Login: undefined;
+  // ... other routes
+};
+
+type NavigationType = NavigationProp<RootStackParamList>;
+
 const ProfileScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavigationType>();
   const [userProfile, setUserProfile] = useState<any>(null);
   const [folderCounts, setFolderCounts] = useState<{ [key: string]: number }>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -361,6 +377,23 @@ const ProfileScreen: React.FC = () => {
     }
   };
 
+  const handleNavigateToMovieGrid = (params: {
+    folderId: string;
+    folderName: string;
+    folderColor: string;
+    isCritics: boolean;
+  }) => {
+    // Use MovieGridScreen directly instead of ProfileMovieGrid
+    navigation.navigate('MovieGridScreen', {
+      folderId: params.folderId,
+      folderName: params.folderName,
+      folderColor: params.folderColor,
+      isCritics: params.isCritics,
+      userId: auth.currentUser?.uid || '',
+      fromScreen: 'Profile'
+    });
+  };
+
   const renderHeader = () => (
     <View style={styles.headerContainer}>
       <TouchableOpacity 
@@ -460,7 +493,7 @@ const ProfileScreen: React.FC = () => {
           <TouchableOpacity
             key={folder.id}
             style={styles.statCard}
-            onPress={() => navigation.navigate('MovieGridScreen', {
+            onPress={() => handleNavigateToMovieGrid({
               folderId: folder.id,
               folderName: folder.name,
               folderColor: folder.color,

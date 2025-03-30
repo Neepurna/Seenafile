@@ -24,7 +24,7 @@ const REVIEW_CARD_WIDTH = width - 30; // Full width cards for reviews
 const ITEMS_PER_PAGE = 20;
 
 const MovieGridScreen = ({ route, navigation }) => {
-  const { folderId, folderName, folderColor, isCritics, userId } = route.params;
+  const { folderId, folderName, folderColor, isCritics, userId, fromScreen } = route.params;
   const [movies, setMovies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -68,20 +68,28 @@ const MovieGridScreen = ({ route, navigation }) => {
   }, [navigation]);
 
   useEffect(() => {
-    // Set up navigation options based on source screen
-    if (route.params?.fromScreen === 'UserProfileChat') {
-      navigation.setOptions({
-        headerLeft: () => (
-          <TouchableOpacity 
-            onPress={() => navigation.goBack()}
-            style={{ marginLeft: 16 }}
-          >
-            <Ionicons name="chevron-back" size={24} color="#fff" />
-          </TouchableOpacity>
-        )
-      });
-    }
-  }, [navigation, route.params]);
+    // Use the correct back navigation based on source screen
+    const handleBack = () => {
+      if (fromScreen === 'UserProfile') {
+        navigation.navigate('UserProfileMain');
+      } else if (fromScreen === 'Profile') {
+        navigation.navigate('ProfileMain');
+      } else {
+        navigation.goBack();
+      }
+    };
+
+    navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity 
+          onPress={handleBack}
+          style={{ marginLeft: 16 }}
+        >
+          <Ionicons name="chevron-back" size={24} color="#fff" />
+        </TouchableOpacity>
+      )
+    });
+  }, [navigation, fromScreen]);
 
   const fetchMovieDetails = async (reviewData) => {
     try {
@@ -300,8 +308,11 @@ const MovieGridScreen = ({ route, navigation }) => {
     
     try {
       setLoading(true);
-      const userId = auth.currentUser?.uid || route.params.userId;
-      const userRef = doc(db, 'users', userId);
+      // Always use the passed userId instead of current user's ID
+      const targetUserId = userId || auth.currentUser?.uid;
+      const userRef = doc(db, 'users', targetUserId);
+      
+      console.log('Loading movies for user:', targetUserId);
       const moviesCollection = collection(userRef, isCritics ? 'reviews' : 'movies');
       
       const q = query(

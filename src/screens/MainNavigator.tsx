@@ -10,6 +10,7 @@ import ProfileScreen from '../screens/ProfileScreen';
 import MyWallScreen from '../screens/MyWallScreen';
 import MovieGridScreen from '../screens/MovieGridScreen';
 import UserProfileChatScreen from '../screens/UserProfileChatScreen';
+import ProfileMovieGrid from '../screens/ProfileMovieGrid';
 import UserMovieCollectionScreen from '../screens/UserMovieCollectionScreen';
 
 const Stack = createStackNavigator();
@@ -41,7 +42,7 @@ const HomeStack = () => (
   </Stack.Navigator>
 );
 
-// Update UserProfileStack
+// Update UserProfileStack to properly handle nested navigation
 const UserProfileStack = () => (
   <Stack.Navigator
     screenOptions={{
@@ -55,11 +56,13 @@ const UserProfileStack = () => (
     />
     <Stack.Screen 
       name="UserMovieCollection" 
-      component={UserMovieCollectionScreen}
+      component={MovieGridScreen}  // Changed to use MovieGridScreen directly
       options={{
         headerShown: true,
         headerTransparent: true,
         headerTintColor: '#fff',
+        headerTitle: '',
+        presentation: 'card',
         headerLeft: (props) => (
           <TouchableOpacity
             style={{ marginLeft: 16 }}
@@ -73,7 +76,7 @@ const UserProfileStack = () => (
   </Stack.Navigator>
 );
 
-// Create a separate ProfileStack
+// Update ProfileStack to include unique route names
 const ProfileStack = () => (
   <Stack.Navigator
     screenOptions={{
@@ -81,14 +84,18 @@ const ProfileStack = () => (
       cardStyle: { backgroundColor: '#000' },
     }}
   >
-    <Stack.Screen name="ProfileMain" component={ProfileScreen} />
     <Stack.Screen 
-      name="MovieGridScreen" 
+      name="ProfileMain" 
+      component={ProfileScreen} 
+    />
+    <Stack.Screen 
+      name="MovieGridScreen"  // Changed from ProfileMovieGrid to MovieGridScreen
       component={MovieGridScreen}
       options={{
         headerShown: true,
         headerTransparent: true,
         headerTintColor: '#fff',
+        headerTitle: '',
         headerLeft: (props) => (
           <TouchableOpacity
             style={{ marginLeft: 16 }}
@@ -114,7 +121,7 @@ const ChatStack = () => (
       name="UserProfile" 
       component={UserProfileStack}
       options={{
-        presentation: 'card',
+        presentation: 'modal',
         animationEnabled: true,
       }}
     />
