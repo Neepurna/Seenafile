@@ -73,8 +73,11 @@ const MovieGridScreen = ({ route, navigation }) => {
     navigation.setOptions({
       headerTitle: () => (
         <View style={styles.headerTitleContainer}>
-          <Text style={[styles.headerText, { color: folderColor }]}>{folderName}</Text>
+          <Text style={[styles.headerText, { color: '#FFFFFF' }]}>{folderName}</Text>
         </View>
+      ),
+      headerBackground: () => (
+        <View style={styles.headerBackground} />
       ),
     });
     
@@ -816,6 +819,10 @@ const styles = StyleSheet.create({
     marginTop: 15,
     textAlign: 'center',
   },
+  headerBackground: {
+    flex: 1,
+    backgroundColor: '#000000',
+  },
   headerTitleContainer: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -824,6 +831,7 @@ const styles = StyleSheet.create({
   headerText: {
     fontSize: 18,
     fontWeight: 'bold',
+    color: '#FFFFFF',  // Make sure text is white
   },
   headerSpacing: {
     height: 10,

@@ -17,12 +17,13 @@ const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
 const commonHeaderStyle = {
-  backgroundColor: '#000',
+  backgroundColor: '#000000',
   elevation: 0,
   shadowOpacity: 0,
   borderBottomWidth: 1,
   borderBottomColor: '#222',
   height: Platform.OS === 'ios' ? 90 : 70,
+  opacity: 1,
 };
 
 const HomeStack = () => (
@@ -72,6 +73,7 @@ const UserProfileStack = () => (
         headerTitleStyle: {
           color: '#fff',
           fontSize: 18,
+          fontWeight: 'bold',
         },
         headerTitleAlign: 'center',
         headerTitleContainerStyle: {
@@ -86,7 +88,7 @@ const UserProfileStack = () => (
           paddingTop: Platform.OS === 'ios' ? 10 : 0,
         },
         headerTintColor: '#fff',
-        cardStyle: { paddingTop: Platform.OS === 'ios' ? 90 : 70 }
+        cardStyle: { backgroundColor: '#000' }
       }}
     />
   </Stack.Navigator>
