@@ -2,7 +2,7 @@ import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { View, TouchableOpacity } from 'react-native';
+import { View, TouchableOpacity, Platform } from 'react-native';
 import MovieSearchScreen from '../screens/MovieSearchScreen';
 import CineBrowseScreen from '../screens/CineBrowseScreen';
 import CinePalScreen from '../screens/CinePalScreen';
@@ -15,6 +15,15 @@ import UserMovieCollectionScreen from '../screens/UserMovieCollectionScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
+
+const commonHeaderStyle = {
+  backgroundColor: '#000',
+  elevation: 0,
+  shadowOpacity: 0,
+  borderBottomWidth: 1,
+  borderBottomColor: '#222',
+  height: Platform.OS === 'ios' ? 90 : 70,
+};
 
 const HomeStack = () => (
   <Stack.Navigator
@@ -56,21 +65,28 @@ const UserProfileStack = () => (
     />
     <Stack.Screen 
       name="UserMovieCollection" 
-      component={MovieGridScreen}  // Changed to use MovieGridScreen directly
+      component={MovieGridScreen}
       options={{
         headerShown: true,
-        headerTransparent: true,
+        headerStyle: commonHeaderStyle,
+        headerTitleStyle: {
+          color: '#fff',
+          fontSize: 18,
+        },
+        headerTitleAlign: 'center',
+        headerTitleContainerStyle: {
+          paddingTop: Platform.OS === 'ios' ? 10 : 0,
+        },
+        headerLeftContainerStyle: {
+          paddingLeft: 16,
+          paddingTop: Platform.OS === 'ios' ? 10 : 0,
+        },
+        headerRightContainerStyle: {
+          paddingRight: 16,
+          paddingTop: Platform.OS === 'ios' ? 10 : 0,
+        },
         headerTintColor: '#fff',
-        headerTitle: '',
-        presentation: 'card',
-        headerLeft: (props) => (
-          <TouchableOpacity
-            style={{ marginLeft: 16 }}
-            onPress={() => props.navigation.goBack()}
-          >
-            <Ionicons name="chevron-back" size={24} color="#fff" />
-          </TouchableOpacity>
-        ),
+        cardStyle: { paddingTop: Platform.OS === 'ios' ? 90 : 70 }
       }}
     />
   </Stack.Navigator>
@@ -89,21 +105,23 @@ const ProfileStack = () => (
       component={ProfileScreen} 
     />
     <Stack.Screen 
-      name="MovieGridScreen"  // Changed from ProfileMovieGrid to MovieGridScreen
+      name="MovieGridScreen"
       component={MovieGridScreen}
       options={{
         headerShown: true,
-        headerTransparent: true,
+        headerStyle: commonHeaderStyle,
+        headerTitleStyle: {
+          color: '#fff',
+          fontSize: 18,
+        },
+        headerTitleAlign: 'center',
+        headerLeftContainerStyle: {
+          paddingLeft: 16,
+        },
+        headerRightContainerStyle: {
+          paddingRight: 16,
+        },
         headerTintColor: '#fff',
-        headerTitle: '',
-        headerLeft: (props) => (
-          <TouchableOpacity
-            style={{ marginLeft: 16 }}
-            onPress={() => props.navigation.goBack()}
-          >
-            <Ionicons name="chevron-back" size={24} color="#fff" />
-          </TouchableOpacity>
-        ),
       }}
     />
   </Stack.Navigator>

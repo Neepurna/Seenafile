@@ -13,11 +13,16 @@ import {
   Animated,
   PanResponder,
   Modal,
+  SafeAreaView,
+  Platform,
+  StatusBar,
 } from 'react-native';
 import { auth, db } from '../firebase';
 import { doc, collection, query, where, getDocs, orderBy, limit, onSnapshot, getDoc } from 'firebase/firestore';
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
+
 const { width } = Dimensions.get('window');
 const GRID_SIZE = width / 5 - 10; // Changed from 4 to 5 movies per row
 const REVIEW_CARD_WIDTH = width - 30; // Full width cards for reviews
@@ -35,6 +40,7 @@ const MovieGridScreen = ({ route, navigation }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const slideAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const [folderTitle, setFolderTitle] = useState('');
 
   const panResponder = useRef(
     PanResponder.create({
@@ -60,6 +66,20 @@ const MovieGridScreen = ({ route, navigation }) => {
   useEffect(() => {
     loadMovies(true);
   }, []);
+
+  useEffect(() => {
+    const { folderName, folderColor } = route.params;
+    
+    navigation.setOptions({
+      headerTitle: () => (
+        <View style={styles.headerTitleContainer}>
+          <Text style={[styles.headerText, { color: folderColor }]}>{folderName}</Text>
+        </View>
+      ),
+    });
+    
+    setFolderTitle(folderName);
+  }, [navigation, route.params]);
 
   useEffect(() => {
     navigation.setOptions({
@@ -590,58 +610,63 @@ const MovieGridScreen = ({ route, navigation }) => {
   }
 
   return (
-    <View style={styles.container}>
-      <FlatList
-        data={movies}
-        renderItem={renderContent}
-        keyExtractor={item => item.id}
-        numColumns={5}
-        key={isCritics ? 'critics' : 'grid'}
-        contentContainerStyle={[
-          styles.gridContainer,
-          isCritics && styles.reviewContainer
-        ]}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => {
-              setPage(1);
-              loadMovies(true);
-            }}
-            tintColor={folderColor}
-          />
-        }
-        onEndReached={null} // Remove infinite scroll
-        onEndReachedThreshold={null}
-        ListFooterComponent={renderFooter}
-        ListEmptyComponent={
-          !loading && (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>
-                No {isCritics ? 'reviews' : 'movies'} in this folder yet
-              </Text>
-            </View>
-          )
-        }
-      />
-      {renderMovieModal()}
-    </View>
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="light-content" backgroundColor="#000" />
+      <View style={styles.container}>
+        <FlatList
+          data={movies}
+          renderItem={renderContent}
+          keyExtractor={item => item.id}
+          numColumns={5}
+          key={isCritics ? 'critics' : 'grid'}
+          contentContainerStyle={[
+            styles.gridContainer,
+            isCritics && styles.reviewContainer,
+            { paddingTop: 16 } // Add padding at the top
+          ]}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setPage(1);
+                loadMovies(true);
+              }}
+              tintColor={folderColor}
+            />
+          }
+          onEndReached={null} // Remove infinite scroll
+          onEndReachedThreshold={null}
+          ListFooterComponent={renderFooter}
+          ListEmptyComponent={
+            !loading && (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>
+                  No {isCritics ? 'reviews' : 'movies'} in this folder yet
+                </Text>
+              </View>
+            )
+          }
+          ListHeaderComponent={<View style={styles.headerSpacing} />}
+        />
+        {renderMovieModal()}
+      </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
   container: {
     flex: 1,
-    backgroundColor: '#121212',
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#121212',
+    backgroundColor: '#000',
+    marginTop: Platform.OS === 'ios' ? 0 : StatusBar.currentHeight,
   },
   gridContainer: {
     padding: 10,
+    paddingBottom: 60, // Add padding for bottom tab bar
   },
   movieContainer: {
     width: GRID_SIZE,
@@ -790,6 +815,18 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginTop: 15,
     textAlign: 'center',
+  },
+  headerTitleContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  headerText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  headerSpacing: {
+    height: 10,
   },
 });
 
