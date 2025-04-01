@@ -162,6 +162,9 @@ const AuthDrawer: React.FC<AuthDrawerProps> = ({
                 placeholderTextColor="#999"
                 returnKeyType="next"
                 autoComplete="email"
+                textContentType="emailAddress"
+                importantForAutofill="yes"
+                autoCorrect={false}
                 onSubmitEditing={() => passwordInputRef.current?.focus()}
                 blurOnSubmit={false}
               />
@@ -175,6 +178,10 @@ const AuthDrawer: React.FC<AuthDrawerProps> = ({
                 secureTextEntry
                 placeholderTextColor="#999"
                 returnKeyType="done"
+                autoComplete="password"
+                textContentType="password"
+                importantForAutofill="yes"
+                autoCorrect={false}
                 onSubmitEditing={handleLogin}
               />
 

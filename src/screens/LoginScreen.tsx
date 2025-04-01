@@ -9,6 +9,8 @@ import {
   Image,
   Text,
   TouchableOpacity,
+  Platform,
+  TextInput,
 } from 'react-native';
 import { signIn, signUp, resendVerificationEmail, resetPassword, createUserWithProfile } from '../firebase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -46,9 +48,14 @@ const LoginScreen = ({ navigation }) => {
       }
 
       if (user) {
+        // Store credentials for autofill
+        if (Platform.OS === 'ios') {
+          // iOS specific credential storage
+          TextInput.sendCredentialsOnFocus = true;
+        }
         await AsyncStorage.setItem('userToken', user.uid);
         await AsyncStorage.setItem('userEmail', user.email);
-        setShowAuthDrawer(false); // Close drawer on success
+        setShowAuthDrawer(false);
         navigation.replace('Main');
       }
     } catch (error) {
