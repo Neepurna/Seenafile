@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "SeenaFile",
-    "slug": "SeenaFile",
+    "name": "Inclivo",
+    "slug": "inclivo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -34,7 +34,10 @@
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE"
-      ]
+      ],
+      "compileSdkVersion": 33,
+      "targetSdkVersion": 33,
+      "buildToolsVersion": "33.0.0"
     },
     "web": {
       "favicon": "./assets/favicon.png"

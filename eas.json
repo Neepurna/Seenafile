@@ -1,18 +1,21 @@
 {
   "cli": {
     "version": ">=16.1.0",
-    "appVersionSource": "remote",
-    "projectId": "30f76484-486a-429e-bb06-a07fb346feb5"
+    "appVersionSource": "remote"
   },
   "build": {
     "preview": {
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease",
+        "withoutCredentials": true,
+        "autoIncrement": true
       }
     },
     "preview2": {
       "android": {
-        "gradleCommand": ":app:assembleRelease"
+        "gradleCommand": ":app:assembleRelease",
+        "withoutCredentials": true
       }
     },
     "preview3": {
