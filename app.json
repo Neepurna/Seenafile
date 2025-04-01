@@ -21,15 +21,20 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#121212"
       },
       "versionCode": 1,
-      "package": "com.cinephile.app",
+      "package": "com.inclivo.app",
       "softwareKeyboardLayoutMode": "pan",
       "screenOrientation": "portrait",
       "navigationBar": {
         "visible": "immersive"
-      }
+      },
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"

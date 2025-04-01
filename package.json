@@ -54,7 +54,8 @@
     "react-native-svg": "15.8.0",
     "react-native-tab-view": "^3.5.2",
     "react-native-vector-icons": "^10.2.0",
-    "react-native-webview": "13.12.5"
+    "react-native-webview": "13.12.5",
+    "eas-cli": "^16.1.0"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",

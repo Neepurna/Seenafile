@@ -47,12 +47,11 @@ interface MovieThumbnail {
   movieTitle?: string; // Add this field
 }
 
-// Update the folders array with correct icon
+// Update the folders array without critics
 const folders: FolderData[] = [
   { id: 'watched', name: 'Watched', color: '#4BFF4B', count: 0, icon: 'checkmark-circle' },
-  { id: 'most_watch', name: 'Most Watched', color: '#FFD700', count: 0, icon: 'repeat' },
+  { id: 'most_watch', name: 'Must Watch', color: '#FFD700', count: 0, icon: 'repeat' },
   { id: 'watch_later', name: 'Watch Later', color: '#00BFFF', count: 0, icon: 'time' },
-  { id: 'critics', name: 'Critics', color: '#FF4081', count: 0, icon: 'star' }, // Changed icon to 'star'
 ];
 
 // Update the type definitions
@@ -132,35 +131,6 @@ const ProfileScreen: React.FC = () => {
     // Wrap listeners in try-catch
     try {
       const moviesRef = collection(userRef, 'movies');
-      const reviewsRef = collection(userRef, 'reviews');
-
-      const reviewsUnsubscribe = onSnapshot(reviewsRef, 
-        (snapshot) => {
-          const reviewsData = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          }));
-          setUserReviews(reviewsData);
-
-          // Update critics folder count and thumbnails
-          const criticsCount = reviewsData.length;
-          setFolderCounts(prev => ({ ...prev, critics: criticsCount }));
-
-          // Update critics thumbnails
-          setFolderThumbnails(prev => ({
-            ...prev,
-            critics: reviewsData
-              .filter(review => review.poster_path)
-              .slice(0, 2)
-              .map(review => ({
-                id: review.id,
-                poster_path: review.poster_path,
-                movieTitle: review.movieTitle
-              }))
-          }));
-        }, 
-        handleError
-      );
 
       const MOVIES_CACHE_KEY = `user_movies_${userId}`;
       const moviesUnsubscribe = onSnapshot(moviesRef, 
@@ -169,8 +139,7 @@ const ProfileScreen: React.FC = () => {
             const counts = {
               watched: 0,
               most_watch: 0,
-              watch_later: 0,
-              critics: folderCounts.critics || 0
+              watch_later: 0
             };
             
             const thumbsByFolder = { ...folderThumbnails };
@@ -180,7 +149,7 @@ const ProfileScreen: React.FC = () => {
               const data = doc.data();
               if (data.category) {
                 const category = data.category === 'most_watched' ? 'most_watch' : data.category;
-                if (counts.hasOwnProperty(category) && category !== 'critics') {
+                if (counts.hasOwnProperty(category)) {
                   counts[category]++;
                   
                   // Store full movie data by folder
@@ -254,7 +223,6 @@ const ProfileScreen: React.FC = () => {
       );
 
       return () => {
-        reviewsUnsubscribe();
         moviesUnsubscribe();
       };
     } catch (error) {
@@ -487,7 +455,6 @@ const ProfileScreen: React.FC = () => {
     <View style={styles.statsContainer}>
       {folders.map((folder) => {
         const count = folderCounts[folder.id] || 0;
-        const thumbs = folderThumbnails[folder.id] || [];
         
         return (
           <TouchableOpacity
@@ -497,7 +464,7 @@ const ProfileScreen: React.FC = () => {
               folderId: folder.id,
               folderName: folder.name,
               folderColor: folder.color,
-              isCritics: folder.id === 'critics'
+              isCritics: false
             })}
           >
             <LinearGradient
@@ -510,27 +477,11 @@ const ProfileScreen: React.FC = () => {
                 </View>
                 <View style={styles.folderInfo}>
                   <Text style={styles.folderName}>{folder.name}</Text>
-                  <Text style={styles.folderCount}>
-                    {count} {folder.id === 'critics' ? 'reviews' : 'movies'}
-                  </Text>
+                  <View style={styles.countContainer}>
+                    <Text style={styles.folderCount}>{count}</Text>
+                    <Text style={styles.moviesLabel}>movies</Text>
+                  </View>
                 </View>
-              </View>
-              
-              <View style={styles.thumbnailsRow}>
-                {thumbs.map((thumb, index) => (
-                  <View key={thumb.id} style={styles.thumbnailWrapper}>
-                    <Image
-                      source={{ uri: `https://image.tmdb.org/t/p/w92${thumb.poster_path}` }}
-                      style={styles.thumbnail}
-                      resizeMode="cover"
-                    />
-                  </View>
-                ))}
-                {count > 2 && (
-                  <View style={styles.moreIndicator}>
-                    <Text style={styles.moreIndicatorText}>+{count - 2}</Text>
-                  </View>
-                )}
               </View>
             </LinearGradient>
           </TouchableOpacity>
@@ -713,35 +664,30 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   statsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
     marginTop: 24,
     paddingHorizontal: 8,
   },
   statCard: {
-    width: '48%',
-    marginBottom: 16,
+    width: '100%',
+    marginBottom: 12,
     borderRadius: 12,
     overflow: 'hidden',
   },
   statGradient: {
     padding: 16,
-    alignItems: 'center',
   },
   folderHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
   },
   folderIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: 'rgba(51, 51, 51, 0.8)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 16,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
   },
@@ -749,45 +695,24 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   folderName: {
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: '600',
     color: '#fff',
-    marginBottom: 4,
+    marginBottom: 6,
+  },
+  countContainer: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
   },
   folderCount: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#BB86FC',
+    marginRight: 8,
+  },
+  moviesLabel: {
     fontSize: 14,
     color: '#888',
-  },
-  thumbnailsRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    gap: 8,
-  },
-  thumbnailWrapper: {
-    width: 45,
-    height: 68,
-    borderRadius: 6,
-    overflow: 'hidden',
-    backgroundColor: '#333',
-  },
-  thumbnail: {
-    width: '100%',
-    height: '100%',
-  },
-  moreIndicator: {
-    position: 'absolute',
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  moreIndicatorText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
   },
   signOutButton: {
     flexDirection: 'row',

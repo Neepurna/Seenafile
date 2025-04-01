@@ -13,10 +13,12 @@ import {
   Keyboard,
   ScrollView,
   ActivityIndicator,
-  Modal
+  Modal,
+  TouchableWithoutFeedback
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { fetchMovieCredits } from '../services/tmdb';
+import CastList from './CastList';
 
 const { width, height } = Dimensions.get('window');
 const CARD_PADDING = 16;
@@ -58,7 +60,7 @@ const MovieReview: React.FC<MovieReviewProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [cast, setCast] = useState<CastMember[]>([]);
   const [isLoadingCast, setIsLoadingCast] = useState(true);
-  const [activeTab, setActiveTab] = useState<'info' | 'cast'>('info');
+  const [activeTab, setActiveTab] = useState<'info'>('info'); // Change to only info tab
 
   useEffect(() => {
     loadCast();
@@ -130,80 +132,20 @@ const MovieReview: React.FC<MovieReviewProps> = ({
     </View>
   );
 
-  const renderCastTab = () => (
-    <ScrollView style={styles.castTabContent}>
-      <View style={styles.castGrid}>
-        {cast.map(member => (
-          <View key={member.id} style={styles.castGridItem}>
-            <Image 
-              source={{
-                uri: member.profile_path 
-                  ? `https://image.tmdb.org/t/p/w185${member.profile_path}`
-                  : 'https://via.placeholder.com/185x278?text=No+Image'
-              }}
-              style={styles.castGridImage}
-            />
-            <View style={styles.castGridInfo}>
-              <Text style={styles.castGridName} numberOfLines={1}>{member.name}</Text>
-              <Text style={styles.castGridCharacter} numberOfLines={2}>{member.character}</Text>
-            </View>
-          </View>
-        ))}
-      </View>
-    </ScrollView>
-  );
-
   const renderInfoTab = () => (
-    <ScrollView style={styles.mainContent}>
-      <View style={styles.overviewSection}>
-        <Text style={styles.sectionTitle}>Overview</Text>
-        <Text style={styles.overview}>{movie.overview || 'No overview available'}</Text>
-      </View>
-
-      <View style={styles.detailsSection}>
-        <Text style={styles.sectionTitle}>Details</Text>
-        <View style={styles.detailsGrid}>
-          {movie.release_date && (
-            <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Release Date</Text>
-              <Text style={styles.detailText}>
-                {new Date(movie.release_date).toLocaleDateString()}
-              </Text>
-            </View>
-          )}
-          
-          {movie.media_type && (
-            <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Type</Text>
-              <Text style={styles.detailText}>
-                {movie.media_type === 'tv' ? 'TV Show' : 'Movie'}
-              </Text>
-            </View>
-          )}
-
-          {movie.vote_average !== undefined && (
-            <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Rating</Text>
-              <View style={styles.ratingContainer}>
-                <Ionicons name="star" size={16} color="#FFD700" />
-                <Text style={styles.detailText}>
-                  {movie.vote_average.toFixed(1)}/10
-                </Text>
-              </View>
-            </View>
-          )}
-
-          {movie.original_language && (
-            <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Language</Text>
-              <Text style={styles.detailText}>
-                {movie.original_language.toUpperCase()}
-              </Text>
-            </View>
-          )}
+    <View style={styles.mainContent}>
+      <TouchableWithoutFeedback onPress={onDoubleTap}>
+        <View style={styles.overviewSection}>
+          <Text style={styles.sectionTitle}>Overview</Text>
+          <Text style={styles.overview}>{movie.overview || 'No overview available'}</Text>
         </View>
+      </TouchableWithoutFeedback>
+
+      <View style={styles.castSection}>
+        <Text style={styles.sectionTitle}>Cast</Text>
+        <CastList cast={cast} isLoading={isLoadingCast} />
       </View>
-    </ScrollView>
+    </View>
   );
 
   const displayTitle = movie.title || movie.name || 'Untitled';
@@ -245,23 +187,7 @@ const MovieReview: React.FC<MovieReviewProps> = ({
         </View>
       </View>
 
-      {activeTab === 'info' ? renderInfoTab() : renderCastTab()}
-
-      {/* Bottom Tabs */}
-      <View style={styles.tabBar}>
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'info' && styles.activeTab]}
-          onPress={() => setActiveTab('info')}
-        >
-          <Text style={[styles.tabText, activeTab === 'info' && styles.activeTabText]}>INFO</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'cast' && styles.activeTab]}
-          onPress={() => setActiveTab('cast')}
-        >
-          <Text style={[styles.tabText, activeTab === 'cast' && styles.activeTabText]}>CAST</Text>
-        </TouchableOpacity>
-      </View>
+      {renderInfoTab()}
     </View>
   );
 };
@@ -396,30 +322,6 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     paddingHorizontal: 5,
   },
-  castCard: {
-    width: 90, // Slightly wider
-    marginRight: 15,
-    alignItems: 'center',
-  },
-  castImage: {
-    width: 70, // Slightly larger
-    height: 70, // Slightly larger
-    borderRadius: 35,
-    marginBottom: 5,
-    borderWidth: 2,
-    borderColor: '#FFD700',
-  },
-  castName: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  castCharacter: {
-    color: '#999',
-    fontSize: 10,
-    textAlign: 'center',
-  },
   noDataText: {
     color: '#999',
     fontStyle: 'italic',
@@ -486,106 +388,16 @@ const styles = StyleSheet.create({
   },
   mainContent: {
     flex: 1,
-    padding: 15,
+    paddingVertical: 15,
   },
   overviewSection: {
     marginBottom: 20,
+    paddingHorizontal: 15,
   },
   castSection: {
     marginBottom: 20,
+    paddingLeft: 15,
     height: 140,
-  },
-  castList: {
-    flex: 1,
-  },
-  castContainer: {
-    paddingHorizontal: 15,
-    alignItems: 'center',
-  },
-  castCard: {
-    width: 90,
-    marginRight: 15,
-    alignItems: 'center',
-  },
-  castImage: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    marginBottom: 5,
-    borderWidth: 2,
-    borderColor: '#FFD700',
-  },
-  tabContent: {
-    flex: 1,
-    marginBottom: 10,
-  },
-  castTabContent: {
-    flex: 1,
-    padding: 10,
-  },
-  castGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    padding: 5,
-  },
-  castGridItem: {
-    width: '23%', // 4 items per row with some spacing
-    marginBottom: 15,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    overflow: 'hidden',
-  },
-  castGridImage: {
-    width: '100%',
-    aspectRatio: 1, // Make image square
-    resizeMode: 'cover',
-  },
-  castGridInfo: {
-    padding: 5,
-  },
-  castGridName: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  castGridCharacter: {
-    color: '#999',
-    fontSize: 10,
-    textAlign: 'center',
-    marginTop: 2,
-  },
-  detailsSection: {
-    marginBottom: 20,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 10,
-    padding: 15,
-  },
-  detailsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginHorizontal: -8,
-  },
-  detailItem: {
-    width: '50%',
-    paddingHorizontal: 8,
-    marginBottom: 16,
-  },
-  detailLabel: {
-    color: '#999',
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  detailText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
   },
 });
 
