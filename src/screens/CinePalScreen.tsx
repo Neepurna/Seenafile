@@ -20,6 +20,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import ChatList from '../components/ChatList';
 import { useNavigation, NavigationProp } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useFonts } from 'expo-font';
 
 const { width, height } = Dimensions.get('window');
 const STORAGE_KEY = '@connected_users';
@@ -35,6 +36,9 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
   const [error, setError] = useState<string | null>(null);
   const [connectedUsers, setConnectedUsers] = useState<string[]>([]);
   const [debugInfo, setDebugInfo] = useState<string>('');
+  const [fontsLoaded] = useFonts({
+    'Inter-Bold': require('../../assets/fonts/Inter-Bold.ttf'),
+  });
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -343,21 +347,10 @@ const CinePalScreen: React.FC<CinePalScreenProps> = ({ navigation }) => {
       <StatusBar barStyle="light-content" />
       
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Movie Matches</Text>
-        <TouchableOpacity 
-          style={styles.refreshButton}
-          onPress={handleRefresh}
-          disabled={loading || refreshing}
-        >
-          {loading || refreshing ? (
-            <ActivityIndicator size="small" color="#BB86FC" />
-          ) : (
-            <Ionicons name="refresh" size={24} color="#BB86FC" />
-          )}
-        </TouchableOpacity>
+      <View style={styles.titleContainer}>
+        <Text style={styles.titleText}>CINEPAL</Text>
       </View>
-
+      
       {loading && !refreshing ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#BB86FC" />
@@ -560,6 +553,23 @@ const styles = StyleSheet.create({
     color: '#BB86FC',
     fontSize: 10,
     fontFamily: 'monospace',
+  },
+  titleContainer: {
+    width: '100%',
+    alignItems: 'center',
+    paddingTop: Platform.OS === 'ios' ? 60 : 20,
+    paddingBottom: 10,
+    zIndex: 10,
+  },
+  titleText: {
+    fontFamily: 'Inter-Bold',
+    fontSize: 28,
+    color: '#FFFFFF',
+    letterSpacing: 1.5,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
 });
 
