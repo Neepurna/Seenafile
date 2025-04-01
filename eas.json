@@ -1,15 +1,13 @@
 {
   "cli": {
     "version": ">=16.1.0",
-    "requireCommit": true
+    "appVersionSource": "remote",
+    "projectId": "30f76484-486a-429e-bb06-a07fb346feb5"
   },
   "build": {
     "preview": {
       "android": {
         "buildType": "apk"
-      },
-      "env": {
-        "EXPO_PUBLIC_APP_VARIANT": "preview"
       }
     },
     "preview2": {
