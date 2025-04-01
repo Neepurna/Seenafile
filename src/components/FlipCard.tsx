@@ -63,8 +63,8 @@ interface FlipCardProps {
     id: number;
     title: string;
     name?: string;
-    poster_path: string | null;  // Changed from string to string | null
-    backdrop_path: string | null;  // Changed from string to string | null
+    poster_path: string | null;
+    backdrop_path: string | null;
     vote_average: number;
     overview: string;
     release_date: string;
@@ -85,6 +85,10 @@ interface FlipCardProps {
       job: string;
       department: string;
     }>;
+    popularity?: number;
+    status?: string;
+    original_language?: string;
+    production_countries?: Array<{ iso_3166_1: string; name: string }>;
   };
   onSwipingStateChange: (enabled: boolean) => void;
 }
@@ -356,7 +360,7 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
       <Text style={styles.modalSection}>Cast</Text>
       {isLoadingCredits ? (
         <ActivityIndicator size="small" color="#007AFF" />
-      ) : credits.cast.length > 0 ? (
+      ) : credits.cast && credits.cast.length > 0 ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -372,8 +376,12 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
                 }}
                 style={styles.castImage}
               />
-              <Text style={styles.castName} numberOfLines={1}>{castMember.name}</Text>
-              <Text style={styles.castCharacter} numberOfLines={1}>{castMember.character}</Text>
+              <Text style={styles.castName} numberOfLines={1}>
+                {castMember.name || 'Unknown Actor'}
+              </Text>
+              <Text style={styles.castCharacter} numberOfLines={1}>
+                {castMember.character || 'Unknown Role'}
+              </Text>
             </View>
           ))}
         </ScrollView>
@@ -490,23 +498,6 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
   }, [showInfo]);
 
   // Update renderFrontFace to remove title, rating and double tap info
-  const renderFrontFace = () => (
-    <View style={styles.frontFaceContainer}>
-      <Image 
-        source={{ uri: posterUrl }}
-        style={styles.poster}
-        onError={() => {
-          if (!imageError) {
-            setImageError(true);
-            setPosterUrl('https://via.placeholder.com/500x750?text=Error+Loading+Image');
-          }
-        }}
-      />
-      {/* Removed the gradient overlay */}
-      {/* Removed the cardInfo section with title, rating, year text and tap instruction */}
-    </View>
-  );
-
   const handlePostReview = useCallback(async (reviewText: string, rating: number) => {
     if (!auth.currentUser) {
       Alert.alert('Error', 'You must be logged in to post a review');
@@ -550,6 +541,77 @@ const FlipCard: React.FC<FlipCardProps> = ({ movie, onSwipingStateChange }) => {
     duration: 200,
     useNativeDriver: true,
   };
+
+  // Add effect to fetch movie details and credits on mount
+  useEffect(() => {
+    const fetchMovieData = async () => {
+      if (!movie?.id) return;
+      
+      try {
+        setIsLoadingDetails(true);
+        setIsLoadingCredits(true);
+        
+        // Determine if it's a movie or TV show
+        const type = movie.media_type === 'tv' ? 'tv' : 'movie';
+        
+        // Fetch both details and credits in parallel
+        const [detailsResponse, creditsResponse] = await Promise.all([
+          fetch(`https://api.themoviedb.org/3/${type}/${movie.id}?api_key=${API_KEY}&append_to_response=reviews`),
+          fetch(`https://api.themoviedb.org/3/${type}/${movie.id}/credits?api_key=${API_KEY}`)
+        ]);
+
+        if (detailsResponse.ok && creditsResponse.ok) {
+          const [details, credits] = await Promise.all([
+            detailsResponse.json(),
+            creditsResponse.json()
+          ]);
+
+          // Update movie details
+          setMovieDetails({
+            ...details,
+            title: details.title || details.name || movie.title || movie.name || 'Untitled',
+            release_date: details.release_date || details.first_air_date || movie.release_date || 'Unknown'
+          });
+
+          // Update credits
+          setCredits({
+            cast: credits.cast?.slice(0, 10) || [],
+            crew: credits.crew?.filter((c: CrewMember) => 
+              ['Director', 'Producer', 'Screenplay', 'Creator'].includes(c.job)
+            ).slice(0, 5) || []
+          });
+
+          // Update reviews if available
+          if (details.reviews?.results) {
+            setReviews(details.reviews.results.slice(0, 5));
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching movie data:', error);
+      } finally {
+        setIsLoadingDetails(false);
+        setIsLoadingCredits(false);
+      }
+    };
+
+    fetchMovieData();
+  }, [movie?.id]);
+
+  // Update renderFrontFace to include title and rating
+  const renderFrontFace = () => (
+    <View style={styles.frontFaceContainer}>
+      <Image 
+        source={{ uri: posterUrl }}
+        style={styles.poster}
+        onError={() => {
+          if (!imageError) {
+            setImageError(true);
+            setPosterUrl('https://via.placeholder.com/500x750?text=Error+Loading+Image');
+          }
+        }}
+      />
+    </View>
+  );
 
   return (
     <TouchableWithoutFeedback onPress={handleDoubleTap}>

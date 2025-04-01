@@ -120,18 +120,25 @@ const shuffleArray = <T>(array: T[]): T[] => {
 const normalizeMediaItem = (item: any) => {
   return {
     id: item.id,
-    title: item.title || item.name || 'Unknown Title',
-    name: item.name || item.title || 'Unknown Title',
+    title: item.title || item.name || 'Untitled',
+    name: item.name || item.title || 'Untitled',
     poster_path: item.poster_path || null,
     backdrop_path: item.backdrop_path || null,
-    vote_average: item.vote_average || 0,
+    vote_average: parseFloat(item.vote_average || 0).toFixed(1),
     vote_count: item.vote_count || 0,
-    overview: item.overview || '',
-    release_date: item.release_date || item.first_air_date || null,
-    first_air_date: item.first_air_date || item.release_date || null,
+    overview: item.overview || 'No overview available',
+    release_date: item.release_date || item.first_air_date || new Date().toISOString().split('T')[0],
+    first_air_date: item.first_air_date || item.release_date || new Date().toISOString().split('T')[0],
     media_type: item.media_type || (item.name ? 'tv' : 'movie'),
     genre_ids: item.genre_ids || [],
     genres: item.genres || [],
+    popularity: item.popularity || 0,
+    runtime: item.runtime || 0,
+    status: item.status || 'Released',
+    original_language: item.original_language || 'en',
+    production_countries: item.production_countries || [],
+    cast: [],
+    crew: []
   };
 };
 
@@ -267,11 +274,34 @@ export const fetchMovieImages = async (movieId: number) => {
 };
 
 // Function to fetch movie credits (cast and crew)
-export const fetchMovieCredits = async (movieId: number) => {
-  const response = await fetch(
-    `${TMDB_BASE_URL}/movie/${movieId}/credits?api_key=${TMDB_API_KEY}`
-  );
-  return response.json();
+export const fetchMovieCredits = async (id: number, type: string = 'movie') => {
+  try {
+    const response = await fetch(
+      `${TMDB_BASE_URL}/${type}/${id}/credits?api_key=${TMDB_API_KEY}`
+    );
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    // Normalize and validate cast data
+    const normalizedCast = data.cast?.map((member: any) => ({
+      id: member.id,
+      name: member.name || 'Unknown',
+      character: member.character || 'Unknown Role',
+      profile_path: member.profile_path,
+    })) || [];
+
+    return {
+      ...data,
+      cast: normalizedCast
+    };
+  } catch (error) {
+    console.error('Error fetching credits:', error);
+    return { cast: [] };
+  }
 };
 
 // Function to fetch movie videos
@@ -390,59 +420,48 @@ export const searchMoviesAndShows = async (query: string) => {
       return [];
     }
 
-    // Filter and normalize results
-    const normalizedResults = data.results
-      .filter(item => 
-        // Only include movies and TV shows with valid data
-        (item.media_type === 'movie' || item.media_type === 'tv') &&
-        // Ensure basic required fields exist
-        item.id &&
-        (item.title || item.name) &&
-        // Filter out items without images if needed
-        (item.poster_path || item.backdrop_path)
-      )
-      .map(item => ({
-        id: item.id,
-        title: item.title || item.name,
-        name: item.name || item.title,
-        poster_path: item.poster_path,
-        backdrop_path: item.backdrop_path,
-        vote_average: item.vote_average || 0,
-        vote_count: item.vote_count || 0,
-        overview: item.overview || '',
-        release_date: item.release_date || item.first_air_date || null,
-        first_air_date: item.first_air_date || item.release_date || null,
-        media_type: item.media_type,
-        popularity: item.popularity || 0,
-        genre_ids: item.genre_ids || []
-      }));
+    // Filter and fetch additional details for each item
+    const detailedResults = await Promise.all(
+      data.results
+        .filter(item => 
+          (item.media_type === 'movie' || item.media_type === 'tv') &&
+          item.id &&
+          (item.poster_path || item.backdrop_path)
+        )
+        .map(async (item) => {
+          try {
+            // Fetch additional details including credits
+            const type = item.media_type;
+            const detailsUrl = `${API_CONFIG.BASE_URL}/${type}/${item.id}?api_key=${API_CONFIG.TMDB_API_KEY}&append_to_response=credits`;
+            const detailsResponse = await fetch(detailsUrl);
+            const details = await detailsResponse.json();
 
-    // Enhanced sorting that prioritizes both popularity and vote count
-    // Calculate a combined score that weights both factors
-    const sortedResults = normalizedResults.sort((a, b) => {
-      // Normalize vote_count (0-10000 range common for TMDB)
-      const normalizedVoteCountA = Math.min(a.vote_count || 0, 10000) / 10000;
-      const normalizedVoteCountB = Math.min(b.vote_count || 0, 10000) / 10000;
-      
-      // Normalize popularity (0-1000 range common for TMDB)
-      const normalizedPopularityA = Math.min(a.popularity || 0, 1000) / 1000;
-      const normalizedPopularityB = Math.min(b.popularity || 0, 1000) / 1000;
-      
-      // Calculate combined score (60% popularity, 40% vote count)
-      const scoreA = (normalizedPopularityA * 0.6) + (normalizedVoteCountA * 0.4);
-      const scoreB = (normalizedPopularityB * 0.6) + (normalizedVoteCountB * 0.4);
-      
+            // Merge the details with the original item
+            return normalizeMediaItem({
+              ...item,
+              ...details,
+              cast: details.credits?.cast || [],
+              crew: details.credits?.crew || []
+            });
+          } catch (error) {
+            console.error(`Error fetching details for ${item.id}:`, error);
+            return normalizeMediaItem(item);
+          }
+        })
+    );
+
+    // Sort by popularity and vote count
+    const sortedResults = detailedResults.sort((a, b) => {
+      const scoreA = (a.popularity * 0.6) + ((a.vote_count || 0) * 0.4);
+      const scoreB = (b.popularity * 0.6) + ((b.vote_count || 0) * 0.4);
       return scoreB - scoreA;
     });
-    
-    // Add debug log to help troubleshoot
-    console.log(`Search for "${query}" found ${sortedResults.length} results`);
-    
+
+    console.log(`Search for "${query}" found ${sortedResults.length} results with details`);
     return sortedResults;
 
   } catch (error) {
     console.error('Search error:', error);
-    // Return empty array instead of throwing to prevent app crashes
     return [];
   }
 };
