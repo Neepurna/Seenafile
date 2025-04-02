@@ -1,0 +1,21 @@
+{
+  "cli": {
+    "version": ">= 5.9.1",
+    "requireCommit": true
+  },
+  "build": {
+    "preview": {
+      "developmentClient": false,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
+      }
+    },
+    "production": {
+      "android": {
+        "buildType": "apk"
+      }
+    }
+  }
+}
