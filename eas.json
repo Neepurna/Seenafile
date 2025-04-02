@@ -4,23 +4,23 @@
     "appVersionSource": "remote"
   },
   "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "gradleCommand": ":app:assembleDebug",
+        "buildType": "apk",
+        "env": {
+          "ANDROID_HOME": "/opt/android/sdk"
+        }
+      }
+    },
     "preview": {
+      "extends": "development",
       "android": {
         "buildType": "apk",
-        "gradleCommand": ":app:assembleRelease",
-        "withoutCredentials": true,
-        "autoIncrement": true
+        "gradleCommand": ":app:assembleRelease"
       }
-    },
-    "preview2": {
-      "android": {
-        "gradleCommand": ":app:assembleRelease",
-        "withoutCredentials": true
-      }
-    },
-    "preview3": {
-      "developmentClient": true
-    },
-    "production": {}
+    }
   }
 }

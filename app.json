@@ -31,13 +31,23 @@
         "visible": "immersive"
       },
       "permissions": [
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
       ],
       "compileSdkVersion": 33,
       "targetSdkVersion": 33,
-      "buildToolsVersion": "33.0.0"
+      "minSdkVersion": 21,
+      "buildToolsVersion": "33.0.0",
+      "gradle": {
+        "kotlinVersion": "1.7.10"
+      },
+      "buildType": "apk"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -55,7 +65,8 @@
           "photosPermission": "The app needs access to your photos to let you share them with your profile.",
           "cameraPermission": "The app needs access to your camera to let you take profile pictures."
         }
-      ]
+      ],
+      "expo-build-properties"
     ],
     "extra": {
       "eas": {
@@ -67,14 +78,27 @@
       "typedRoutes": true
     },
     "updates": {
-      "fallbackToCacheTimeout": 0
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/30f76484-486a-429e-bb06-a07fb346feb5"
     },
     "assetBundlePatterns": [
       "**/*"
     ],
     "jsEngine": "hermes",
     "packagerOpts": {
-      "sourceExts": ["js", "jsx", "ts", "tsx", "json"]
+      "sourceExts": [
+        "js",
+        "jsx",
+        "ts",
+        "tsx",
+        "json"
+      ]
+    },
+    "developmentClient": true,
+    "runtimeVersion": {
+      "policy": "sdkVersion"
     }
   }
 }
