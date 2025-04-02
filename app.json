@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "SeenaFile",
-    "slug": "SeenaFile",
+    "name": "Inclivo",
+    "slug": "inclivo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#000000"
     },
     "ios": {
       "supportsTablet": true,
@@ -21,30 +21,37 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#000000"
       },
       "versionCode": 1,
-      "package": "com.cinephile.app",
+      "package": "com.inclivo.app",
       "softwareKeyboardLayoutMode": "pan",
       "screenOrientation": "portrait",
       "navigationBar": {
         "visible": "immersive"
+      },
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ],
+      "buildProperties": {
+        "android": {
+          "compileSdkVersion": 33,
+          "targetSdkVersion": 33,
+          "buildToolsVersion": "33.0.0"
+        }
       }
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      [
-        "expo-screen-orientation",
-        {
-          "initialOrientation": "PORTRAIT"
-        }
-      ],
+      "expo-screen-orientation",
       [
         "expo-image-picker",
         {
-          "photosPermission": "The app needs access to your photos to let you share them with your profile.",
+          "photosPermission": "The app accesses your photos to let you share them with your friends.",
           "cameraPermission": "The app needs access to your camera to let you take profile pictures."
         }
       ]
