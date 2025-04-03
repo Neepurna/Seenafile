@@ -29,44 +29,38 @@
       "screenOrientation": "portrait",
       "navigationBar": {
         "visible": "immersive"
-      }
+      },
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      [
-        "expo-screen-orientation",
-        {
-          "initialOrientation": "PORTRAIT"
-        }
-      ],
-      [
-        "expo-image-picker",
-        {
-          "photosPermission": "The app needs access to your photos to let you share them with your profile.",
-          "cameraPermission": "The app needs access to your camera to let you take profile pictures."
-        }
-      ]
+      ["expo-screen-orientation", {
+        "initialOrientation": "PORTRAIT"
+      }],
+      ["expo-image-picker", {
+        "photosPermission": "The app needs access to your photos to let you share them with your profile.",
+        "cameraPermission": "The app needs access to your camera to let you take profile pictures."
+      }]
     ],
     "extra": {
       "eas": {
-        "projectId": "your-project-id"
+        "projectId": "30f76484-486a-429e-bb06-a07fb346feb5"
       }
     },
-    "experiments": {
-      "tsconfigPaths": true,
-      "typedRoutes": true
+    "owner": "seenafile",
+    "runtimeVersion": {
+      "policy": "sdkVersion"
     },
     "updates": {
       "fallbackToCacheTimeout": 0
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
-    "jsEngine": "hermes",
-    "packagerOpts": {
-      "sourceExts": ["js", "jsx", "ts", "tsx", "json"]
-    }
+    "assetBundlePatterns": ["**/*"],
+    "jsEngine": "hermes"
   }
 }
