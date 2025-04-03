@@ -24,7 +24,7 @@
         "backgroundColor": "#ffffff"
       },
       "versionCode": 1,
-      "package": "com.cinephile.app",
+      "package": "com.neepurna.inclivo",
       "softwareKeyboardLayoutMode": "pan",
       "screenOrientation": "portrait",
       "navigationBar": {
@@ -34,12 +34,19 @@
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE"
-      ]
+      ],
+      "compileSdkVersion": 33,
+      "targetSdkVersion": 33,
+      "buildToolsVersion": "33.0.0",
+      "publishBundlePath": "android/app/src/main/assets/shell-app.bundle",
+      "publishManifestPath": "android/app/src/main/assets/shell-app-manifest.json"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "expo-build-properties",
+      "react-native-reanimated",
       ["expo-screen-orientation", {
         "initialOrientation": "PORTRAIT"
       }],
