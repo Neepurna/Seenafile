@@ -45,8 +45,13 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-build-properties",
-      "react-native-reanimated",
+      ["expo-build-properties", {
+        "android": {
+          "compileSdkVersion": 33,
+          "targetSdkVersion": 33,
+          "buildToolsVersion": "33.0.0"
+        }
+      }],
       ["expo-screen-orientation", {
         "initialOrientation": "PORTRAIT"
       }],
